@@ -126,6 +126,33 @@ Detalle original:
 - Correr todos los samples del núcleo (sin plugins opcionales) en lote: tabla de estado en `docs/COMPATIBILIDAD.md`.
 - Verificar: `Ex_HohmannTransfer`, un sample de Optimize (VF13ad o fmincon-free) y B-plane convergen igual que escritorio; lote de samples sin regresiones.
 
+### Fase 7c — Arreglar pendientes de QA + probar más misiones
+Meta: cerrar los fallos que QA dejó anotados en Bitácora y ver el comportamiento con muchas más misiones antes de pulir la UX. Si no cabe, partir en **7c1** (arreglos) y **7c2** (más misiones).
+- **Arreglos de backend:**
+  - Rutas de entrada relativas: fijar el directorio de trabajo del motor (`GmatWorkingDirectory` o equivalente) para que `../samples/SupportFiles/...` resuelva como en escritorio. Casos: Ex_Propagate_ThrustHistoryFile y Ex_Contact_Location_Station_Mask.
+  - Limpiar las carpetas `run-*`/`desk-*` y el dict `runs` (Fase 2).
+  - El corte por timeout no debe depender de `pool._processes` (Fase 3b).
+  - Enum de `DateFormat` vacío (Fase 3b).
+- **Arreglos de modelo/serializer:**
+  - Quitar un cuerpo primario no debe dejar campos `GravityField.*` (Fase 4b).
+  - Las líneas editadas no deben llevar el prefijo `GMAT ` (Fase 4b).
+  - El `Add` de un XYPlot debe leerse aunque ocupe varias líneas (Fase 6a).
+- **Arreglos de frontend:**
+  - Nuevo debe vaciar el documento y el árbol de Misión (Fases 4b y 5b).
+  - Renombrar y borrar en el árbol de recursos con diálogo propio en vez de `prompt/confirm` nativos.
+  - Marcadores de error de validación en Monaco (Fase 2).
+  - Quitar el crédito "Cesium ion" de la vista 3D (Fase 6b).
+- **Solver (7a):**
+  - Los optimizadores que no son Yukon deben mostrar costo y restricciones si GMAT los imprime.
+  - Asignar bien el cierre de solvers anidados.
+  - Con `ShowProgress=false`, avisar que no habrá eventos.
+- **Más misiones:**
+  - Extender `app.batch` a los samples de subcarpetas de `GMAT_HOME/samples`, no solo los 88 raíz.
+  - Agregar 5-8 misiones propias en `backend/tests/missions/`: LEO con arrastre, GEO con station-keeping (Target en bucle While/For), transferencia lunar, finite burn con tanque que se vacía, Optimize con NonlinearConstraint y un script con errores a propósito. Cada una con valores de referencia sacados de `batch.run_desktop` (gmatpy directo).
+  - Probar en navegador al menos 5 misiones de punta a punta: abrir, editar con formularios, correr, Solver, Resultados (XYPlot, tabla, 2D, 3D) y guardar `.script` para volver a abrirlo. Una de ellas con varias corridas de solver, para probar el selector.
+  - Actualizar `docs/COMPATIBILIDAD.md` con los conteos nuevos.
+- Verificar: pytest + `pytest -m slow` + `python -m app.batch` sin regresiones. Las misiones propias deben coincidir con escritorio. QA debe recorrer las 5 misiones en navegador.
+
 ### Fase 8 — UX: intuitivo de verdad
 Meta: que un estudiante arme su primera misión en 5 minutos.
 - Plantillas/asistentes: "Órbita LEO", "Transferencia Hohmann a GEO", "Viaje a la Luna", "Ground track de un satélite"; recorrido guiado la primera vez.
@@ -175,7 +202,8 @@ Cuentas, misiones guardadas en servidor (PostgreSQL), compartir por enlace, cuot
 - [x] Fase 6a — Resultados: datos del motor, gráficas, tablas y traza en tierra 2D
 - [x] Fase 6b — Resultados: vista 3D con Cesium
 - [x] Fase 7a — Solvers en vivo: eventos por iteración + pestaña Solver
-- [ ] Fase 7b — Lote de samples del núcleo + docs/COMPATIBILIDAD.md + B-plane/Optimize vs escritorio
+- [x] Fase 7b — Lote de samples del núcleo + docs/COMPATIBILIDAD.md + B-plane/Optimize vs escritorio
+- [ ] Fase 7c — Arreglar pendientes de QA + probar más misiones
 - [ ] Fase 8 — UX: intuitivo de verdad
 - [ ] Fase 9 — Docker y deploy en VPS
 - [ ] Fase 10 — Pruebas E2E y documentación
@@ -196,3 +224,4 @@ Cuentas, misiones guardadas en servidor (PostgreSQL), compartir por enlace, cuot
 - **2026-11-14 · Fase 6a** — Fase 6 partida en 6a/6b. `engine/results.py`: el runner inserta ReportFile ocultos (`gmatweb_*.csv`, `SolverIterations = Current`) por nave y por XYPlot antes de `BeginMissionSequence`. Con `Current`, GMAT escribe solo la pasada final, así que no se recorta nada y BackProp se conserva. `None` no sirve porque omite la pasada convergida del Target. Los ReportFile del usuario respetan `WriteHeaders`. Se agregaron `GET /runs/{id}/results` (409 si no terminó) y `/files/{name}` (solo nombres simples, sin internos); el evento `done` trae `available`. Construir los subscribers con `Construct` tumba RunScript (anotado en GOTCHAS). Frontend: la pestaña Resultados reemplaza Gráficas/Reportes, con XYPlot uPlot (zoom, PNG/CSV), tabla de 500 filas (el CSV lleva todas) y traza 2D en SVG. Se vacía al correr o cambiar de documento. QA APRUEBA, con una ronda de correcciones (BackProp recortado, WriteHeaders, resultados viejos): pytest 333 passed, lint y build OK. En Hohmann, /results coincide exacto con un ReportFile propio y /files rechaza traversal. Pendientes: sin épocas de maniobra; el XYPlot oculto no sigue Toggle; lat/lon siempre respecto a la Tierra; el `Add` solo se lee en una línea; la traza sin etiquetas de grados; Resultados en móvil sin probar (Fase 8).
 - **2026-11-14 · Fase 6b** — Vista 3D en `results/View3D.tsx`, carga perezosa (chunk de 4.2 MB, 1.1 MB gzip), con Cesium 1.147 sin ion: token vacío y base NaturalEarthII local. `vite.config.ts` copia los assets a `public/cesium` (en .gitignore; se copian al arrancar `npm run dev`; borrarlo si se actualiza cesium) con `CESIUM_BASE_URL=/cesium/`. Las trayectorias van en un solo Primitive SimplePolylineGeometry en ICRF, y por cuadro solo cambia su modelMatrix. La nave usa SampledPositionProperty INERTIAL (lineal); la hora es UTCGregorian de la 1ª fila + segundos A1. Hay seguir nave y cámara inercial (postUpdate + computeIcrfToFixedMatrix). QA APRUEBA: lint y build OK, pytest 333 passed. Hohmann sale a escala (apogeo ~6.5 R⊕) y Ex_LunarTransfer se encuadra. 57k puntos cargan en ~0.5 s. No hay peticiones externas ni errores de consola, y el viewer no tiene fugas al cambiar de pestaña. Pendientes: fps sin medir (Chrome MCP limita rAF), doble clic en nave sin probar, no se dibuja la Luna y todo va centrado en la Tierra, sin marcadores de maniobra, aparece el crédito "Cesium ion" aunque no se usa, móvil sin probar.
 - **2026-11-14 · Fase 7a** — Fase 7 partida en 7a/7b. `engine/solver.py` (`SolverLog`) lee el texto de progreso que GMAT ya escribe en `gmat.log` (formatos de DifferentialCorrector y Yukon tomados de GMAT-src). Con eso el runner emite eventos `solver` por el WS: `start`, una `iteration` por pasada nominal (variables, objetivos con tolerancia y `met`, restricciones, costo) y `end` con converged, failed o initial. No hay ReportFile ocultos nuevos y `results.py` sigue con `SolverIterations=Current`. La tolerancia sale del Achieve del script (default 0.1). Pestaña central "Solver" (`results/SolverPanel.tsx`) con selector de corridas, aviso verde o rojo, gráfica uPlot (log de \|Deseado − Logrado\| para DC, costo y restricciones para Optimize) y tabla. Si no converge sale una línea amarilla en la consola. QA rechazó una vez (la gráfica tapaba la tabla, y salía "1 iteraciones"); se corrigió con `.view:has(> .chart){flex:none}` y `.tableWrap` con min-height 200px. QA APRUEBA: pytest 336 passed, lint y build OK. Hohmann da 12 iteraciones con TOI 2.24028397735 / GOI 1.432966302, igual que GMAT. Con `MaximumIterations=3` sale failed y Yukon converge. Sin solape a 951 y 700 px de alto, y sin errores de consola. Pendientes: los optimizadores que no son Yukon solo imprimen variables; con solvers anidados, el cierre se asigna al último activo del mismo tipo; con ShowProgress=false no hay eventos; el selector con varias corridas no se probó; móvil sin responsive (Fase 8).
+- **2026-11-14 · Fase 7b** — `app/batch.py` (`python -m app.batch --jobs 4`, ~1 min) corre los 88 samples raíz por el mismo camino que la web (runner.create = sanitize + inject) y reescribe `docs/COMPATIBILIDAD.md`. Un sample sale "plugin" solo si su librería tiene la línea PLUGIN comentada en el startup file del worker (`disabled_plugins`, `PLUGIN_MARKS`). "Escritorio" es `batch.run_desktop`: gmatpy directo con el script original. `tests/test_desktop.py` y `tests/test_batch.py` son `slow` (fuera del pytest normal) y comparan Hohmann, Yukon y MarsBPlane con escritorio (rel 1e-9). QA rechazó una vez porque "plugin" escondía samples de Formation, EventLocator y Estimation que sí corren. Ya corregido, QA APRUEBA: pytest 339 passed, slow 3 passed. Lote: 74 ok, 8 rechazados (GmatFunction, Python, #Include), 3 plugin (ExternalForceModel ×2, MarsGRAM), 2 falta archivo (ruta relativa) y 1 error (Tut_Orbit_Estimation: sanitize reescribe un `TrackingFileSet.FileName` de entrada). Los dos últimos pasan a la Fase 7c, que el usuario agregó: arreglar pendientes de QA y probar más misiones. VF13ad y fmincon no están instalados, así que Optimize solo se probó con Yukon.

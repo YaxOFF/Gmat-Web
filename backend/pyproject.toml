@@ -21,3 +21,5 @@ include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not slow'"
+markers = ["slow: lento, corre con el motor scripts completos (pytest -m slow)"]

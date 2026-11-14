@@ -32,5 +32,5 @@ Formulario/árbol → `setMission` (cambia el modelo ya) → `POST /api/script/s
 - Textos de UI en `frontend/src/i18n/es.ts`.
 - Estilos: CSS modules + tokens `light-dark()` en `index.css`.
 - Linter frontend: oxlint (no eslint).
-- Pruebas backend con motor real y `TestClient`; archivo modelo: `tests/test_tools.py`.
+- Pruebas backend con motor real y `TestClient`; archivo modelo: `tests/test_tools.py`. Pruebas lentas con `@pytest.mark.slow` (excluidas por `addopts`; `pytest -m slow`). `app/batch.py` es herramienta de desarrollo: la API no lo importa.
 - Conventional Commits; una fase por sesión (`PLAN.md`).

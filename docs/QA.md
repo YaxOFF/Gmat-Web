@@ -99,3 +99,7 @@ await window.__dnd(__find('Prop 1 Day'),__find('Prop to Perigee'),0.2)
 - UI: pestana Solver; aviso verde/rojo (`role=status|alert`); linea de consola amarilla (color rgb(210,153,34)) "Aviso: el solver DC no convergio". Sin Target/Optimize: mensaje vacio.
 - Movil sin resize: en la pagina, `document.body.innerHTML=''` + `<iframe src="/" width=390>` mismo origen; cargar script y clics via `iframe.contentDocument`; capturar con `computer`. Ojo: el scrollWidth de 717 a 390 px ya existe en todas las pestanas (app no responsiva).
 - Medir solapamiento grafica/tabla: `getBoundingClientRect` de `[class*=_chart_]` vs su padre `[class*=_view_]`.
+
+### Fase 7b (lote de samples)
+- `python -m app.batch --jobs 4` (~1 min) regenera docs/COMPATIBILIDAD.md; sacar copia antes (el archivo no estaba en git) y comparar con `sed -E 's/\| [0-9.]+ \|/| T |/'` para ignorar tiempos. Dejó 64/8/0/0/1/15 estable; no deja procesos huérfanos (GMAT.exe de escritorio ya abierto es del usuario).
+- Ver si un `plugin` de verdad no corre: script con `sys.path.insert(0,'.')` y `python -I`, bajo `if __name__=='__main__'` (spawn), llamando `batch.run_desktop(path)` y `await batch.run_web(texto)`. En 7b: 8 de 9 samples "plugin" probados (MarsOrbit, Constellation, EclipseLocation, PlanetographicRegion, Covariance, StationContactLocator, IntrusionLocator, Inter_Spacecraft_Tracking) corren ok por la web; Contact_Location_Station_Mask da falta archivo (ruta relativa).

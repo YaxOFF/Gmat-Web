@@ -33,6 +33,7 @@
 | Sincronía editor de script ↔ modelo | `store.ts` (`editText`, `setMission`, contador `seq`) |
 | Editor Monaco + resaltado GMAT | `frontend/src/editor/ScriptEditor.tsx`, `gmat.ts` |
 | Ejemplos de GMAT | `backend/app/samples.py` (lee `GMAT_HOME/samples`) |
+| Lote de samples y comparación con escritorio | `backend/app/batch.py` (`python -m app.batch` regenera `docs/COMPATIBILIDAD.md`); `backend/tests/test_desktop.py` (`pytest -m slow`) |
 | Textos de UI | `frontend/src/i18n/es.ts` |
 
 Símbolos: `grep` en `docs/SYMBOLS.tsv` (generar con `sh docs/docs.sh map`).
