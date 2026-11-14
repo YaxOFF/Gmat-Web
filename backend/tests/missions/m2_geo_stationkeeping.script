@@ -1,0 +1,59 @@
+%  Mision propia 2: GEO con station-keeping. Cada 2 dias un Target (DC) dentro de un For
+%  corrige el semieje mayor con una maniobra impulsiva. Sol, Luna y gravedad 4x4.
+
+Create Spacecraft Sat;
+Sat.DateFormat       = UTCGregorian;
+Sat.Epoch            = '01 Jan 2025 00:00:00.000';
+Sat.CoordinateSystem = EarthMJ2000Eq;
+Sat.DisplayStateType = Keplerian;
+Sat.SMA              = 42164.17;
+Sat.ECC              = 0.0002;
+Sat.INC              = 0.05;
+Sat.RAAN             = 0;
+Sat.AOP              = 0;
+Sat.TA               = 0;
+Sat.DryMass          = 1500;
+
+Create ForceModel FM;
+FM.CentralBody                      = Earth;
+FM.PrimaryBodies                    = {Earth};
+FM.PointMasses                      = {Sun, Luna};
+FM.Drag                             = None;
+FM.SRP                              = Off;
+FM.GravityField.Earth.Degree        = 4;
+FM.GravityField.Earth.Order         = 4;
+FM.GravityField.Earth.PotentialFile = 'JGM2.cof';
+
+Create Propagator Prop;
+Prop.FM              = FM;
+Prop.Type            = RungeKutta89;
+Prop.InitialStepSize = 60;
+Prop.Accuracy        = 1e-11;
+Prop.MinStep         = 0.001;
+Prop.MaxStep         = 2700;
+
+Create ImpulsiveBurn SK;
+SK.CoordinateSystem = Local;
+SK.Origin           = Earth;
+SK.Axes             = VNB;
+
+Create DifferentialCorrector DC;
+
+Create Variable I DVTotal;
+
+Create ReportFile R;
+R.Filename     = 'm2_geo_stationkeeping.txt';
+R.WriteHeaders = false;
+R.Precision    = 16;
+
+BeginMissionSequence;
+For I = 1:3;
+   Propagate Prop(Sat) {Sat.ElapsedDays = 2};
+   Target DC {SolveMode = Solve, ExitMode = SaveAndContinue};
+      Vary DC(SK.Element1 = 0, {Perturbation = 1e-6, MaxStep = 0.01});
+      Maneuver SK(Sat);
+      Achieve DC(Sat.SMA = 42164.17, {Tolerance = 1e-5});
+   EndTarget;
+   DVTotal = DVTotal + abs(SK.Element1);
+EndFor;
+Report R Sat.A1ModJulian Sat.X Sat.Y Sat.Z Sat.VX Sat.VY Sat.VZ Sat.SMA SK.Element1 DVTotal;

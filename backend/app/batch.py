@@ -1,4 +1,4 @@
-"""Lote de samples raíz de GMAT_HOME por el mismo camino que la web (sanitize + runner),
+"""Lote de samples de GMAT_HOME (raíz y subcarpetas) por el mismo camino que la web (sanitize + runner),
 y corrida "escritorio" (gmatpy directo, sin sanitize ni inyección) para comparar.
 
 Regenerar docs/COMPATIBILIDAD.md (desde backend/, con GMAT_HOME definido):
@@ -106,10 +106,11 @@ def _desktop_child(gmat_home: str, cache_dir: str, script: str, out_dir: str) ->
     sys.exit(0 if g.RunScript() else 3)
 
 
-def run_desktop(script: Path, timeout: float = 300) -> list[dict]:
+def run_desktop(script: Path, timeout: float = 300, out: Path | None = None) -> list[dict]:
     """Como GMAT escritorio: el .script original con gmatpy, sin sanitize ni ReportFile ocultos.
-    Devuelve los eventos `solver` de su log."""
-    out = Path(tempfile.mkdtemp(prefix="desk-", dir=config.RUNS_DIR))
+    Devuelve los eventos `solver` de su log. Con `out`, escribe ahí y no la borra."""
+    keep = out is not None
+    out = out or Path(tempfile.mkdtemp(prefix="desk-", dir=config.RUNS_DIR))
     p = mp.get_context("spawn").Process(target=_desktop_child, daemon=True,
                                         args=(config.GMAT_HOME, str(config.CACHE_DIR), str(script), str(out)))
     p.start()
@@ -124,7 +125,8 @@ def run_desktop(script: Path, timeout: float = 300) -> list[dict]:
         lines = (out / "gmat.log").read_text(encoding="utf-8", errors="replace").splitlines()
         return [ev for line in lines for ev in log.feed(line)]
     finally:
-        shutil.rmtree(out, ignore_errors=True)
+        if not keep:
+            shutil.rmtree(out, ignore_errors=True)
 
 
 def _solver_cell(r: dict) -> str:
@@ -136,19 +138,23 @@ def _solver_cell(r: dict) -> str:
 
 
 def write_doc(rows: list[dict]) -> None:
-    counts = {s: sum(r["state"] == s for r in rows) for s in STATES}
+    def summary(rs: list[dict]) -> str:
+        return " · ".join(f"{s}: {sum(r['state'] == s for r in rs)}" for s in STATES) + f" · total: {len(rs)}"
+
+    folders = sorted({r["name"].rpartition("/")[0] for r in rows})
     lines = [
         "<!-- generado por backend/app/batch.py: no editar la tabla a mano -->",
         "# Compatibilidad de samples",
         "",
-        f"Samples raíz de `GMAT_HOME/samples` (GMAT R2026a) corridos por el camino de la web "
+        f"Samples de `GMAT_HOME/samples` y sus subcarpetas (GMAT R2026a) corridos por el camino de la web "
         f"(`sanitize` + `runner` + ReportFile ocultos). Timeout {config.RUN_TIMEOUT_S:.0f} s.",
         "",
         "Regenerar (desde `backend/`, con `GMAT_HOME`): `python -m app.batch` (opciones `--jobs`, `--timeout`).",
         "",
         "## Resumen",
         "",
-        " · ".join(f"{s}: {counts[s]}" for s in STATES) + f" · total: {len(rows)}",
+        f"- **Todos:** {summary(rows)}",
+        *(f"- `{f or 'raíz'}`: {summary([r for r in rows if r['name'].rpartition('/')[0] == f])}" for f in folders),
         "",
         "Estados: `ok` terminó sin error; `rechazado` lo para `sanitize` (regla de seguridad, no se corre); "
         "`error` el motor no lo cargó o falló; `timeout` pasó el límite; `falta archivo` el motor no encontró "
@@ -162,6 +168,9 @@ def write_doc(rows: list[dict]) -> None:
         "- Rutas de entrada relativas: GMAT las busca en la carpeta del script (`GmatFileUtil::FindFile`), que "
         "en la web es la corrida; `sanitize` pasa a absoluta la que existe desde `GMAT_HOME/samples` "
         "(`'../samples/SupportFiles/...'`). Una ruta relativa a otra carpeta no se encuentra.",
+        "- Samples de subcarpetas con rutas relativas a su propia carpeta (`../SupportFiles/...`, `../../data/...`, "
+        "`.\\OFI_Earth.earth`): `sanitize` las resuelve desde `GMAT_HOME/samples`, no desde la subcarpeta, y "
+        "salen `falta archivo` (4 en R2026a).",
         "- `TrackingFileSet.FileName`: con un `Simulator` en el script es salida y va a la corrida; sin él es "
         "entrada (`.gmd` que lee el estimador) y no se reescribe. Un script que simula y además lee otro "
         "`.gmd` existente no lo encuentra.",
@@ -198,7 +207,7 @@ async def run_all(jobs: int) -> list[dict]:
         print(f"{r['state']:>13}  {r['time']:>6}  {s['id']}  {r['reason'][:80]}", flush=True)
         return {"name": s["id"], **r}
 
-    return await asyncio.gather(*(one(s) for s in samples.list_samples() if not s["folder"]))
+    return await asyncio.gather(*(one(s) for s in samples.list_samples()))
 
 
 def main() -> None:

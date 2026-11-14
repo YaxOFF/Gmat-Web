@@ -1,0 +1,68 @@
+%  Mision propia 4: finite burn que vacia el tanque. Empuje de 500 N, Isp 300 s y 50 kg de
+%  combustible: quema hasta que queda 1 kg y luego propaga hasta el apoapsis.
+
+Create ChemicalTank Tank;
+Tank.AllowNegativeFuelMass = false;
+Tank.FuelMass              = 50;
+Tank.PressureModel         = PressureRegulated;
+
+Create ChemicalThruster Eng;
+Eng.CoordinateSystem   = Local;
+Eng.Origin             = Earth;
+Eng.Axes               = VNB;
+Eng.ThrustDirection1   = 1;
+Eng.ThrustDirection2   = 0;
+Eng.ThrustDirection3   = 0;
+Eng.DecrementMass      = true;
+Eng.Tank               = {Tank};
+Eng.MixRatio           = [1];
+Eng.GravitationalAccel = 9.81;
+Eng.C1                 = 500;
+Eng.K1                 = 300;
+
+Create Spacecraft Sat;
+Sat.DateFormat       = UTCGregorian;
+Sat.Epoch            = '01 Jan 2025 00:00:00.000';
+Sat.CoordinateSystem = EarthMJ2000Eq;
+Sat.DisplayStateType = Keplerian;
+Sat.SMA              = 7000;
+Sat.ECC              = 0.001;
+Sat.INC              = 28.5;
+Sat.RAAN             = 0;
+Sat.AOP              = 0;
+Sat.TA               = 0;
+Sat.DryMass          = 500;
+Sat.Tanks            = {Tank};
+Sat.Thrusters        = {Eng};
+
+Create FiniteBurn FB;
+FB.Thrusters = {Eng};
+
+Create ForceModel FM;
+FM.CentralBody                      = Earth;
+FM.PrimaryBodies                    = {Earth};
+FM.Drag                             = None;
+FM.SRP                              = Off;
+FM.GravityField.Earth.Degree        = 2;
+FM.GravityField.Earth.Order         = 0;
+FM.GravityField.Earth.PotentialFile = 'JGM2.cof';
+
+Create Propagator Prop;
+Prop.FM              = FM;
+Prop.Type            = RungeKutta89;
+Prop.InitialStepSize = 10;
+Prop.Accuracy        = 1e-11;
+Prop.MinStep         = 0.001;
+Prop.MaxStep         = 5;  % paso corto: el tanque no puede pasar por debajo de 0 entre pasos
+
+Create ReportFile R;
+R.Filename     = 'm4_finite_burn.txt';
+R.WriteHeaders = false;
+R.Precision    = 16;
+
+BeginMissionSequence;
+BeginFiniteBurn FB(Sat);
+Propagate Prop(Sat) {Sat.Tank.FuelMass = 1};
+EndFiniteBurn FB(Sat);
+Propagate Prop(Sat) {Sat.Apoapsis};
+Report R Sat.A1ModJulian Sat.X Sat.Y Sat.Z Sat.VX Sat.VY Sat.VZ Sat.SMA Sat.TotalMass Sat.Tank.FuelMass;

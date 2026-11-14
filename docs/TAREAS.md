@@ -5,7 +5,7 @@
 Requieren `GMAT_HOME` (local: `C:\Users\Yaxon\Downloads\gmat-win-R2026a`).
 - Correr todo: `./dev.ps1` (Windows) o `./dev.sh`. Backend `:8000`, frontend `:5173`. Listo cuando `GET http://127.0.0.1:8000/api/health` da `status: "ok"`. Antes, confirmar que los dos puertos están libres (`docs/GOTCHAS.md`, Entorno de desarrollo).
 - Pruebas backend: `cd backend; .venv/Scripts/python -m pytest` (motor real, ~30 s). Esperado: `339 passed, 46 skipped, 3 deselected, 1 xfailed` (~75 s) y un aviso de Starlette. Las `slow` (web vs escritorio: Hohmann, Yukon, Mars B-plane) van aparte: `pytest -m slow` (~15 s).
-- Lote de samples: `cd backend; .venv/Scripts/python -m app.batch` (~1 min, 4 en paralelo) reescribe `docs/COMPATIBILIDAD.md`. Correrlo tras tocar sanitize, results, solver o runner y revisar que no bajen los `ok` (77 en 7c1).
+- Lote de samples: `cd backend; .venv/Scripts/python -m app.batch` (162 samples de raíz y subcarpetas, varios minutos, 4 en paralelo) reescribe `docs/COMPATIBILIDAD.md`. Correrlo tras tocar sanitize, results, solver o runner y revisar que no bajen los `ok` (7c2: 77 de 88 en raíz, 118 de 162 en total).
 - Frontend: `cd frontend; npm run lint; npm run build` (~2 s). Lint sin salida; build avisa de chunks mayores a 500 kB (Monaco y Cesium, ambos cargados en lazy). No hay runner de pruebas en el frontend. Solvers: `pytest tests/test_solver.py` (Hohmann converge, MaximumIterations bajo no converge, Yukon).
 - Backend a mano: `cd backend; .venv/Scripts/python -m uvicorn app.main:app --port 8000`.
 

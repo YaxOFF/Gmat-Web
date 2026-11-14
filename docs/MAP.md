@@ -34,6 +34,7 @@
 | Editor Monaco + resaltado GMAT + marcadores de error (`store.logs` con línea) | `frontend/src/editor/ScriptEditor.tsx`, `gmat.ts` |
 | Ejemplos de GMAT | `backend/app/samples.py` (lee `GMAT_HOME/samples`) |
 | Lote de samples y comparación con escritorio | `backend/app/batch.py` (`python -m app.batch` regenera `docs/COMPATIBILIDAD.md`); `backend/tests/test_desktop.py` (`pytest -m slow`) |
+| Misiones propias con referencia de escritorio | `backend/tests/missions/` (`m1..m6.script`, `reference.json`, `make_reference.py` la regenera); `backend/tests/test_missions.py` (`pytest -m slow`) |
 | Textos de UI | `frontend/src/i18n/es.ts` |
 
 Símbolos: `grep` en `docs/SYMBOLS.tsv` (generar con `sh docs/docs.sh map`).

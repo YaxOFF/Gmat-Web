@@ -19,7 +19,10 @@ export default function ScriptEditor() {
       fontSize: 13,
     })
     editorRef.current = ed
-    const sub = ed.onDidChangeModelContent(() => useApp.getState().editText(ed.getValue()))
+    const sub = ed.onDidChangeModelContent(() => {
+      monaco.editor.setModelMarkers(ed.getModel()!, 'gmat', [])  // los errores eran del texto anterior
+      useApp.getState().editText(ed.getValue())
+    })
     const onScheme = () => monaco.editor.setTheme(dark.matches ? 'vs-dark' : 'vs')
     dark.addEventListener('change', onScheme)
     return () => {
@@ -34,10 +37,7 @@ export default function ScriptEditor() {
   useEffect(() => {
     const ed = editorRef.current
     const { text } = useApp.getState().doc
-    if (ed && ed.getValue() !== text) {
-      ed.setValue(text)
-      monaco.editor.setModelMarkers(ed.getModel()!, 'gmat', [])  // los errores eran del texto anterior
-    }
+    if (ed && ed.getValue() !== text) ed.setValue(text)  // limpia marcadores vía onDidChangeModelContent
   }, [rev])
 
   // Errores/avisos con línea (validar o correr) como marcadores en el margen.

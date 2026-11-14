@@ -1,0 +1,128 @@
+{
+  "m1_leo_drag": {
+    "time": 0.9,
+    "report": {
+      "Sat.A1ModJulian": 30678.00042863867,
+      "Sat.X": -4177.282287801592,
+      "Sat.Y": -4475.561509463153,
+      "Sat.Z": -2888.414233479739,
+      "Sat.VX": 5.480212189484962,
+      "Sat.VY": -1.858971160265978,
+      "Sat.VZ": -5.043249425448859,
+      "Sat.SMA": 6773.800330043804,
+      "Sat.Altitude": 395.0888720493494
+    },
+    "solvers": null
+  },
+  "m2_geo_stationkeeping": {
+    "time": 0.7,
+    "report": {
+      "Sat.A1ModJulian": 30682.50042863868,
+      "Sat.X": 41922.28954406947,
+      "Sat.Y": 4426.882064166798,
+      "Sat.Z": -7.858896196977356,
+      "Sat.VX": -0.3228654595890832,
+      "Sat.VY": 3.058305367898132,
+      "Sat.VZ": 0.002257272172110809,
+      "Sat.SMA": 42164.17000000003,
+      "SK.Element1": -5.290103301809649e-06,
+      "DVTotal": 7.293084165659478e-05
+    },
+    "solvers": {
+      "DC": {
+        "runs": 3,
+        "final": [
+          {
+            "SK.Element1": -3.21037154806e-05
+          },
+          {
+            "SK.Element1": -3.55370228741e-05
+          },
+          {
+            "SK.Element1": -5.29010330181e-06
+          }
+        ],
+        "status": "converged"
+      }
+    }
+  },
+  "m3_lunar_transfer": {
+    "time": 1.0,
+    "report": {
+      "Sat.A1ModJulian": 26868.43338794704,
+      "Sat.Luna.SMA": 7110.194995835672,
+      "Sat.Luna.ECC": 0.1015445138664036,
+      "Sat.Luna.RMAG": 6571.780821725999,
+      "Sat.Luna.RadPer": 6388.193701488202,
+      "LOI.Element1": -0.6038837297994449
+    },
+    "solvers": {
+      "DC": {
+        "runs": 1,
+        "final": [
+          {
+            "LOI.Element1": -0.603883729799
+          }
+        ],
+        "status": "converged"
+      }
+    }
+  },
+  "m4_finite_burn": {
+    "time": 0.8,
+    "report": {
+      "Sat.A1ModJulian": 30676.53992005659,
+      "Sat.X": -8005.323968813704,
+      "Sat.Y": -1127.03311475356,
+      "Sat.Z": -626.0094355982068,
+      "Sat.VX": 1.073359526309293,
+      "Sat.VY": -5.858582165531449,
+      "Sat.VZ": -3.178505823377634,
+      "Sat.SMA": 7557.9745269549,
+      "Sat.TotalMass": 501.0000000000092,
+      "Sat.Tank.FuelMass": 1.000000000009152
+    },
+    "solvers": null
+  },
+  "m5_optimize_yukon": {
+    "time": 0.8,
+    "report": {
+      "Sat.A1ModJulian": 30676.72036942825,
+      "Sat.SMA": 42164.00000041409,
+      "Sat.ECC": 3.41512563839638e-08,
+      "Sat.RMAG": 42164.00000015532,
+      "TOI.Element1": 2.419501369693876,
+      "GOI.Element1": 1.464555061191668,
+      "Cost": 3.884056430885544
+    },
+    "solvers": {
+      "Opt": {
+        "runs": 1,
+        "final": [
+          {
+            "TOI.Element1": 2.41950136969,
+            "GOI.Element1": 1.46455506119,
+            "cost": 3.88405643089
+          }
+        ],
+        "status": "converged"
+      }
+    }
+  },
+  "m6_errors": {
+    "time": 0.6,
+    "error": {
+      "exit": 2,
+      "lines": [
+        8,
+        13
+      ],
+      "log": [
+        "1: D:\\YaxonFolder\\Github\\Gmat-Web\\backend\\tests\\missions\\m6_errors.script: **** ERROR **** Interpreter Exception: The field name \"SMAA\" on object \"Sat\" is not permitted in line:",
+        "\"   8: Sat.SMAA             = 7100;\"",
+        "2: D:\\YaxonFolder\\Github\\Gmat-Web\\backend\\tests\\missions\\m6_errors.script: **** ERROR **** Interpreter Exception:  Undefined function, object, or disallowed object field \"Sat2.ElapsedDays\" found in line:",
+        "\"  13: Propagate Prop(Sat2) {Sat2.ElapsedDays = 1};\""
+      ]
+    }
+  }
+}

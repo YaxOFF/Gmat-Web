@@ -1,0 +1,85 @@
+%  Mision propia 3: transferencia lunar. Estado inicial y TOI de Ex_LunarTransfer; propaga
+%  hasta la esfera de influencia, luego con la Luna como cuerpo central hasta el periselenio
+%  y un Target (DC) calcula la LOI para dejar una orbita lunar con ECC = 0.1.
+
+Create Spacecraft Sat;
+Sat.DateFormat       = UTCGregorian;
+Sat.Epoch            = '22 Jul 2014 11:29:10.811';
+Sat.CoordinateSystem = EarthMJ2000Eq;
+Sat.DisplayStateType = Cartesian;
+Sat.X                = -137380.1984338506;
+Sat.Y                = 75679.87867537055;
+Sat.Z                = 21487.63875187856;
+Sat.VX               = -0.2324532014235503;
+Sat.VY               = -0.4462753967758019;
+Sat.VZ               = 0.08561205662877103;
+Sat.DryMass          = 1000;
+
+Create ForceModel EarthFM;
+EarthFM.CentralBody                      = Earth;
+EarthFM.PrimaryBodies                    = {Earth};
+EarthFM.PointMasses                      = {Sun, Luna};
+EarthFM.Drag                             = None;
+EarthFM.SRP                              = Off;
+EarthFM.GravityField.Earth.Degree        = 4;
+EarthFM.GravityField.Earth.Order         = 4;
+EarthFM.GravityField.Earth.PotentialFile = 'JGM2.cof';
+
+Create ForceModel MoonFM;
+MoonFM.CentralBody                     = Luna;
+MoonFM.PrimaryBodies                   = {Luna};
+MoonFM.PointMasses                     = {Sun, Earth};
+MoonFM.Drag                            = None;
+MoonFM.SRP                             = Off;
+MoonFM.GravityField.Luna.Degree        = 4;
+MoonFM.GravityField.Luna.Order         = 4;
+MoonFM.GravityField.Luna.PotentialFile = 'LP165P.cof';
+
+Create Propagator EarthProp;
+EarthProp.FM              = EarthFM;
+EarthProp.Type            = RungeKutta89;
+EarthProp.InitialStepSize = 60;
+EarthProp.Accuracy        = 1e-11;
+EarthProp.MinStep         = 0.001;
+EarthProp.MaxStep         = 45000;
+
+Create Propagator MoonProp;
+MoonProp.FM              = MoonFM;
+MoonProp.Type            = RungeKutta89;
+MoonProp.InitialStepSize = 60;
+MoonProp.Accuracy        = 1e-11;
+MoonProp.MinStep         = 0.001;
+MoonProp.MaxStep         = 15000;
+
+Create ImpulsiveBurn TOI;
+TOI.CoordinateSystem = Local;
+TOI.Origin           = Earth;
+TOI.Axes             = VNB;
+TOI.Element1         = 0.14676929889;
+TOI.Element2         = 0.046042675892;
+TOI.Element3         = 0.090223244097;
+
+Create ImpulsiveBurn LOI;
+LOI.CoordinateSystem = Local;
+LOI.Origin           = Luna;
+LOI.Axes             = VNB;
+
+Create DifferentialCorrector DC;
+
+Create ReportFile R;
+R.Filename     = 'm3_lunar_transfer.txt';
+R.WriteHeaders = false;
+R.Precision    = 16;
+
+BeginMissionSequence;
+Propagate EarthProp(Sat) {Sat.Periapsis};
+Maneuver TOI(Sat);
+Propagate EarthProp(Sat) {Sat.Earth.RMAG = 325000};
+Propagate MoonProp(Sat) {Sat.Luna.Periapsis};
+Target DC {SolveMode = Solve, ExitMode = SaveAndContinue};
+   Vary DC(LOI.Element1 = -0.6, {Perturbation = 1e-5, MaxStep = 0.1});
+   Maneuver LOI(Sat);
+   Achieve DC(Sat.Luna.ECC = 0.1, {Tolerance = 1e-6});
+EndTarget;
+Propagate MoonProp(Sat) {Sat.ElapsedDays = 1};
+Report R Sat.A1ModJulian Sat.Luna.SMA Sat.Luna.ECC Sat.Luna.RMAG Sat.Luna.RadPer LOI.Element1;

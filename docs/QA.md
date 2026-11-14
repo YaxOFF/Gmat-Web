@@ -114,3 +114,11 @@ await window.__dnd(__find('Prop 1 Day'),__find('Prop to Perigee'),0.2)
 - Marcadores Monaco: tras Validar con `DefaultSC.Bogus = 3;` aparece squiggle (`.squiggly-error`); Ctrl+G + número para llegar a la línea. Hoy NO se limpia al editar a mano (ScriptEditor.tsx solo limpia en setValue externo).
 - Guardar: hook `HTMLAnchorElement.prototype.click` y `fetch(this.href)` para leer el contenido; sin líneas `GMAT `.
 - Móvil: iframe 390 px sigue con scrollWidth 717 (preexistente).
+
+### Fase 7c2 (misiones propias)
+- Las misiones de `backend/tests/missions/` no salen en `/api/samples`. Servirlas con CORS (`python` http.server en 127.0.0.1:8765, `os.chdir` a esa carpeta, header `Access-Control-Allow-Origin: *`) y cargar con `__load(nombre, 'http://127.0.0.1:8765/<m>.script')` (variante de `__load` con segundo argumento = URL; `File` en `input[type=file]` + `change`).
+- `__sel()` = el select de Vista de Resultados (opciones `gt:`/`sc:`/`rf:`); el selector de corridas de solver es el select cuyas opciones empiezan con `#N ·`. Ojo: el primer select de la página es el Agregar.
+- Guardar: hook de `HTMLAnchorElement.prototype.click` + `fetch(href)`; comparar con el original normalizando espacios (`replace(/\s+/g,' ')`). Diferencias esperadas y semánticamente iguales: se pierden comillas en `HistoricWeatherSource/PredictedWeatherSource = 'X'`, `Create Variable A B;` se parte en una línea por variable, comentario al final de línea pasa a línea propia, `1e-8` -> `1e-08`.
+- Números 7c2 (todos iguales a `reference.json`): m1 X=-4177.282287801592; m2 SK.Element1 por corrida -3.21037154806e-05 / -3.55370228741e-05 / -5.29010330181e-06; m3 LOI -0.603883729799; m4 FuelMass 1.000000000009152; m5 TOI 2.41950136969, GOI 1.46455506119. Ninguna misión propia tiene XYPlot (Resultados solo gt/sc/rf).
+- m6: Validar y Correr dan 2 squiggles (líneas 8 y 13); teclear los borra; Validar los devuelve.
+- Eje Y log del Solver muestra "0" en varias marcas (valores < 0,001 redondeados).
