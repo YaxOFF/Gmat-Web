@@ -10,6 +10,7 @@ const ResourceForm = lazy(() => import('./resources/ResourceForm'))
 const MissionTree = lazy(() => import('./mission/MissionTree'))
 const CommandForm = lazy(() => import('./mission/CommandForm'))
 const Results = lazy(() => import('./results/Results'))
+const View3D = lazy(() => import('./results/View3D')) // Cesium pesa varios MB: solo al abrir la pestaña 3D
 const goto = (line: number) => import('./editor/gmat').then((m) => m.revealLine(line))
 
 function Tabs<T extends string>({ items, value, onChange }: {
@@ -146,7 +147,7 @@ export default function App() {
         {centerTab === 'resource' && <Suspense fallback={null}><ResourceForm /></Suspense>}
         {centerTab === 'command' && <Suspense fallback={null}><CommandForm /></Suspense>}
         {centerTab === 'results' && <Suspense fallback={null}><Results /></Suspense>}
-        {centerTab === 'view3d' && <div className={s.pane}>{es.empty}</div>}
+        {centerTab === 'view3d' && <Suspense fallback={null}><View3D /></Suspense>}
       </main>
       <Console />
       {gallery && <SampleGallery onClose={() => setGallery(false)} />}

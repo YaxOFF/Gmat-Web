@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Assets de Cesium copiados por vite.config.ts
+public/cesium

@@ -14,6 +14,7 @@
 |---|---|
 | Correr un script (proceso por corrida, log en vivo, timeout, cancelar) | `backend/app/engine/runner.py`, ruta `/api/runs` y WS en `main.py` |
 | Resultados (ReportFile ocultos por nave/XYPlot, lectura, `/results`, `/files`) | `backend/app/engine/results.py` (`inject`, `read`), rutas en `main.py`; pestaña `frontend/src/results/Results.tsx` (uPlot, tabla, traza en tierra SVG), tipos `model/results.ts`, `store.results` |
+| Vista 3D (Cesium: Tierra offline NaturalEarthII, trayectorias, reloj/timeline, seguir nave, cámara inercial) | `frontend/src/results/View3D.tsx` (pestaña `view3d`, lazy en `App.tsx`), `results/cesiumBase.ts`, copia de assets en `frontend/vite.config.ts` |
 | Seguridad de scripts (prohibidos, rutas de salida) | `backend/app/engine/sanitize.py` |
 | Script ↔ modelo JSON | `backend/app/script/parser.py`, `serializer.py`; tipos en `frontend/src/model/mission.ts`, `shared/mission.schema.json` |
 | Excepciones del round-trip | `docs/EXCEPCIONES_ROUNDTRIP.md`, `backend/tests/test_script.py` |

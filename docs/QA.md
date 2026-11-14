@@ -85,3 +85,11 @@ await window.__dnd(__find('Prop 1 Day'),__find('Prop to Perigee'),0.2)
 - BackProp: `Propagate BackProp` con `ElapsedDays` POSITIVO nunca termina (usar negativo). Con `Propagate +0.5d; BackProp -0.3d` los datos de nave quedan 0..0.2 d (176 filas) mientras el ReportFile crudo tiene 698: `_csv` recorta mal.
 - UI: Ejemplos -> Correr -> pestaña Resultados; el select "Vista" se maneja con setter nativo + `change` (valores `gt:`/`sc:`/`rf:`/`xy:`). Ctrl hook de descargas: sobrescribir `HTMLAnchorElement.prototype.click` y leer `a.download`/blob.
 - Al cargar otro ejemplo, Resultados conserva los de la corrida anterior hasta correr de nuevo; al correr se vacía.
+
+### Fase 6b (Vista 3D Cesium)
+- Cargar un script por UI sin diálogo: `fetch('/api/samples/X.script')`, `File` en `input[type=file]` (DataTransfer) + evento `change`; Ejemplos: el input de búsqueda es el primero que NO es `type=file`.
+- Red: `read_network_requests urlPattern:'https://'` -> 0 (todo sale de `/cesium/Assets`). Aviso "Cesium ion" es solo un crédito local (ion-credit.png).
+- Largo: Hohmann con `ElapsedSecs = 432000` + `DefaultProp.MaxStep = 8; InitialStepSize = 8;` da 56 948 filas; la pestaña 3D carga sin error.
+- `requestAnimationFrame` en la ventana de Chrome MCP va a ~1 fps (incluso sin WebGL): no sirve para medir fps. Un `javascript_tool` >45 s da timeout de CDP: partir en pasos.
+- Pestañas Editor/3D/Resultados x6: 1 `.cesium-viewer` constante, heap en diente de sierra (sin fuga).
+- La pestaña 3D arranca en pausa: clic en ▶ (333,608 en 1568 px). Los clics 'scroll' de `computer` hacen zoom de Cesium.

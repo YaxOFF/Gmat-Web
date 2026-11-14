@@ -48,6 +48,12 @@ export const es = {
     rows: (shown: number, total: number) => shown < total ? `Mostrando ${shown} de ${total} filas` : `${total} filas`,
     trackHint: 'Proyección equirectangular, latitud/longitud respecto a la Tierra (GMAT).',
   },
+  view3d: {
+    follow: 'Seguir nave',
+    noFollow: 'Ninguna',
+    inertial: 'Cámara inercial (EarthMJ2000Eq)',
+    hint: 'Posiciones de GMAT en EarthMJ2000Eq centradas en la Tierra; ▶ reproduce la corrida.',
+  },
   validate: {
     starting: 'Validando el script con el motor…',
     ok: 'El motor cargó el script sin errores.',

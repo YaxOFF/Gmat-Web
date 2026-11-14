@@ -22,3 +22,5 @@
 .path { fill: none; stroke: var(--accent); stroke-width: .6; vector-effect: non-scaling-stroke; }
 .start { fill: var(--ok); }
 .end { fill: var(--error); }
+.globe { flex: 1; min-height: 300px; position: relative; }
+.bar select { padding: 2px 6px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); color: var(--text); }
