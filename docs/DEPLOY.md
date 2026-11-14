@@ -1,4 +1,4 @@
-<!-- fuente: docker-compose.yml, backend/Dockerfile, frontend/Dockerfile, frontend/nginx.conf, .env.example | rev: pendiente -->
+<!-- fuente: docker-compose.yml, backend/Dockerfile, frontend/Dockerfile, frontend/nginx.conf, .env.example | rev: 8739818 -->
 # Despliegue con Docker
 
 ```sh
