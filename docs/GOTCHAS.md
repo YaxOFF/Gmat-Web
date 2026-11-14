@@ -1,4 +1,4 @@
-<!-- fuente: backend/app/engine, backend/app/script, backend/app/main.py, frontend/src/store.ts, frontend/src/model/refs.ts, frontend/src/resources, dev.ps1 | rev: 7cb852d -->
+<!-- fuente: backend/app/engine, backend/app/script, backend/app/main.py, frontend/src/store.ts, frontend/src/model/refs.ts, frontend/src/resources, dev.ps1 | rev: ead1d00 -->
 # Trampas
 
 Leídas del código y comprobadas con el motor real donde dice "(verificado)".
