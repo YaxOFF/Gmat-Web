@@ -21,6 +21,13 @@ COMMENTABLE = ("Achieve", "BeginFileThrust", "BeginFiniteBurn", "ClearPlot", "En
                "Toggle", "UpdateDynamicData", "Vary", "Write")
 DISABLED = re.compile(r"%\s*((?:" + "|".join(COMMENTABLE) + r")\b.*);")
 BURN = re.compile(r"([A-Za-z_]\w*)\s*\(([^()]*)\)")
+SOLVER_CALL_RE = re.compile(r"([A-Za-z_]\w*)\s*\((.*)\)", re.S)
+# Comandos `Solver(relación[, {opciones}])`: claves de `args` y patrón de la relación.
+SOLVER_CALL = {"Vary": (("lhs", "rhs", "opts"), r"(.+?)\s*=\s*(.+)"),
+               "Achieve": (("lhs", "rhs", "opts"), r"(.+?)\s*=\s*(.+)"),
+               "Minimize": (("lhs",), r"([^=<>]+)"),
+               "NonlinearConstraint": (("lhs", "op", "rhs"), r"(.+?)\s*(<=|>=|=)\s*(.+)")}
+COND = re.compile(r"(.+?)\s*(==|~=|<=|>=|<|>)\s*(.+)", re.S)
 PROPAGATE = re.compile(r"(?:(Synchronized)\s+)?(?:(BackProp)\s+)?((?:[A-Za-z_]\w*\s*\([^()]*\)\s*)+)(?:\{(.*)\})?")
 
 
@@ -132,7 +139,42 @@ def _args(cmd: str, text: str) -> dict:
             return {"subs": toks[:-1], "state": toks[-1]}
     elif cmd == "GMAT" and (m := re.fullmatch(r"(.+?)\s*=(?!=)\s*(.*)", text, re.S)):
         return {"lhs": m[1], "rhs": m[2]}
+    elif cmd in ("Target", "Optimize") and (m := re.fullmatch(r"([A-Za-z_]\w*)\s*(\{.*\})?", text, re.S)):
+        if (opts := _opts(m[2])) is not None:
+            return {"solver": m[1], "opts": opts}
+    elif cmd in SOLVER_CALL and (m := SOLVER_CALL_RE.fullmatch(text)):
+        parts = _split(m[2], ",")
+        opts = _opts(parts[1]) if len(parts) == 2 else {} if len(parts) == 1 else None
+        keys, pattern = SOLVER_CALL[cmd]
+        rel = re.fullmatch(pattern, parts[0].strip(), re.S)
+        if rel and opts is not None and ("opts" in keys or not opts):
+            return {"solver": m[1], **dict(zip(keys, rel.groups())), **({"opts": opts} if "opts" in keys else {})}
+    elif cmd in ("If", "While"):
+        parts = re.split(r"\s*([&|])\s*", text.strip())
+        conds = [re.fullmatch(COND, p) for p in parts[::2]]
+        if all(conds):
+            return {"conds": [{"join": parts[2 * i - 1] if i else "", "lhs": c[1], "op": c[2], "rhs": c[3]}
+                              for i, c in enumerate(conds)]}
+    elif cmd == "For" and (m := re.fullmatch(r"([A-Za-z_][\w.]*)\s*=\s*([^:]+?)\s*:\s*([^:]+?)(?:\s*:\s*([^:]+?))?\s*", text)):
+        start, step, end = (m[2], m[3], m[4]) if m[4] else (m[2], "", m[3])
+        return {"var": m[1], "start": start, "step": step, "end": end}
     return {}
+
+
+def _opts(s: str | None) -> dict | None:
+    """`{K = v, ...}` → {"K": "v"} (valores como texto); None si no encaja."""
+    if not s:
+        return {}
+    s = s.strip()
+    if not (s.startswith("{") and s.endswith("}")):
+        return None
+    out = {}
+    for item in (t for t in _split(s[1:-1], ",") if t.strip()):
+        k, eq, v = item.partition("=")
+        if not eq or not IDENT.fullmatch(k.strip()) or not v.strip():
+            return None
+        out[k.strip()] = v.strip()
+    return out
 
 
 def _cmd(stmt: str, comments: list[str]) -> dict:

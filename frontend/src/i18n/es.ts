@@ -102,6 +102,10 @@ export const es = {
     addProp: '+ Propagador', addStop: '+ Condición', addParam: '+ Parámetro', del: 'Quitar',
     burn: 'Maniobra', file: 'Reporte', params: 'Parámetros a escribir', subs: 'Salidas (separadas por coma)',
     state: 'Estado', lhs: 'Variable o campo', rhs: 'Expresión',
+    solver: 'Solver', variable: 'Variable a variar', goal: 'Objetivo', op: 'Operador', initial: 'Valor inicial',
+    target: 'Valor', optDefault: 'Vacío = valor por defecto de GMAT', conds: 'Condiciones', join: 'Conector',
+    joinHelp: '& = y, | = o. GMAT evalúa de izquierda a derecha.', addCond: '+ Condición',
+    loopVar: 'Variable del ciclo', start: 'Inicio', step: 'Paso', end: 'Fin',
     picker: {
       title: 'Selector de parámetros', open: 'Elegir parámetro…', object: 'Objeto', search: 'Buscar parámetro…',
       CoordinateSystem: 'Sistema de coordenadas', Origin: 'Cuerpo de referencia', use: 'Usar', close: 'Cerrar',

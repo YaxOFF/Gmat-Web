@@ -19,7 +19,7 @@ export default {
   - Al terminar, detener solo esos puertos (8001/5175).
 
 ## Automático
-- `cd backend; .venv/Scripts/python -m pytest -q` -> fase 5a: 320 passed, 46 skipped, 1 xfailed.
+- `cd backend; .venv/Scripts/python -m pytest -q` -> fase 5a: 320 passed, 46 skipped, 1 xfailed; fase 5b: 322 passed, 46 skipped, 1 xfailed.
 - `cd frontend; npm run lint` (oxlint limpio) y `npm run build` (solo aviso de chunk >500 kB).
 
 ## API (python, urllib)
@@ -61,13 +61,20 @@ await window.__dnd(__find('Prop 1 Day'),__find('Prop to Perigee'),0.2)
 7. Comentar/Habilitar un Maneuver: línea `% Maneuver ...;` en el Editor, `.cmd` tachado; botón deshabilitado en bloques y Else.
 8. Borrar: primer clic "¿Borrar?", segundo borra.
 9. Correr (botón verde), esperar ~10 s: consola "Mission run completed".
+10. Fase 5b (formularios de solver/control): Target (select Solver = DC, SolveMode/ExitMode/ShowProgressWindow con opción vacía = se omite); Vary (editar Upper/MaxStep: cambia la línea y el Editor); Achieve (Tolerance + picker `…`); If (+Condición, conector `|`, operador `>`, × a la 1.ª: desaparece el conector); For con Variable creada (inicio/paso/fin -> `For Variable1 = 2:2:6;`); Validar -> "El motor cargó el script sin errores.".
+11. Fase 5b CLAVE (Hohmann desde cero): Nuevo, en Recursos poner el select (setter nativo) y clic Crear para Spacecraft, ForceModel, Propagator, ImpulsiveBurn x2, DifferentialCorrector (Local/Earth/VNB son los valores por defecto). En Misión, con `__add` (select + Agregar, en JS) agregar en orden Propagate, Target, Vary, Maneuver, Propagate, Achieve, Vary, Maneuver, Achieve (se anidan en el Target; usan el primer DC/nave/burn). Editar: stop `Spacecraft1.Periapsis`/`Apoapsis` (vaciar el valor), Vary 2 `ImpulsiveBurn2.Element1`, Maneuver 2 burn ImpulsiveBurn2, Achieve 2 `Spacecraft1.ECC` = 0. Correr: ImpulsiveBurn1.Element1 = 2.24028397735, ImpulsiveBurn2.Element1 = 1.432966302 (idéntico al sample; el "≈2.2408" del plan es aproximado). Salida en la consola de la UI (no hay Report).
 - Regresión: Ejemplos -> Correr; pestaña Recursos (lista, Crear Spacecraft, editor dedicado); editar script a mano y ver el árbol.
 - Sin errores: `read_console_messages onlyErrors` (el rastreo empieza en la primera llamada; llamarlo antes de actuar); `scrollWidth <= innerWidth`.
 - Trampas:
   - `resize_window` no cambia el viewport: capturar móvil con Chrome headless `--window-size=390,800 <url>`.
   - `confirm()`/`prompt()` nativos (Borrar/Renombrar de recursos, ResourceTree.tsx) congelan CDP; evitarlos o pulsar Enter en el diálogo.
   - Etiqueta y línea del comando se confirman al perder foco: pulsar Tab antes de comprobar.
+  - Nuevo deja el árbol de Misión viejo (bug 4b) hasta que se edita el Editor; la pestaña Recursos sí se vacía. Basta teclear `% new` en el Editor.
+  - Tras `Nuevo` la sesión de Chrome puede tener otra altura de viewport: los clics por coordenadas de filas del árbol cambian; medir con `getBoundingClientRect` o captura antes de clicar (un clic erróneo editó Upper de otro Vary).
+  - `javascript_tool` bloquea con "[BLOCKED: Cookie/query string data]" si el valor devuelto incluye `document.body.innerText` muy largo o textarea con ciertos textos; devolver recortes o usar captura. El selector del Agregar es el primer `select`; los selects de condiciones de If son `select` posteriores (op1, conector, op2).
+  - Clic en tab Editor + clic en el área + `ctrl+End` + captura permite leer el script (Monaco virtualiza líneas; no hay `window.monaco`).
   - Capturas: copiar a `qa-capturas/fase-<N>/` (ignorada por git).
 
 ## Por fase
 - Fase 5a: parameters, parse/serialize de `% Cmd;`, árbol Misión, formulario Propagate, picker, drag, ↑/↓, agregar, comentar, borrar, corrida Hohmann, regresión de recursos.
+- Fase 5b: Target/Vary/Achieve/If/For formularios, `parser._args`, comandos nuevos con el primer recurso, Hohmann armado desde cero (TOI 2.24028397735, GOI 1.432966302), regresión 5a (drag, comentar, borrar).

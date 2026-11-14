@@ -24,7 +24,7 @@ Verificar: `cd backend; .venv/Scripts/python -m pytest tests/test_tools.py`.
 Verificar: `pytest tests/test_script.py`.
 
 ## Formulario de comando nuevo
-1. `args` en `parser._args` (devolver `{}` si la sintaxis no encaja) + caso en `test_command_args_and_disabled`.
+1. `args` en `parser._args` (devolver `{}` si la sintaxis no encaja) + caso en `test_command_args_and_disabled` o `test_solver_and_control_args`.
 2. `toText` y tipo en `frontend/src/mission/commands.ts`; default en `newCommand`; entrada en `MENU`.
 3. Componente en `FORMS` de `CommandForm.tsx`; textos en `es.mission`.
 

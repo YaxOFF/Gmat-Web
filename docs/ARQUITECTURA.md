@@ -25,7 +25,7 @@
 Formulario/árbol → `setMission` (cambia el modelo ya) → `POST /api/script/serialize` → texto al editor. Editar texto → `editText` (debounce 400 ms) → `POST /api/script/parse` → modelo. Parse y serialize son Python puro: no usan el motor.
 
 ## Flujo: esquemas
-`ResourceTree` pide `GET /api/schema` una vez; `ResourceForm` (con `Editors.tsx` para Spacecraft/ForceModel/Propagator) pide `GET /api/schema/{type}` la primera vez que se abre un tipo. El backend responde de la caché en disco o le pregunta al motor (`engine_types` por el pool, `engine_fields` aislado) y guarda. `CommandForm`/`ParamPicker` piden `GET /api/parameters` la primera vez que se abre el selector (`engine_parameters` aislado, misma caché en disco con clave `parameters`).
+`ResourceTree` pide `GET /api/schema` una vez; `ResourceForm` (con `Editors.tsx` para Spacecraft/ForceModel/Propagator) pide `GET /api/schema/{type}` la primera vez que se abre un tipo. El backend responde de la caché en disco o le pregunta al motor (`engine_types` por el pool, `engine_fields` aislado) y guarda. `CommandForm` (formularios por comando en `FORMS`, sin llamadas al backend salvo el editor de línea) y `ParamPicker` piden `GET /api/parameters` la primera vez que se abre el selector (`engine_parameters` aislado, misma caché en disco con clave `parameters`).
 
 ## Convenciones
 - Config solo por env (`config.py`), nada hardcodeado.

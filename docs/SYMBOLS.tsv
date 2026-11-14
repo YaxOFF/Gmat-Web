@@ -11,9 +11,13 @@ CenterTab	frontend/src/store.ts
 Checks	frontend/src/resources/Editors.tsx
 Command	frontend/src/model/mission.ts
 CommandForm	frontend/src/mission/CommandForm.tsx
+Cond	frontend/src/mission/commands.ts
+CondArgs	frontend/src/mission/commands.ts
+CondForm	frontend/src/mission/CommandForm.tsx
 Console	frontend/src/App.tsx
 ConvertRequest	backend/app/main.py
 ConvertSelect	frontend/src/resources/Editors.tsx
+DC_TYPES	frontend/src/mission/commands.ts
 Doc	frontend/src/store.ts
 Editor	frontend/src/resources/Editors.tsx
 Engine	frontend/src/store.ts
@@ -21,6 +25,8 @@ EngineStatus	frontend/src/App.tsx
 EpochRequest	backend/app/main.py
 Field	frontend/src/resources/Field.tsx
 FieldSchema	frontend/src/model/schema.ts
+ForArgs	frontend/src/mission/commands.ts
+ForForm	frontend/src/mission/CommandForm.tsx
 ForceModelEditor	frontend/src/resources/Editors.tsx
 FormProps	frontend/src/mission/CommandForm.tsx
 IDENT	frontend/src/model/refs.ts
@@ -32,6 +38,9 @@ MENU	frontend/src/mission/commands.ts
 Mission	frontend/src/model/mission.ts
 MissionTree	frontend/src/mission/MissionTree.tsx
 NamesField	frontend/src/mission/CommandForm.tsx
+OPT_TYPES	frontend/src/mission/commands.ts
+Opts	frontend/src/mission/commands.ts
+OptsFields	frontend/src/mission/CommandForm.tsx
 Others	frontend/src/resources/Editors.tsx
 ParamInfo	frontend/src/model/schema.ts
 ParamInput	frontend/src/mission/ParamPicker.tsx
@@ -42,6 +51,8 @@ PropagateForm	frontend/src/mission/CommandForm.tsx
 PropagatorEditor	frontend/src/resources/Editors.tsx
 Props	frontend/src/resources/Editors.tsx
 Ref	frontend/src/model/mission.ts
+RelArgs	frontend/src/mission/CommandForm.tsx
+RelArgs	frontend/src/mission/commands.ts
 ReportArgs	frontend/src/mission/commands.ts
 ReportForm	frontend/src/mission/CommandForm.tsx
 ResSelect	frontend/src/mission/CommandForm.tsx
@@ -55,6 +66,7 @@ Sample	frontend/src/store.ts
 SampleGallery	frontend/src/App.tsx
 ScriptEditor	frontend/src/editor/ScriptEditor.tsx
 ScriptRejected	backend/app/engine/sanitize.py
+SolverArgs	frontend/src/mission/commands.ts
 SpacecraftEditor	frontend/src/resources/Editors.tsx
 Tabs	frontend/src/App.tsx
 TextField	frontend/src/resources/Field.tsx

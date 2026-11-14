@@ -98,6 +98,48 @@ Propagate Prop(Sat, 'Covariance') {Sat.ElapsedDays = 1};
     assert parse(text) == m
 
 
+def test_solver_and_control_args():
+    m = parse("""BeginMissionSequence;
+Target 'T' DC {SolveMode = Solve, ExitMode = DiscardAndContinue};
+   Vary DC(TOI.Element1 = 0.5, {Perturbation = 0.0001, Lower = 0, MaxStep = 0.2});
+   Achieve DC(Sat.Earth.RMAG = 42165, {Tolerance = 0.1});
+   Achieve aDC(ev(3,1) = 1);
+EndTarget;
+Optimize Yukon1;
+   Minimize Yukon1(cost);
+   NonlinearConstraint Yukon1(G<=8);
+   NonlinearConstraint Yukon1(a.X=b.X);
+EndOptimize;
+If a > 1 & Sat.Earth.Altitude <= 342 | b ~= 0
+EndIf;
+While Sat.ElapsedDays < 1.0
+EndWhile;
+For I = 1:2:14;
+EndFor;
+For i = 1:20
+EndFor;
+Vary DC(x = 1, {Perturbation});
+""")
+    t, o, i, w, f, f2, bad = m["sequence"]
+    assert t["args"] == {"solver": "DC", "opts": {"SolveMode": "Solve", "ExitMode": "DiscardAndContinue"}}
+    vary, ach, ach2 = t["children"]
+    assert vary["args"] == {"solver": "DC", "lhs": "TOI.Element1", "rhs": "0.5",
+                            "opts": {"Perturbation": "0.0001", "Lower": "0", "MaxStep": "0.2"}}
+    assert ach["args"]["opts"] == {"Tolerance": "0.1"} and ach2["args"]["lhs"] == "ev(3,1)"
+    assert o["args"] == {"solver": "Yukon1", "opts": {}}
+    mn, nl, nl2 = o["children"]
+    assert mn["args"] == {"solver": "Yukon1", "lhs": "cost"}
+    assert nl["args"] == {"solver": "Yukon1", "lhs": "G", "op": "<=", "rhs": "8"} and nl2["args"]["op"] == "="
+    assert i["args"]["conds"] == [{"join": "", "lhs": "a", "op": ">", "rhs": "1"},
+                                  {"join": "&", "lhs": "Sat.Earth.Altitude", "op": "<=", "rhs": "342"},
+                                  {"join": "|", "lhs": "b", "op": "~=", "rhs": "0"}]
+    assert w["args"]["conds"] == [{"join": "", "lhs": "Sat.ElapsedDays", "op": "<", "rhs": "1.0"}]
+    assert f["args"] == {"var": "I", "start": "1", "step": "2", "end": "14"}
+    assert f2["args"] == {"var": "i", "start": "1", "step": "", "end": "20"}
+    assert bad["args"] == {}
+    assert parse(serialize(m)) == m
+
+
 def test_parse_keeps_unknown_lines():
     m = parse("Create Spacecraft Sat;\nSat.Epoch = 19 Aug 2015;\nCreate 3D;\nfoo bar;\n")
     assert m["raw"] == ["Sat.Epoch = 19 Aug 2015;", "Create 3D;", "foo bar;"]

@@ -35,7 +35,22 @@ export type BurnArgs = { burn: string; sats: string[] }
 export type ReportArgs = { file: string; params: string[] }
 export type ToggleArgs = { subs: string[]; state: string }
 export type AssignArgs = { lhs: string; rhs: string }
+/** Opciones `{K = v, ...}` en el orden del script; valores como texto. */
+export type Opts = Record<string, string>
+export type SolverArgs = { solver: string; opts: Opts } // Target, Optimize
+export type RelArgs = { solver: string; lhs: string; op?: string; rhs?: string; opts?: Opts } // Vary, Achieve, Minimize, NonlinearConstraint
+export type Cond = { join: string; lhs: string; op: string; rhs: string }
+export type CondArgs = { conds: Cond[] } // If, While
+export type ForArgs = { var: string; start: string; step: string; end: string }
 export type Args = Record<string, unknown>
+
+export const DC_TYPES = ['DifferentialCorrector']
+export const OPT_TYPES = ['Yukon', 'SQPMatlab', 'FminconOptimizer', 'VF13ad']
+
+const optsText = (o: Opts = {}) => {
+  const items = Object.entries(o).filter(([, v]) => v !== '').map(([k, v]) => `${k} = ${v}`)
+  return items.length ? `{${items.join(', ')}}` : ''
+}
 
 /** Texto del comando a partir de `args` (mismo formato que acepta el parser). */
 export function toText(cmd: string, a: Args): string {
@@ -52,6 +67,22 @@ export function toText(cmd: string, a: Args): string {
   if (cmd === 'Report') return [(a as ReportArgs).file, ...(a as ReportArgs).params].join(' ')
   if (cmd === 'Toggle') return [...(a as ToggleArgs).subs, (a as ToggleArgs).state].join(' ')
   if (cmd === 'GMAT') return `${(a as AssignArgs).lhs} = ${(a as AssignArgs).rhs}`
+  if (cmd === 'Target' || cmd === 'Optimize') {
+    const t = a as SolverArgs
+    return [t.solver, optsText(t.opts)].filter(Boolean).join(' ')
+  }
+  if (cmd === 'Minimize') return `${(a as RelArgs).solver}(${(a as RelArgs).lhs})`
+  if (cmd === 'NonlinearConstraint' || cmd === 'Vary' || cmd === 'Achieve') {
+    const r = a as RelArgs
+    const o = optsText(r.opts)
+    return `${r.solver}(${r.lhs} ${r.op ?? '='} ${r.rhs}${o && `, ${o}`})`
+  }
+  if (cmd === 'If' || cmd === 'While')
+    return (a as CondArgs).conds.map((c, i) => `${i ? ` ${c.join} ` : ''}${c.lhs} ${c.op} ${c.rhs}`).join('')
+  if (cmd === 'For') {
+    const f = a as ForArgs
+    return `${f.var} = ${[f.start, f.step, f.end].filter(Boolean).join(':')}`
+  }
   return ''
 }
 
@@ -65,8 +96,8 @@ export function lineOf(c: Command): string {
 export function newCommand(cmd: string, m: Mission): Command {
   const first = (types: string[], fallback: string) => m.resources.find((r) => types.includes(r.type))?.name ?? fallback
   const sat = first(['Spacecraft'], 'DefaultSC')
-  const dc = first(['DifferentialCorrector'], 'DC')
-  const opt = first(['Yukon', 'SQPMatlab', 'FminconOptimizer', 'VF13ad'], 'Optimizer')
+  const dc = first(DC_TYPES, 'DC')
+  const opt = first(OPT_TYPES, 'Optimizer')
   const variable = first(['Variable'], '')
   const plot = first(['XYPlot'], 'XYPlot1')
   const args: Record<string, Args> = {
@@ -79,14 +110,18 @@ export function newCommand(cmd: string, m: Mission): Command {
     Toggle: { subs: [first(['ReportFile', 'XYPlot', 'OrbitView', 'GroundTrackPlot', 'EphemerisFile'], 'ReportFile1')],
       state: 'On' },
     GMAT: variable ? { lhs: variable, rhs: '0' } : { lhs: `${sat}.SMA`, rhs: '7000' },
+    Target: { solver: dc, opts: { SolveMode: 'Solve', ExitMode: 'DiscardAndContinue' } },
+    Vary: { solver: dc, lhs: `${first(['ImpulsiveBurn'], 'DefaultIB')}.Element1`, rhs: '0.5',
+      opts: { Perturbation: '0.0001', Lower: '0', Upper: '3.14159', MaxStep: '0.2' } },
+    Achieve: { solver: dc, lhs: `${sat}.Earth.RMAG`, rhs: '42165', opts: { Tolerance: '0.1' } },
+    Optimize: { solver: opt, opts: { SolveMode: 'Solve', ExitMode: 'DiscardAndContinue' } },
+    Minimize: { solver: opt, lhs: variable || 'Cost' },
+    NonlinearConstraint: { solver: opt, lhs: `${sat}.Earth.SMA`, op: '=', rhs: '7000' },
+    If: { conds: [{ join: '', lhs: `${sat}.ElapsedDays`, op: '<', rhs: '1' }] },
+    While: { conds: [{ join: '', lhs: `${sat}.ElapsedDays`, op: '<', rhs: '1' }] },
+    For: { var: variable || 'I', start: '1', step: '1', end: '10' },
   }
-  const text: Record<string, string> = {
-    Target: dc, Vary: `${dc}(${first(['ImpulsiveBurn'], 'DefaultIB')}.Element1 = 0.5)`,
-    Achieve: `${dc}(${sat}.Earth.RMAG = 42165)`, Optimize: opt, Minimize: `${opt}(${variable || 'Cost'})`,
-    NonlinearConstraint: `${opt}(${sat}.Earth.SMA = 7000)`, If: `${sat}.ElapsedDays < 1`,
-    While: `${sat}.ElapsedDays < 1`, For: `${variable || 'I'} = 1:10`,
-    ClearPlot: plot, MarkPoint: plot, PenUp: plot, PenDown: plot,
-  }
+  const text: Record<string, string> = { ClearPlot: plot, MarkPoint: plot, PenUp: plot, PenDown: plot }
   const c: Command = { cmd, text: args[cmd] ? toText(cmd, args[cmd]) : text[cmd] ?? '', args: args[cmd] ?? {}, comments: [] }
   if (cmd in BLOCKS) c.children = []
   return c
