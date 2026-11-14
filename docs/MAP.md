@@ -1,4 +1,4 @@
-<!-- fuente: backend/app, frontend/src, shared | rev: 7cb852d -->
+<!-- fuente: backend/app, frontend/src, shared | rev: 6d5fcd4 -->
 # Mapa
 
 ## Entradas
