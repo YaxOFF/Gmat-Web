@@ -2,6 +2,18 @@
 
 Port web de NASA GMAT R2026a: backend FastAPI sobre `gmatpy` (motor real) + frontend React/Vite/TS/Cesium.
 
+## Contexto del proyecto (antes de explorar código)
+
+Lee `docs/SISTEMA.md`: piezas (frontend, backend, motor GMAT) y qué toca cada tipo de cambio.
+
+Para ubicar algo, en este orden:
+1. `Grep` de la palabra clave dentro de `docs/`. Conceptos en `MAP.md`, símbolos en `SYMBOLS.tsv` (no leerlo entero).
+2. `docs/TAREAS.md` si vas a implementar: archivos, orden, archivo modelo y comando de verificación.
+3. `docs/GOTCHAS.md` antes de tocar el motor, el parser o la sincronía script ↔ modelo.
+4. Solo si falla: grep en el repo y agrega la entrada faltante a `docs/MAP.md`.
+
+Con el archivo ubicado, `Grep` del símbolo y `Read` con `offset`. Al terminar un cambio corre `sh docs/docs.sh stale` y actualiza lo que liste.
+
 ## Al empezar cada sesión
 
 1. Leer `PLAN.md` → **Avance** y tomar la primera fase sin marcar.
