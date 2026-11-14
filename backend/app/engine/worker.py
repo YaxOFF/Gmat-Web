@@ -5,6 +5,8 @@ Todo lo que toque el motor se envía aquí con `submit(fn, ...)`.
 """
 import asyncio
 import multiprocessing as mp
+import os
+import re
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -23,18 +25,31 @@ def api_startup_file(gmat_home: Path, cache_dir: Path) -> Path:
         return existing
     cache_dir.mkdir(parents=True, exist_ok=True)
     out = cache_dir / "api_startup_file.txt"
-    src = (gmat_home / "bin" / "gmat_startup_file.txt").read_text()
-    out.write_text(src.replace("..", gmat_home.as_posix()))
+    text = (gmat_home / "bin" / "gmat_startup_file.txt").read_text().replace("..", gmat_home.as_posix())
+    if not out.exists() or out.read_text() != text:
+        # atómico: varios procesos de corrida arrancan a la vez y lo leen
+        tmp = out.with_name(f"{out.name}.{os.getpid()}")
+        tmp.write_text(text)
+        try:
+            os.replace(tmp, out)
+        except PermissionError:  # Windows: otro proceso lo tiene abierto; ya lo escribió igual
+            tmp.unlink(missing_ok=True)
     return out
 
 
-def _init(gmat_home: str, cache_dir: str) -> None:
+def _init(gmat_home: str, cache_dir: str, output_path: str | None = None) -> None:
     global gmat
     home = Path(gmat_home)
     sys.path.insert(1, str(home / "bin"))
     import gmatpy
 
-    gmatpy.Setup(str(api_startup_file(home, Path(cache_dir))))
+    startup = api_startup_file(home, Path(cache_dir))
+    if output_path:  # corrida: salidas por defecto (GmatLog, ReportFile sin Filename) a su carpeta
+        text = re.sub(r"(?m)^OUTPUT_PATH\s*=.*$", f"OUTPUT_PATH = {Path(output_path).as_posix()}/",
+                      startup.read_text())
+        startup = Path(output_path) / "startup.txt"
+        startup.write_text(text)
+    gmatpy.Setup(str(startup))
     gmat = gmatpy
 
 

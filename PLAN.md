@@ -148,7 +148,7 @@ Cuentas, misiones guardadas en servidor (PostgreSQL), compartir por enlace, cuot
 
 - [x] Fase 0 — Preparar
 - [x] Fase 1 — Esqueleto backend + frontend
-- [ ] Fase 2 — Correr scripts (editor + consola)
+- [x] Fase 2 — Correr scripts (editor + consola)
 - [ ] Fase 3 — Modelo de misión: parser/serializer + esquemas
 - [ ] Fase 4 — Árbol de recursos + formularios
 - [ ] Fase 5 — Editor de secuencia de misión
@@ -164,3 +164,4 @@ Cuentas, misiones guardadas en servidor (PostgreSQL), compartir por enlace, cuot
 
 - **2026-11-14 · Fase 0** — Repo creado con `origin` a `YaxOFF/Gmat-Web`. Elegido backend Python + `gmatpy` (motor real) en lugar de WebAssembly o reescritura; frontend React + Vite + TS + Cesium; alcance v1 = núcleo de diseño de misión; deploy Docker/Portainer + local. Comprobado que `gmatpy` R2026a corre samples con Python 3.14 en Windows y que existe build Ubuntu R2026a para Docker. Código fuente C++ de referencia clonado en `C:\Users\Yaxon\Downloads\GMAT-src` (tag `R2026a`).
 - **2026-11-14 · Fase 1** — Backend FastAPI con `ProcessPoolExecutor` (spawn) cuyo initializer importa `gmatpy`; `GET /api/health` devuelve versión vía worker (`{status:"error"}` si el motor falla). Si falta `GMAT_HOME/bin/api_startup_file.txt` se genera uno equivalente en `backend/.cache/`. Límites por env: `GMAT_WEB_WORKERS=2`, `GMAT_WEB_TASK_TIMEOUT=60`. Frontend Vite 8 + TS 7 + oxlint (en vez de eslint), Zustand, tokens `light-dark()`, textos en `es.ts`. Verificado: pytest, lint, build, health por proxy, shell visible sin errores de consola. Pendiente: `GMAT_HOME` debe estar definido (pytest y `dev.ps1` fallan sin él, a propósito); `dev.sh` solo con `sh -n`.
+- **2026-11-14 · Fase 2** — Cada corrida es un proceso spawn propio (`engine/runner.py`, cwd `GMAT_HOME/bin`); log por `WS /api/ws/runs/{id}` (log con nivel y línea, progress, done, error); cancelar con `DELETE /api/runs/{id}`; timeout y `MAX_RUNS` (429). `sanitize.py` rechaza CallPython/Matlab/GmatFunction, System*, Save, `#Include`; reescribe rutas de salida a la carpeta de la corrida; comenta visores GUI sin mover líneas. Corregida carrera al escribir `api_startup_file`. Frontend: Monaco (lazy), ejemplos, abrir/guardar, consola con errores clicables. ~70 de 88 samples raíz corren limpios (faltan GmatFunction, Python, MarsGRAM, archivos de entrada). Pendientes: limpiar carpetas de corrida y dict `runs`; en Docker instalación GMAT solo lectura; marcadores de error en Monaco; revisión visual completa de UI (solo se comprobó carga sin errores de consola).

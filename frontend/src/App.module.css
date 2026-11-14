@@ -62,3 +62,64 @@
   font-weight: 600;
 }
 .log { flex: 1; margin: 0; padding: 8px 10px; overflow: auto; font: 12px/1.4 var(--mono); }
+.logLine {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: pre-wrap;
+}
+button.logLine { cursor: pointer; text-decoration: underline dotted; }
+button.logLine:hover { background: var(--surface-2); }
+.logLine[data-level='warning'] { color: var(--warn); }
+.logLine[data-level='error'] { color: var(--error); }
+.logLine[data-level='system'] { color: var(--accent); font-weight: 600; }
+.running { margin-left: var(--gap); font-weight: 400; color: var(--text-muted); }
+
+.btn:disabled { opacity: .5; cursor: default; }
+.btnRun, .btnStop { composes: btn; color: #fff; border-color: transparent; }
+.btnRun { background: var(--ok); }
+.btnStop { background: var(--error); }
+.docName { color: var(--text-muted); font-family: var(--mono); }
+.editorPane { flex: 1; display: flex; min-height: 0; }
+.editorPane[hidden] { display: none; }
+
+.dialog {
+  width: min(760px, 90vw);
+  height: min(640px, 85vh);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+.dialog[open] { display: flex; flex-direction: column; }
+.dialogHead { display: flex; align-items: center; gap: var(--gap); padding: 10px; border-bottom: 1px solid var(--border); }
+.dialogBody { flex: 1; overflow: auto; padding: 6px 10px 12px; }
+.input {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: inherit;
+}
+.group { margin: 12px 0 4px; font-size: 13px; color: var(--text-muted); }
+.sample {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sample:hover { background: var(--surface-2); }
+.sample small { color: var(--text-muted); }
