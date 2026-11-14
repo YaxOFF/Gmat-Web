@@ -1,4 +1,4 @@
-<!-- fuente: backend/app/main.py, frontend/vite.config.ts, backend/app/config.py | rev: a31cbd8 -->
+<!-- fuente: backend/app/main.py, frontend/vite.config.ts, backend/app/config.py | rev: b6321b0 -->
 # Sistema
 
 | Pieza | Dónde vive | Stack | Docs |

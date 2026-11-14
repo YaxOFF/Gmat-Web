@@ -1,4 +1,4 @@
-<!-- fuente: backend/app, frontend/src, backend/tests | rev: a31cbd8 -->
+<!-- fuente: backend/app, frontend/src, backend/tests | rev: b6321b0 -->
 # Tareas
 
 ## Comandos
