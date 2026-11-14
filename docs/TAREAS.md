@@ -1,10 +1,10 @@
-<!-- fuente: backend/app, frontend/src, backend/tests | rev: b6321b0 -->
+<!-- fuente: backend/app, frontend/src, backend/tests | rev: 136b077 -->
 # Tareas
 
 ## Comandos
 Requieren `GMAT_HOME` (local: `C:\Users\Yaxon\Downloads\gmat-win-R2026a`).
 - Correr todo: `./dev.ps1` (Windows) o `./dev.sh`. Backend `:8000`, frontend `:5173`. Listo cuando `GET http://127.0.0.1:8000/api/health` da `status: "ok"`. Antes, confirmar que los dos puertos están libres (`docs/GOTCHAS.md`, Entorno de desarrollo).
-- Pruebas backend: `cd backend; .venv/Scripts/python -m pytest` (motor real, ~30 s). Esperado: `320 passed, 46 skipped, 1 xfailed` y un aviso de Starlette.
+- Pruebas backend: `cd backend; .venv/Scripts/python -m pytest` (motor real, ~30 s). Esperado: `322 passed, 46 skipped, 1 xfailed` y un aviso de Starlette.
 - Frontend: `cd frontend; npm run lint; npm run build` (~2 s). Lint sin salida; build avisa de un chunk mayor a 500 kB (Monaco). No hay runner de pruebas en el frontend.
 - Backend a mano: `cd backend; .venv/Scripts/python -m uvicorn app.main:app --port 8000`.
 
