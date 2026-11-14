@@ -120,6 +120,29 @@ async def convert_state(req: ConvertRequest):
     return {"type": req.toType, "elements": out}
 
 
+DATE_FORMATS = {f"{scale}{kind}" for scale in ("A1", "TAI", "UTC", "TT", "TDB")
+                for kind in ("ModJulian", "Gregorian")}
+
+
+class EpochRequest(BaseModel):
+    fromFormat: str
+    toFormat: str
+    epoch: str
+
+
+@app.post("/api/convert/epoch")
+async def convert_epoch(req: EpochRequest):
+    if not {req.fromFormat, req.toFormat} <= DATE_FORMATS:
+        raise HTTPException(422, "Formato de época desconocido")
+    # va al script entre comillas: solo dígitos, letras, espacios, ':' '.' '-'
+    if not re.fullmatch(r"[\w :.\-]{1,40}", req.epoch):
+        raise HTTPException(422, "Época inválida")
+    out = await worker.submit(worker.convert_epoch, req.fromFormat, req.toFormat, req.epoch)
+    if out is None:
+        raise HTTPException(422, "El motor no aceptó la época")
+    return {"format": req.toFormat, "epoch": out}
+
+
 @app.get("/api/schema")
 async def list_schema_types():
     return await schema.types()

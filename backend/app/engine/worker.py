@@ -101,6 +101,18 @@ def convert_state(from_type: str, to_type: str, elements: dict[str, float]) -> d
     return {label: float(sc.GetField(label)) for label in sc.GetStateElementLabels(to_type)}
 
 
+def convert_epoch(from_format: str, to_format: str, epoch: str) -> str | None:
+    """Época de un formato a otro (UTCGregorian, TAIModJulian…) con el Spacecraft de GMAT.
+    El llamador valida formato y texto. None si el motor no la acepta."""
+    script = (f"Create Spacecraft ConvSat;\nConvSat.DateFormat = {from_format};\n"
+              f"ConvSat.Epoch = '{epoch}';\nBeginMissionSequence;\n")
+    if not _load_text(script):
+        return None
+    sc = gmat.GetObject("ConvSat")
+    sc.SetField("DateFormat", to_format)
+    return str(sc.GetField("Epoch"))
+
+
 def validate_script(script_path: str, log_path: str) -> bool:
     """Carga (sin correr) un script ya saneado; los errores quedan en log_path."""
     os.chdir(Path(config.GMAT_HOME, "bin"))

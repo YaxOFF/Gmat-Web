@@ -17,11 +17,12 @@
 | Script ↔ modelo JSON | `backend/app/script/parser.py`, `serializer.py`; tipos en `frontend/src/model/mission.ts`, `shared/mission.schema.json` |
 | Excepciones del round-trip | `docs/EXCEPCIONES_ROUNDTRIP.md`, `backend/tests/test_script.py` |
 | Esquemas de campos desde el motor (caché, proceso aislado) | `backend/app/engine/schema.py`, `frontend/src/model/schema.ts`; forma en `docs/API.md` |
-| Conversión de estado orbital | `worker.convert_state`, ruta `/api/convert/state` |
+| Conversión de estado orbital y de época | `worker.convert_state`/`convert_epoch`, rutas `/api/convert/state`, `/api/convert/epoch`; `store.convert` |
 | Variables de entorno y límites | `backend/app/config.py`; tabla en `README.md` |
 | Validar script sin correrlo | `worker.validate_script`, ruta `/api/script/validate` |
 | Árbol de recursos (crear/renombrar/clonar/borrar) | `frontend/src/resources/ResourceTree.tsx`, `frontend/src/model/refs.ts` |
-| Formulario de recurso | `frontend/src/resources/ResourceForm.tsx` |
+| Formulario de recurso | `frontend/src/resources/ResourceForm.tsx` (marco), `Field.tsx` (un campo), `value.ts` (`show`) |
+| Editores dedicados Spacecraft/ForceModel/Propagator | `frontend/src/resources/Editors.tsx`; prueba LEO modelo = script a mano en `backend/tests/test_leo.py` |
 | Sincronía editor de script ↔ modelo | `store.ts` (`editText`, `setMission`, contador `seq`) |
 | Editor Monaco + resaltado GMAT | `frontend/src/editor/ScriptEditor.tsx`, `gmat.ts` |
 | Ejemplos de GMAT | `backend/app/samples.py` (lee `GMAT_HOME/samples`) |

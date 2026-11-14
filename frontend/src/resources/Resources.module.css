@@ -54,3 +54,11 @@
 .row input[type='checkbox'] { justify-self: start; }
 .reset { border: 0; background: none; cursor: pointer; color: var(--text-muted); }
 .reset:disabled { visibility: hidden; }
+
+.section { margin: 0 0 12px; padding: 4px 10px 8px; border: 1px solid var(--border); border-radius: var(--radius); }
+.legend { padding: 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); cursor: default; }
+summary.legend { cursor: pointer; }
+.note { grid-column: 1 / -1; color: var(--text-muted); font-size: 12px; }
+.note.warn { margin: 0; color: var(--warn); }
+.checks { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 4px 0; }
+.checks .label { flex-basis: 100%; }

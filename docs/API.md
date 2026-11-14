@@ -13,6 +13,7 @@
 | `POST /script/serialize` | modelo | `{script}`; 422 |
 | `POST /script/validate` | `{script}` | `{ok, errors:[{type?, level, text, line?}]}` (siempre 200) |
 | `POST /convert/state` | `{fromType,toType,elements}` | `{type, elements}`; 422 |
+| `POST /convert/epoch` | `{fromFormat,toFormat,epoch}` (formatos `A1/TAI/UTC/TT/TDB` + `ModJulian/Gregorian`) | `{format, epoch}`; 422 |
 | `GET /schema` | | lista `{type, category, objectType}` |
 | `GET /schema/{type}` | | `{type, fields}`; 404 si el tipo no es creable |
 

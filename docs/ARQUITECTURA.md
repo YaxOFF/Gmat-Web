@@ -25,7 +25,7 @@
 Formulario/árbol → `setMission` (cambia el modelo ya) → `POST /api/script/serialize` → texto al editor. Editar texto → `editText` (debounce 400 ms) → `POST /api/script/parse` → modelo. Parse y serialize son Python puro: no usan el motor.
 
 ## Flujo: esquemas
-`ResourceTree` pide `GET /api/schema` una vez; `ResourceForm` pide `GET /api/schema/{type}` la primera vez que se abre un tipo. El backend responde de la caché en disco o le pregunta al motor (`engine_types` por el pool, `engine_fields` aislado) y guarda.
+`ResourceTree` pide `GET /api/schema` una vez; `ResourceForm` (con `Editors.tsx` para Spacecraft/ForceModel/Propagator) pide `GET /api/schema/{type}` la primera vez que se abre un tipo. El backend responde de la caché en disco o le pregunta al motor (`engine_types` por el pool, `engine_fields` aislado) y guarda.
 
 ## Convenciones
 - Config solo por env (`config.py`), nada hardcodeado.

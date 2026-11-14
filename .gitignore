@@ -9,3 +9,5 @@ runs/
 .cache/
 *.egg-info/
 *.tsbuildinfo
+qa-capturas/
+.claude/settings.local.json

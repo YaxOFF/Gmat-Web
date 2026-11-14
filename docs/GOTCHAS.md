@@ -36,7 +36,7 @@ Leídas del código y comprobadas con el motor real donde dice "(verificado)".
 - **Caché:** `GMAT_WEB_CACHE/schema/<versión>.v2.json`, reescrito completo con cada tipo nuevo. Si cambia la forma de lo guardado, subir el sufijo `.v2`. La versión y la caché en memoria duran lo que el proceso (`schema.reset()` es para pruebas). `_lock` global: las consultas de esquema van en serie.
 - **Nombres de tipo.** `PropSetup` se publica como `Propagator`. Del factory de PARAMETER solo salen `Variable`, `String`, `Array`. FminconOptimizer, VF13ad y GroundStation no salen (el motor no los lista). Hoy son 47 tipos.
 - **`ENUM_CANDIDATES` solo cubre `Spacecraft.DisplayStateType`** y se filtra probando `SetField`. `main.STATE_TYPES` usa la lista sin filtrar.
-- **`stateType` es la primera representación que usa el elemento.** `INC`, `RAAN`, `AOP`, `TA` y `SMA` salen como `Keplerian`; `RMAG`, `RA`, `DEC`, `VMAG` como `SphericalAZFPA` (verificado). `ResourceForm` filtra por igualdad, así que en `ModifiedKeplerian` solo muestra `RadPer` y `RadApo`. Los cartesianos (`X`…`VZ`) no llevan `stateType` y se ven siempre. Pendiente para la fase 4b.
+- **`stateType` es la primera representación que usa el elemento.** `INC`, `RAAN`, `AOP`, `TA` y `SMA` salen como `Keplerian`; `RMAG`, `RA`, `DEC`, `VMAG` como `SphericalAZFPA` (verificado). `Editors.tsx` filtra por igualdad, así que en `ModifiedKeplerian` solo muestra `RadPer` y `RadApo`. Los cartesianos (`X`…`VZ`) no llevan `stateType`: el editor los trata como `Cartesian` a mano (`CART`).
 - **`default` es `null` en campos de solo lectura** (leerlos puede tumbar el motor).
 
 ## Parser y serializer (`script/`)
@@ -67,10 +67,15 @@ Leídas del código y comprobadas con el motor real donde dice "(verificado)".
 - **Grupos del árbol:** `EVENT_LOCATOR`, `FIELD_OF_VIEW` y los tipos que el motor no lista caen en "other".
 - **Controles del formulario:** `Boolean` = casilla; campo con `enum` = lista; resto = texto, con sugerencias si trae `refType`. No se muestran los de solo lectura. Texto vacío o ↺ quita el campo del script (vuelve al default).
 - **Listas y matrices:** todo tipo con `Array`, `Rvector`, `Rmatrix` o `Unsigned` se parte por espacios y comas en una lista plana. Una `Rmatrix` pierde sus filas.
+- **Campos que el motor no lista** (`GravityField.<cuerpo>.Degree/Order/PotentialFile`, `Drag.AtmosphereModel`, pasos del integrador del Propagator: `InitialStepSize`, `Accuracy`, `MinStep`, `MaxStep`, `MaxStepAttempts`, `StopIfAccuracyIsViolated`) los define `Editors.tsx` a mano (`syn`) con los defaults de GMAT; listas de cuerpos, atmósferas, integradores y formatos de época también son fijas. El esquema de `Propagator` solo trae `FM` y `Type`; el de ForceModel no trae `GravityField.*` (verificado).
+- **Arrastre:** GMAT escribe `FM.Drag = None` sin arrastre y `FM.Drag.AtmosphereModel = X` con él; el editor quita `Drag` y todo `Drag.*` al cambiar de modelo. Igual con `SRP`: GMAT rechaza `SRP.Flux`/`SRP.SRPModel`/`SRP.Nominal_Sun` con `SRP = Off` (verificado), así que cambiar SRP quita todo `SRP.*` (`tests/test_leo.py`).
+- **Select con `enum` cuyo valor es un recurso** guarda `{ref}` (si fuera string el serializer lo pondría entre comillas). El Propagator usa eso para `FM` (lista de ForceModel del modelo).
+- **`patch` de `Editors.tsx` borra y reescribe la clave:** lo cambiado pasa al final del recurso, así `DisplayStateType` queda antes de los elementos y `DateFormat` antes de `Epoch`.
+- **Cambiar `DisplayStateType`** convierte con el motor los elementos de la representación actual (o sus defaults), quita esos y escribe los nuevos; elementos de otras representaciones quedan donde estaban.
 - **Campo `Object` con un nombre que no es recurso** (ej. `Earth`) se guarda como string; si no es identificador (`Sat.X`) sale entre comillas.
 
 ## Conversión de estado
-`/api/convert/state` solo usa `EarthMJ2000Eq`, sin CS ni época propios. Los elementos se interpolan en un script: solo identificadores y números finitos (validado en `main.py`).
+`/api/convert/state` solo usa `EarthMJ2000Eq`, sin CS ni época propios (el editor de Spacecraft no manda su `CoordinateSystem`). `/api/convert/epoch` cambia `DateFormat` en un Spacecraft del motor, que reescribe `Epoch` (verificado); la época va entre comillas al script: solo `[\w :.-]`, máx. 40. Los elementos se interpolan en un script: solo identificadores y números finitos (validado en `main.py`).
 
 ## Entorno de desarrollo
 - **`dev.ps1` no avisa si los puertos están ocupados** (verificado). Con un backend viejo en `:8000`, uvicorn falla con `[Errno 10048]`, Vite sube a `:5174` y el proxy habla con el backend viejo: `/api/health` da `ok` y las rutas nuevas dan 404. Revisar con `netstat -ano | findstr ":8000 :5173"`.

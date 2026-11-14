@@ -44,3 +44,19 @@ def test_validate(client):
     assert any(e.get("line") == 2 for e in bad["errors"])
     rejected = client.post("/api/script/validate", json={"script": "BeginMissionSequence;\nSystem 'dir';\n"}).json()
     assert rejected["ok"] is False and rejected["errors"]
+
+
+def test_convert_epoch(client):
+    r = client.post("/api/convert/epoch", json={"fromFormat": "UTCGregorian", "toFormat": "TAIModJulian",
+                                                "epoch": "01 Jan 2025 00:00:00.000"})
+    assert r.status_code == 200
+    assert float(r.json()["epoch"]) == pytest.approx(30676.50042824074, abs=1e-9)
+    back = client.post("/api/convert/epoch", json={"fromFormat": "TAIModJulian", "toFormat": "UTCGregorian",
+                                                   "epoch": r.json()["epoch"]}).json()
+    assert back["epoch"] == "01 Jan 2025 00:00:00.000"
+    bad = {"fromFormat": "UTCGregorian", "toFormat": "TAIModJulian", "epoch": "1';\nSystem 'x"}
+    assert client.post("/api/convert/epoch", json=bad).status_code == 422
+    bad = {"fromFormat": "UTC; System", "toFormat": "TAIModJulian", "epoch": "21545"}
+    assert client.post("/api/convert/epoch", json=bad).status_code == 422
+    nonsense = {"fromFormat": "UTCGregorian", "toFormat": "TAIModJulian", "epoch": "not a date"}
+    assert client.post("/api/convert/epoch", json=nonsense).status_code == 422

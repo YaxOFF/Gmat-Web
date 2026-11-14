@@ -50,6 +50,8 @@ type AppState = {
   select: (name: string | null) => void
   /** Cambio hecho desde formularios/árbol: reescribe el script desde el modelo. */
   setMission: (m: Mission, selected?: string | null) => void
+  /** POST /api/convert/{state|epoch} (lo calcula el motor). Lanza Error con el detalle si falla. */
+  convert: (kind: 'state' | 'epoch', body: object) => Promise<{ elements?: Record<string, number>; epoch?: string }>
 }
 
 const PARSE_DELAY_MS = 400
@@ -215,6 +217,12 @@ export const useApp = create<AppState>((set, get) => {
           log({ level: 'error', text: `${es.resources.serializeError}: ${e}` })
         }
       })()
+    },
+    convert: async (kind, body) => {
+      const r = await post(`/api/convert/${kind}`, body)
+      const out = await r.json()
+      if (!r.ok) throw new Error(String(out.detail ?? r.status))
+      return out
     },
   }
 })
