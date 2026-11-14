@@ -1,4 +1,4 @@
-<!-- fuente: backend/app, frontend/src, shared | rev: 078da86 -->
+<!-- fuente: backend/app, frontend/src, shared | rev: a31cbd8 -->
 # Mapa
 
 ## Entradas
@@ -16,8 +16,9 @@
 | Seguridad de scripts (prohibidos, rutas de salida) | `backend/app/engine/sanitize.py` |
 | Script ↔ modelo JSON | `backend/app/script/parser.py`, `serializer.py`; tipos en `frontend/src/model/mission.ts`, `shared/mission.schema.json` |
 | Excepciones del round-trip | `docs/EXCEPCIONES_ROUNDTRIP.md`, `backend/tests/test_script.py` |
-| Esquemas de campos desde el motor | `backend/app/engine/schema.py`, `frontend/src/model/schema.ts` |
+| Esquemas de campos desde el motor (caché, proceso aislado) | `backend/app/engine/schema.py`, `frontend/src/model/schema.ts`; forma en `docs/API.md` |
 | Conversión de estado orbital | `worker.convert_state`, ruta `/api/convert/state` |
+| Variables de entorno y límites | `backend/app/config.py`; tabla en `README.md` |
 | Validar script sin correrlo | `worker.validate_script`, ruta `/api/script/validate` |
 | Árbol de recursos (crear/renombrar/clonar/borrar) | `frontend/src/resources/ResourceTree.tsx`, `frontend/src/model/refs.ts` |
 | Formulario de recurso | `frontend/src/resources/ResourceForm.tsx` |

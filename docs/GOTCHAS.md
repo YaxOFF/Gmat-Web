@@ -1,38 +1,79 @@
-<!-- fuente: backend/app/engine, frontend/src/store.ts, frontend/src/model/refs.ts | rev: 078da86 -->
+<!-- fuente: backend/app/engine, backend/app/script, backend/app/main.py, frontend/src/store.ts, frontend/src/model/refs.ts, frontend/src/resources, dev.ps1 | rev: a31cbd8 -->
 # Trampas
 
-## `gmatpy` solo en workers
-Singleton global por proceso. Si FastAPI lo importa, se mezcla estado entre peticiones. `tests/test_health.py` comprueba que `gmatpy` no está en `sys.modules`. Código: `engine/worker.py`.
+Leídas del código y comprobadas con el motor real donde dice "(verificado)".
 
-## Algunos tipos tiran abajo el motor
-Leer campos de solo lectura de ciertos tipos (ej. `NuclearPowerSystem`) mata el proceso. `schema._isolated` usa un pool de un proceso que se termina con `pool._processes` (API privada). Código: `engine/schema.py`.
+## Motor y workers (`engine/worker.py`)
+- **`gmatpy` solo en workers.** Singleton global por proceso. `tests/test_health.py` comprueba que no está en `sys.modules` del proceso API.
+- **Un worker muerto rompe el pool para siempre.** `worker.submit` no recrea el pool: tras un `BrokenProcessPool`, `/api/health` responde `status: "error"` hasta reiniciar el backend. Por eso lo que puede tumbar el motor va por `schema._isolated`, no por `submit`.
+- **El timeout de `submit` no mata la tarea.** Solo deja de esperarla; el worker sigue ocupado. `timeout=0` cuenta como "sin valor" y usa `TASK_TIMEOUT_S`.
+- **Scripts sueltos que usan `TestClient` necesitan `if __name__ == "__main__":`.** Los workers son `spawn` y reimportan el script principal; sin la guarda el pool se rompe (verificado).
+- **`api_startup_file.txt`.** Si falta en `GMAT_HOME/bin` se genera en `GMAT_WEB_CACHE` reemplazando todo `..` del `gmat_startup_file.txt` por `GMAT_HOME`. Escritura atómica; en Windows `os.replace` puede dar `PermissionError` y se ignora. Quedan temporales `api_startup_file.txt.<pid>` huérfanos en la caché [TODO: causa no confirmada].
+- **Cada corrida escribe su propio `startup.txt`** en la carpeta de la corrida con `OUTPUT_PATH` apuntando ahí. `_isolated` y el pool usan el startup común: su `OUTPUT_PATH` es el de GMAT.
+- **`cwd = GMAT_HOME/bin`** en corridas, validación, esquemas y `snapshot`: las rutas de entrada `../data/...` son relativas a `bin`.
 
-## Las corridas usan `cwd = GMAT_HOME/bin`
-Las rutas de entrada `../data/...` son relativas a `bin`. Las salidas se reescriben a la carpeta de la corrida (`sanitize` + `OUTPUT_PATH` de `startup.txt`). Código: `engine/runner.py`, `engine/sanitize.py`.
+## Corridas (`engine/runner.py`)
+- **Nada se limpia.** El dict `runs`, la lista de eventos de cada corrida y las carpetas `run-*` de `GMAT_WEB_RUNS` quedan hasta reiniciar o borrar a mano (verificado: 203 carpetas locales). Solo las `val-*` de validar se borran. `stop_all` termina procesos, no borra carpetas.
+- **Cancelar es una bandera.** `DELETE /runs/{id}` marca `cancelled`; `_supervise` lo ve en su siguiente vuelta (0.2 s), hace `terminate` y emite `error` "Corrida detenida". Si el proceso acaba antes, la corrida termina con `done`. `DELETE` sobre una corrida terminada responde `{ok:true}` sin efecto.
+- **El timeout incluye cargar `gmatpy`.** `RUN_TIMEOUT_S` se mide desde que arranca el supervisor.
+- **Códigos de salida:** 0 = `done`; 2 = `LoadScript` falló; 3 = `RunScript` falló; otro = caída del motor ("El motor terminó con código N").
+- **`MAX_RUNS` cuenta corridas sin terminar.** Validar no cuenta y lanza un proceso propio por petición.
+- **Nivel de log por texto (`classify`).** `**** ERROR ****` o `Exception` en cualquier parte = error; `warning` sin distinguir mayúsculas = warning; una línea citada (`"  57: ..."`) = error con `line`. Los textos de error traen la ruta temporal del script.
+- **`done.results.files`** lista solo archivos del primer nivel de la carpeta, sin `HIDDEN` (`gmat.log`, `mission.script`, `startup.txt`, `GmatLog.txt`). Aún no hay endpoint para bajarlos.
 
-## `api_startup_file.txt`
-Si falta en `GMAT_HOME/bin`, se genera en `backend/.cache/` de forma atómica (varios procesos lo leen a la vez; en Windows `os.replace` puede dar `PermissionError` y se ignora). Código: `worker.api_startup_file`.
+## Saneo (`engine/sanitize.py`)
+- **Trabaja línea por línea y no une `...`.** Un visor GUI con continuación queda a medias y el script no carga: `OV.Add = {Sat, ...` se comenta y la línea `Earth};` no (verificado). Un `Create` con continuación no se registra.
+- **`FORBIDDEN` es por token, sensible a mayúsculas.** Rechaza `CallPythonFunction`, `CallMatlabFunction`, `CallGmatFunction`, `SystemCommand`, `System`, `PythonFunction`, `MatlabFunction`, `GmatFunction`, `Save`, `SaveMission`, `Python.x`, `#Include`. Ignora strings y comentarios. Falso positivo: un recurso o variable llamado `System` o `Save` (verificado). No mira tokens precedidos de `.` (`Obj.Save` pasa).
+- **Solo se reescriben 4 campos de salida** (`Filename`, `OutputFile`, `ReportFile`, `MatlabFile`, sin distinguir mayúsculas), en cualquier objeto y también dentro de la secuencia. Se conserva solo el nombre del archivo: dos salidas con el mismo nombre en carpetas distintas chocan. Valor vacío = `output.txt`. [TODO: inventariar campos de salida del motor fuera de esta lista].
+- **Las rutas de entrada no se tocan ni se validan.** `Filename` de `ThrustHistoryFile` y `FileInterface` se deja igual (`INPUT_TYPES`), y cualquier otro campo con ruta también: un script puede leer archivos fuera de la corrida.
+- **Visores GUI** (`OpenFramesInterface`, `OpenFramesView`, `OrbitView`, `GroundTrackPlot`): se comenta toda línea que nombre uno, así que `Toggle OV RF On` pierde también `RF`.
+- **Conserva el número de líneas**; convierte CRLF a LF.
+- **El límite de tamaño vive aquí.** `/runs` responde 400 y `/script/validate` 200 con `ok:false`; solo `/script/parse` da 413. `/script/serialize` no tiene límite.
 
-## Caché de esquemas por versión
-`backend/.cache/schema/<versión>.v2.json`. Si cambia la forma de lo que guarda `schema.py`, sube el sufijo `.v2`. Sin `GMAT_HOME` no arranca (a propósito).
+## Esquemas (`engine/schema.py`)
+- **Algunos tipos tumban el motor** al leer sus campos (ej. `NuclearPowerSystem`). `_isolated` usa un proceso por llamada y lo mata con `pool._processes` (API privada). Timeout de `_isolated` = excepción sin capturar (500).
+- **Un tipo que tumba el motor queda en caché como `null`** en disco. `GET /schema/{type}` responde 200 con `fields: null` y el frontend muestra error. Para reintentar hay que borrar el archivo de caché.
+- **Caché:** `GMAT_WEB_CACHE/schema/<versión>.v2.json`, reescrito completo con cada tipo nuevo. Si cambia la forma de lo guardado, subir el sufijo `.v2`. La versión y la caché en memoria duran lo que el proceso (`schema.reset()` es para pruebas). `_lock` global: las consultas de esquema van en serie.
+- **Nombres de tipo.** `PropSetup` se publica como `Propagator`. Del factory de PARAMETER solo salen `Variable`, `String`, `Array`. FminconOptimizer, VF13ad y GroundStation no salen (el motor no los lista). Hoy son 47 tipos.
+- **`ENUM_CANDIDATES` solo cubre `Spacecraft.DisplayStateType`** y se filtra probando `SetField`. `main.STATE_TYPES` usa la lista sin filtrar.
+- **`stateType` es la primera representación que usa el elemento.** `INC`, `RAAN`, `AOP`, `TA` y `SMA` salen como `Keplerian`; `RMAG`, `RA`, `DEC`, `VMAG` como `SphericalAZFPA` (verificado). `ResourceForm` filtra por igualdad, así que en `ModifiedKeplerian` solo muestra `RadPer` y `RadApo`. Los cartesianos (`X`…`VZ`) no llevan `stateType` y se ven siempre. Pendiente para la fase 4b.
+- **`default` es `null` en campos de solo lectura** (leerlos puede tumbar el motor).
 
-## Nombres de tipo
-`PropSetup` se publica como `Propagator`. Del factory de PARAMETER solo se exponen `Variable`, `String`, `Array`. FminconOptimizer, VF13ad y GroundStation no salen (el motor no los lista). Código: `schema.ALIASES`, `USER_PARAMETERS`.
+## Parser y serializer (`script/`)
+- **Nunca descarta líneas:** lo no entendido va a `raw`. Qué va a `raw` y qué cambia de lugar: `docs/EXCEPCIONES_ROUNDTRIP.md` (Límites conocidos).
+- **`raw` se escribe después de todos los recursos y antes de `BeginMissionSequence`.** También caen ahí los comentarios del final del script (verificado), un `Create` repetido y las asignaciones de un recurso cuyo `Create` no se entendió.
+- **Sin `BeginMissionSequence` todo es zona de recursos:** los comandos van a `raw` y el serializer agrega la línea siempre.
+- **Formato estable, no idéntico al original.** Prefijo `GMAT` en toda asignación, sangría de 3 espacios, línea en blanco tras cada recurso, comentarios del recurso juntos antes del `Create`. Los números salen con `repr`: `7100.` pasa a `7100.0`, `1.0e3` a `1000.0`; los enteros siguen enteros.
+- **Campos en orden de script.** Un campo anidado `Sat.Tank.X` tiene clave `Tank.X`.
+- **Valores:** identificador suelto que no es recurso = string (enum); cualquier otro token sin comillas (recurso, `Sat.X`, ruta) = `{ref}`. Valor con espacios fuera de `{}`/`[]` = no se entiende, va a `raw`.
+- **Comandos:** `text` es el resto tal cual; `args` siempre es `{}`. Bloques: `Target`, `Optimize`, `If`, `While`, `For`, `BeginScript`. `Else` es un hijo más. Un bloque sin cerrar se serializa con su `End...`; un `End...` sin pareja queda como comando suelto.
+- **`'` como transpuesta:** una comilla pegada a identificador, `)`, `]`, `.` o `'` no abre string.
 
-## El parser nunca descarta líneas
-Lo no entendido va a `raw`. Campos repetidos y copias `A = B` también. No se conservan `args` de comandos, comentarios en línea ni líneas en blanco. Hay 1 xfail conocido (`docs/EXCEPCIONES_ROUNDTRIP.md`).
+## Sincronía script ↔ modelo (`store.ts`)
+- **Contador `seq`:** gana el último cambio, venga del texto o del modelo. `editText` ignora el eco del editor comparando el texto.
+- **`setMission` es optimista.** Cambia el modelo y luego pide el texto. Si `serialize` falla, el modelo queda adelantado al texto y la siguiente edición del texto lo pisa.
+- **Reescribir el texto sube `doc.rev`** y `ScriptEditor` hace `setValue`: se pierde el undo de Monaco y el cursor.
+- **Correr y validar usan `doc.text`,** no el modelo; ambos vacían la consola (máximo 5000 líneas).
+- **`parseError` casi nunca aparece:** el parser no rechaza scripts; solo 413 o fallo de red. Con error queda el último modelo bueno.
+- **El modelo va ~400 ms detrás del texto** (debounce).
+- **Sin reintentos.** `schemas[tipo] = 'error'` dura hasta recargar la página. Si falla `fetchTypes`, todo el árbol cae en "other" y solo se puede crear `Spacecraft`.
+- **WebSocket cerrado sin `done`/`error`** = mensaje de conexión perdida. `stop` solo manda el `DELETE`; el fin llega por el WebSocket.
 
-## Sincronía script ↔ modelo
-`store.ts` usa un contador `seq`: gana el último cambio y un parse fallido deja el último modelo bueno. Reescribir el script desde el modelo hace perder el undo de Monaco. Leer `editText` y `setMission` antes de tocar.
-
-## Renombrar recursos
-`refs.renameResource` reemplaza el nombre como token suelto: también toca strings entre comillas y líneas `raw`. Crear/renombrar/borrar usan `prompt`/`confirm` nativos.
+## Árbol y formulario (`resources/`, `model/refs.ts`)
+- **Crear `Array` desde el árbol da `Create Array Array1;` sin dimensiones y GMAT no lo carga** (verificado).
+- **Nombres:** el árbol exige `^[A-Za-z]\w*$`; el parser también acepta `_` inicial.
+- **Renombrar** reemplaza el nombre como token suelto en valores `{ref}`, texto de comandos (incluye strings entre comillas dentro del comando), `endText` y líneas `raw`. No toca etiquetas, comentarios ni valores string.
+- **Borrar no limpia referencias:** solo las lista en el `confirm`. Clonar pierde los comentarios. Crear/renombrar/borrar usan `prompt`/`alert`/`confirm` nativos.
+- **Grupos del árbol:** `EVENT_LOCATOR`, `FIELD_OF_VIEW` y los tipos que el motor no lista caen en "other".
+- **Controles del formulario:** `Boolean` = casilla; campo con `enum` = lista; resto = texto, con sugerencias si trae `refType`. No se muestran los de solo lectura. Texto vacío o ↺ quita el campo del script (vuelve al default).
+- **Listas y matrices:** todo tipo con `Array`, `Rvector`, `Rmatrix` o `Unsigned` se parte por espacios y comas en una lista plana. Una `Rmatrix` pierde sus filas.
+- **Campo `Object` con un nombre que no es recurso** (ej. `Earth`) se guarda como string; si no es identificador (`Sat.X`) sale entre comillas.
 
 ## Conversión de estado
 `/api/convert/state` solo usa `EarthMJ2000Eq`, sin CS ni época propios. Los elementos se interpolan en un script: solo identificadores y números finitos (validado en `main.py`).
 
-## Samples
-~70 de 88 samples raíz corren; faltan GmatFunction, Python, MarsGRAM y archivos de entrada. No es bug del port.
-
-## Windows
-Git avisa `LF` → `CRLF` al commitear. `dev.sh` solo se verificó con `sh -n`.
+## Entorno de desarrollo
+- **`dev.ps1` no avisa si los puertos están ocupados** (verificado). Con un backend viejo en `:8000`, uvicorn falla con `[Errno 10048]`, Vite sube a `:5174` y el proxy habla con el backend viejo: `/api/health` da `ok` y las rutas nuevas dan 404. Revisar con `netstat -ano | findstr ":8000 :5173"`.
+- **Avisos esperados:** pytest muestra `StarletteDeprecationWarning` (httpx); `npm run build` avisa de un chunk mayor a 500 kB (Monaco).
+- **Samples:** ~70 de 88 samples raíz corren; faltan GmatFunction, Python, MarsGRAM y archivos de entrada. No es bug del port.
+- **Windows:** Git avisa `LF` → `CRLF` al commitear. `dev.sh` solo se verificó con `sh -n`.

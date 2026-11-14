@@ -1,4 +1,4 @@
-<!-- fuente: backend/app/main.py, frontend/vite.config.ts, backend/app/config.py | rev: 078da86 -->
+<!-- fuente: backend/app/main.py, frontend/vite.config.ts, backend/app/config.py | rev: a31cbd8 -->
 # Sistema
 
 | Pieza | Dónde vive | Stack | Docs |
@@ -8,13 +8,13 @@
 | Motor GMAT | `GMAT_HOME` (fuera del repo) | `gmatpy` R2026a, solo dentro de procesos worker | `docs/GOTCHAS.md` |
 | Esquema del modelo | `shared/mission.schema.json` | JSON Schema, espejo en `frontend/src/model/mission.ts` | `PLAN.md` |
 
-No hay base de datos ni cuentas (v1). Despliegue Docker: fase 9 del plan, [TODO: aún no existe].
+No hay base de datos ni cuentas (v1). Despliegue Docker: fase 9 del plan, [TODO: aún no existe; al hacerla crear `docs/DEPLOY.md`].
 
 ## Contrato frontend y backend
-- URL base: rutas relativas `/api/...`. Vite hace proxy a `127.0.0.1:8000` (`frontend/vite.config.ts`, con `ws: true`).
+- URL base: rutas relativas `/api/...`. Vite hace proxy de `/api` a `127.0.0.1:8000` con `ws: true` (`frontend/vite.config.ts`). La entrada `/ws` del proxy no se usa: el backend no tiene rutas bajo `/ws` y el frontend abre `/api/ws/...`.
 - Formato de intercambio: el modelo de misión JSON (`resources`, `sequence`, `raw`). El texto `.script` es la fuente de verdad.
 - Errores: `HTTPException` con `{detail}`; `/runs` rechazado por sanitize devuelve `{detail, line}` con 400.
-- Corridas: `POST /api/runs` y luego `WS /api/ws/runs/{id}` (log en vivo). Ver `docs/API.md`.
+- Corridas: `POST /api/runs` y luego `WS /api/ws/runs/{id}` (log en vivo). El WebSocket usa el mismo host que la página (`ws` o `wss` según el protocolo). Eventos en `docs/API.md`.
 
 ## Qué toca cada tipo de cambio
 | Cambio | Backend | Frontend |

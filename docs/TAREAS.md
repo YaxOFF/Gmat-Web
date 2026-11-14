@@ -1,11 +1,11 @@
-<!-- fuente: backend/app, frontend/src, backend/tests | rev: 078da86 -->
+<!-- fuente: backend/app, frontend/src, backend/tests | rev: a31cbd8 -->
 # Tareas
 
 ## Comandos
 Requieren `GMAT_HOME` (local: `C:\Users\Yaxon\Downloads\gmat-win-R2026a`).
-- Correr todo: `./dev.ps1` (Windows) o `./dev.sh`. Backend `:8000`, frontend `:5173`.
-- Pruebas backend: `cd backend; .venv/Scripts/python -m pytest` (usa el motor real, tarda).
-- Frontend: `cd frontend; npm run lint; npm run build`. No hay runner de pruebas en el frontend.
+- Correr todo: `./dev.ps1` (Windows) o `./dev.sh`. Backend `:8000`, frontend `:5173`. Listo cuando `GET http://127.0.0.1:8000/api/health` da `status: "ok"`. Antes, confirmar que los dos puertos están libres (`docs/GOTCHAS.md`, Entorno de desarrollo).
+- Pruebas backend: `cd backend; .venv/Scripts/python -m pytest` (motor real, ~30 s). Esperado: `315 passed, 46 skipped, 1 xfailed` y un aviso de Starlette.
+- Frontend: `cd frontend; npm run lint; npm run build` (~2 s). Lint sin salida; build avisa de un chunk mayor a 500 kB (Monaco). No hay runner de pruebas en el frontend.
 - Backend a mano: `cd backend; .venv/Scripts/python -m uvicorn app.main:app --port 8000`.
 
 ## Endpoint nuevo
@@ -34,4 +34,6 @@ Modelo: `frontend/src/resources/ResourceTree.tsx`.
 Verificar: `npm run lint; npm run build` y revisar en navegador sin errores de consola.
 
 ## Cerrar una fase
-Protocolo de `PLAN.md`: Avance, Bitácora, commit + push, `sh docs/docs.sh stale`.
+Protocolo de `PLAN.md`: Avance, Bitácora, commit + push. Luego `sh docs/docs.sh stale` y actualizar lo que liste (casi siempre `MAP.md`, `TAREAS.md`, `API.md`), con el sello `rev` nuevo, y `sh docs/docs.sh map`.
+
+Fase 9 (Docker): crear `docs/DEPLOY.md` solo con lo no obvio (tarball de GMAT con sha256, `GMAT_HOME=/opt/gmat`, nginx, `.env`).

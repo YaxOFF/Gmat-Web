@@ -35,9 +35,13 @@ cd frontend && npm run lint && npm run build
 | Variable | Defecto | Uso |
 |---|---|---|
 | `GMAT_HOME` | — | Carpeta de GMAT (obligatoria) |
-| `GMAT_WEB_WORKERS` | 2 | Procesos worker con `gmatpy` |
-| `GMAT_WEB_TASK_TIMEOUT` | 60 | Timeout por tarea (s) |
-| `GMAT_WEB_CACHE` | `backend/.cache` | Archivos generados |
+| `GMAT_WEB_WORKERS` | 2 | Procesos worker con `gmatpy` para tareas cortas |
+| `GMAT_WEB_TASK_TIMEOUT` | 60 | Timeout por tarea corta (s): esquemas, validar, convertir |
+| `GMAT_WEB_CACHE` | `backend/.cache` | Archivos generados: startup file de la API y caché de esquemas |
+| `GMAT_WEB_MAX_RUNS` | 2 | Corridas simultáneas; la siguiente recibe 429 |
+| `GMAT_WEB_RUN_TIMEOUT` | 300 | Tiempo máximo por corrida (s); al pasarlo se detiene |
+| `GMAT_WEB_MAX_SCRIPT_BYTES` | 524288 | Tamaño máximo de un script (bytes, UTF-8) |
+| `GMAT_WEB_RUNS` | `<temp>/gmat-web-runs` | Carpeta de corridas (script saneado, log y salidas). No se limpia sola |
 
 ## Licencia
 
