@@ -58,6 +58,25 @@ def gmat_version() -> dict:
     return {"version": g.GetGmatVersion(), "build_date": g.GetGMATBuildDate()}
 
 
+def snapshot(script_path: str) -> dict | None:
+    """Carga un script (sin correrlo) y devuelve lo que el motor entendió: texto canónico de
+    cada objeto y de cada comando de nivel superior. None si no carga."""
+    os.chdir(Path(config.GMAT_HOME, "bin"))  # rutas '../data/...' como en GMAT escritorio
+    g = gmat
+    if not g.LoadScript(script_path):
+        return None
+    mod = g.Moderator.Instance()
+    objs = {}
+    for name in mod.GetListOfObjects(g.UNKNOWN_OBJECT):
+        obj = mod.GetConfiguredObject(name)
+        objs[name] = obj.GetGeneratingString(g.NO_COMMENTS) if obj else None
+    cmds, cmd = [], mod.GetFirstCommand()
+    while cmd is not None:
+        cmds.append(cmd.GetGeneratingString(g.NO_COMMENTS))
+        cmd = cmd.GetNext()
+    return {"objects": objs, "commands": cmds}
+
+
 def start() -> None:
     global _pool
     if not config.GMAT_HOME or not Path(config.GMAT_HOME, "bin", "gmatpy").is_dir():

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mission.schema.json",
+  "title": "Modelo de misión GMAT Web",
+  "description": "Script GMAT como JSON. Lo genera/consume backend/app/script (POST /api/script/parse y /serialize).",
+  "type": "object",
+  "required": ["resources", "sequence", "raw"],
+  "properties": {
+    "resources": { "type": "array", "items": { "$ref": "#/$defs/resource" } },
+    "sequence": { "type": "array", "items": { "$ref": "#/$defs/command" } },
+    "raw": {
+      "description": "Líneas que el parser no entiende (y comentarios sueltos), tal cual. Se escriben después de los recursos, antes de BeginMissionSequence.",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "value": {
+      "description": "Número, bool, string (con comillas en GMAT salvo identificadores tipo enum), lista ([ ] si son números, { } si no), matriz (lista de filas) o token sin comillas que se escribe tal cual (recurso, Obj.Param, ruta...).",
+      "anyOf": [
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "string" },
+        { "type": "object", "required": ["ref"], "properties": { "ref": { "type": "string" } }, "additionalProperties": false },
+        { "type": "array", "items": { "$ref": "#/$defs/value" } }
+      ]
+    },
+    "resource": {
+      "type": "object",
+      "required": ["type", "name", "fields"],
+      "properties": {
+        "type": { "type": "string", "description": "Tipo GMAT (Spacecraft, Propagator...)" },
+        "name": { "type": "string" },
+        "fields": {
+          "description": "Campos con el nombre exacto de GMAT (anidados con punto: GravityField.Earth.Degree), en orden. Array guarda NumRows/NumCols.",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/value" }
+        },
+        "comments": { "type": "array", "items": { "type": "string" }, "description": "Comentarios % (se escriben antes del Create)" }
+      }
+    },
+    "command": {
+      "type": "object",
+      "required": ["cmd", "text"],
+      "properties": {
+        "cmd": { "type": "string", "description": "Palabra clave del comando; 'GMAT' para asignaciones" },
+        "label": { "type": "string", "description": "Etiqueta 'Nombre' del comando" },
+        "text": { "type": "string", "description": "Resto del comando tal cual (sin etiqueta ni ';')" },
+        "args": { "type": "object", "description": "Reservado para argumentos estructurados" },
+        "comments": { "type": "array", "items": { "type": "string" } },
+        "children": {
+          "description": "Solo en bloques: Target, Optimize, If, While, For, BeginScript. Else va como hijo de If.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        },
+        "endComments": { "type": "array", "items": { "type": "string" }, "description": "Comentarios antes/en la línea End del bloque" },
+        "endText": { "type": "string", "description": "Texto extra en la línea End del bloque" }
+      }
+    }
+  }
+}

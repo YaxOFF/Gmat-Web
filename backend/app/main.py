@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app import config, samples
+from app import config, samples, script
 from app.engine import runner, worker
 from app.engine.sanitize import ScriptRejected
 
@@ -57,6 +57,21 @@ async def create_run(req: RunRequest):
     except ScriptRejected as e:
         return JSONResponse({"detail": str(e), "line": e.line}, status_code=400)
     return {"runId": run.id}
+
+
+@app.post("/api/script/parse")
+def parse_script(req: RunRequest):
+    if len(req.script.encode("utf-8")) > config.MAX_SCRIPT_BYTES:
+        raise HTTPException(413, f"Script demasiado grande (máx. {config.MAX_SCRIPT_BYTES} bytes)")
+    return script.parse(req.script)
+
+
+@app.post("/api/script/serialize")
+def serialize_script(model: dict):
+    try:
+        return {"script": script.serialize(model)}
+    except (KeyError, TypeError, AttributeError) as e:
+        raise HTTPException(422, f"Modelo inválido: {type(e).__name__}: {e}")
 
 
 @app.delete("/api/runs/{run_id}")
