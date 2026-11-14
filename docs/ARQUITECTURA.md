@@ -1,4 +1,4 @@
-<!-- fuente: backend/app, frontend/src/store.ts | rev: ead1d00 -->
+<!-- fuente: backend/app, frontend/src/store.ts | rev: 76408c3 -->
 # Arquitectura
 
 ## Decisiones
