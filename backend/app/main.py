@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app import config, samples, script
-from app.engine import runner, worker
+from app.engine import runner, schema, worker
 from app.engine.sanitize import ScriptRejected
 
 
@@ -72,6 +72,19 @@ def serialize_script(model: dict):
         return {"script": script.serialize(model)}
     except (KeyError, TypeError, AttributeError) as e:
         raise HTTPException(422, f"Modelo inválido: {type(e).__name__}: {e}")
+
+
+@app.get("/api/schema")
+async def list_schema_types():
+    return await schema.types()
+
+
+@app.get("/api/schema/{type_name}")
+async def get_schema(type_name: str):
+    fields = await schema.fields(type_name)
+    if fields is None:
+        raise HTTPException(404, f"Tipo no creable: {type_name}")
+    return {"type": type_name, "fields": fields}
 
 
 @app.delete("/api/runs/{run_id}")
