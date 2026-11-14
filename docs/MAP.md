@@ -23,6 +23,10 @@
 | Árbol de recursos (crear/renombrar/clonar/borrar) | `frontend/src/resources/ResourceTree.tsx`, `frontend/src/model/refs.ts` |
 | Formulario de recurso | `frontend/src/resources/ResourceForm.tsx` (marco), `Field.tsx` (un campo), `value.ts` (`show`) |
 | Editores dedicados Spacecraft/ForceModel/Propagator | `frontend/src/resources/Editors.tsx`; prueba LEO modelo = script a mano en `backend/tests/test_leo.py` |
+| Árbol de secuencia (agregar, arrastrar/soltar, ↑/↓, comentar, borrar) | `frontend/src/mission/MissionTree.tsx`; rutas y `newCommand`/`toText` en `mission/commands.ts` |
+| Formularios de comando (Propagate, Maneuver, FiniteBurn, Report, Toggle, asignación) y editor de línea | `frontend/src/mission/CommandForm.tsx`; `args` en `parser._args` |
+| Comando comentado (`disabled`) | `parser.COMMENTABLE`/`DISABLED`, `serializer._seq`; espejo en `commands.ts` (`canDisable`) |
+| Parámetros calculados del motor y selector | `schema.engine_parameters`, ruta `/api/parameters`; `frontend/src/mission/ParamPicker.tsx`, `store.fetchParameters` |
 | Sincronía editor de script ↔ modelo | `store.ts` (`editText`, `setMission`, contador `seq`) |
 | Editor Monaco + resaltado GMAT | `frontend/src/editor/ScriptEditor.tsx`, `gmat.ts` |
 | Ejemplos de GMAT | `backend/app/samples.py` (lee `GMAT_HOME/samples`) |

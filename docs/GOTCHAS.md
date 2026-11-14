@@ -46,7 +46,8 @@ Leídas del código y comprobadas con el motor real donde dice "(verificado)".
 - **Formato estable, no idéntico al original.** Prefijo `GMAT` en toda asignación, sangría de 3 espacios, línea en blanco tras cada recurso, comentarios del recurso juntos antes del `Create`. Los números salen con `repr`: `7100.` pasa a `7100.0`, `1.0e3` a `1000.0`; los enteros siguen enteros.
 - **Campos en orden de script.** Un campo anidado `Sat.Tank.X` tiene clave `Tank.X`.
 - **Valores:** identificador suelto que no es recurso = string (enum); cualquier otro token sin comillas (recurso, `Sat.X`, ruta) = `{ref}`. Valor con espacios fuera de `{}`/`[]` = no se entiende, va a `raw`.
-- **Comandos:** `text` es el resto tal cual; `args` siempre es `{}`. Bloques: `Target`, `Optimize`, `If`, `While`, `For`, `BeginScript`. `Else` es un hijo más. Un bloque sin cerrar se serializa con su `End...`; un `End...` sin pareja queda como comando suelto.
+- **Comandos:** `text` es el resto tal cual y es lo único que escribe el serializer. `args` es una vista derivada de `text` (`_args`) solo para Propagate, Maneuver, Begin/EndFiniteBurn, Report, Toggle y `GMAT`; sintaxis rara (`Prop(Sat, {stop})`, `'Covariance'`) da `{}` y el formulario cae al editor de línea. Los formularios reescriben `text` y `args` juntos (`commands.toText`). Bloques: `Target`, `Optimize`, `If`, `While`, `For`, `BeginScript`. `Else` es un hijo más. Un bloque sin cerrar se serializa con su `End...`; un `End...` sin pareja queda como comando suelto.
+- **Comandos comentados:** en la secuencia, una línea `% Cmd ...;` con `Cmd` en `COMMENTABLE` es un comando con `disabled: true` (70 en los samples); se reescribe como `% Cmd ...;`. Bloques, `Else` y cierres no se pueden comentar (cambiaría la estructura): siguen siendo comentarios. Comentarios sin `;` final (`% Propagate to apoapsis`) siguen siendo comentarios.
 - **`'` como transpuesta:** una comilla pegada a identificador, `)`, `]`, `.` o `'` no abre string.
 
 ## Sincronía script ↔ modelo (`store.ts`)
@@ -73,6 +74,14 @@ Leídas del código y comprobadas con el motor real donde dice "(verificado)".
 - **`patch` de `Editors.tsx` borra y reescribe la clave:** lo cambiado pasa al final del recurso, así `DisplayStateType` queda antes de los elementos y `DateFormat` antes de `Epoch`.
 - **Cambiar `DisplayStateType`** convierte con el motor los elementos de la representación actual (o sus defaults), quita esos y escribe los nuevos; elementos de otras representaciones quedan donde estaban.
 - **Campo `Object` con un nombre que no es recurso** (ej. `Earth`) se guarda como string; si no es identificador (`Sat.X`) sale entre comillas.
+
+## Secuencia (`mission/`)
+- **El comando seleccionado es una ruta de índices** (`selectedCmd`). Si el script cambia desde el editor, la ruta puede apuntar a otro comando; mover/agregar/borrar la actualiza.
+- **Agregar** inserta dentro del bloque seleccionado (al final) o después del comando seleccionado. Soltar sobre un bloque: tercio superior = antes, resto = primer hijo; sobre la fila `End…` = último hijo; sobre el hueco final = al final de la raíz.
+- **Editor de línea:** analiza `BeginMissionSequence;
+<línea>;` con `/api/script/parse` y rechaza si no sale un solo comando o si pasa de bloque a no bloque.
+- **Comandos nuevos** usan el primer recurso del tipo (o nombres por defecto de GMAT como `DefaultSC`, `DC`): pueden no cargar hasta crear esos recursos.
+- **`/api/parameters`** va por `_isolated` porque `Construct` deja objetos en la configuración del worker. Si el motor se cae no se guarda en caché (reintenta en la próxima llamada); en el frontend `'error'` dura hasta recargar.
 
 ## Conversión de estado
 `/api/convert/state` solo usa `EarthMJ2000Eq`, sin CS ni época propios (el editor de Spacecraft no manda su `CoordinateSystem`). `/api/convert/epoch` cambia `DateFormat` en un Spacecraft del motor, que reescribe `Epoch` (verificado); la época va entre comillas al script: solo `[\w :.-]`, máx. 40. Los elementos se interpolan en un script: solo identificadores y números finitos (validado en `main.py`).

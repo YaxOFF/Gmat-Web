@@ -21,6 +21,6 @@ No hay base de datos ni cuentas (v1). Despliegue Docker: fase 9 del plan, [TODO:
 |---|---|---|
 | Campo/tipo nuevo de recurso | nada si el motor lo expone (`engine/schema.py` lo lee); subir sufijo de caché si cambia la forma | `ResourceForm.tsx` (genérico) o editor dedicado |
 | Endpoint nuevo | `main.py`, función de worker en `engine/worker.py` si toca el motor, `docs/API.md` | llamada en `store.ts`, UI |
-| Comando de secuencia nuevo | `script/parser.py` y `serializer.py` | `model/mission.ts` |
+| Comando de secuencia nuevo | `script/parser.py` (`_args`, `COMMENTABLE`) y `serializer.py` | `model/mission.ts`, `mission/commands.ts`, `mission/CommandForm.tsx` |
 | Texto de UI | n/a | `frontend/src/i18n/es.ts` |
 | Regla de seguridad de scripts | `engine/sanitize.py` + `tests/test_sanitize.py` | n/a |

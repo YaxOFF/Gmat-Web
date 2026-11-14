@@ -21,7 +21,10 @@ export interface Command {
   label?: string
   /** Resto del comando tal cual, sin etiqueta ni ';'. */
   text: string
+  /** Vista estructurada de `text` (parser._args); {} si no se reconoce. */
   args?: Record<string, unknown>
+  /** Comentado en el script (`% Cmd ...;`); no aplica a bloques. */
+  disabled?: boolean
   comments?: string[]
   /** Solo en bloques (Target, Optimize, If, While, For, BeginScript). */
   children?: Command[]

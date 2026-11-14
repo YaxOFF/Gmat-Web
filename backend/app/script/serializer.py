@@ -29,7 +29,8 @@ def _seq(cmds: list[dict], depth: int, out: list[str]) -> None:
         head = " ".join(x for x in (c["cmd"], f"'{c['label']}'" if "label" in c else "") if x)
         text = c.get("text", "")
         sep = "" if not head or not text or text.startswith("(") else " "
-        out.append(f"{pad}{head}{sep}{text};")
+        off = "% " if c.get("disabled") and c["cmd"] not in BLOCKS else ""  # comando deshabilitado
+        out.append(f"{pad}{off}{head}{sep}{text};")
         if c["cmd"] in BLOCKS and "children" in c:
             _seq(c["children"], depth + 1, out)
             out.extend(pad + INDENT + x for x in c.get("endComments", []))

@@ -59,8 +59,17 @@ def test_unknown_type(client):
     assert client.get("/api/schema/Spacecraft%20x;%20System").status_code == 404
 
 
+def test_parameters(client):
+    params = {p["name"]: p for p in client.get("/api/parameters").json()}
+    assert params["ElapsedDays"]["dep"] == "" and params["ElapsedDays"]["unit"] == "Day"
+    assert params["Altitude"]["dep"] == "Origin" and params["Altitude"]["depDefault"] == "Earth"
+    assert params["X"]["dep"] == "CoordinateSystem" and params["X"]["depDefault"] == "EarthMJ2000Eq"
+    assert "Variable" not in params and "Apoapsis" in params
+
+
 def test_cache_reused(client, monkeypatch):
     first = client.get("/api/schema/Spacecraft").json()
+    params = client.get("/api/parameters").json()
 
     def boom(*_, **__):
         raise AssertionError("no debería consultar el motor")
@@ -68,4 +77,5 @@ def test_cache_reused(client, monkeypatch):
     monkeypatch.setattr(schema, "_isolated", boom)
     schema.reset()  # olvida la memoria: debe salir del archivo en disco
     assert client.get("/api/schema/Spacecraft").json() == first
+    assert client.get("/api/parameters").json() == params
     assert list(config.CACHE_DIR.glob("schema/*.json"))

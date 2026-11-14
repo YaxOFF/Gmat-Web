@@ -13,6 +13,15 @@ NUMBER = re.compile(r"[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?")
 ARRAY_NAME = re.compile(r"([A-Za-z_]\w*)\[\s*(\d+)\s*,\s*(\d+)\s*\]")
 ASSIGN = re.compile(r"(?:GMAT\s+)?([A-Za-z_]\w*)\.([\w.]+)\s*=\s*(.*)", re.S)
 SEQ_ASSIGN = re.compile(r"[A-Za-z_][\w.]*(\([^=]*\))?\s*=(?!=)")
+# Comandos que se pueden deshabilitar: `% Cmd ...;` en la secuencia es un comando con `disabled`
+# (no bloques, Else ni cierres: comentarlos cambiaría la estructura).
+COMMENTABLE = ("Achieve", "BeginFileThrust", "BeginFiniteBurn", "ClearPlot", "EndFileThrust", "EndFiniteBurn",
+               "FindEvents", "GMAT", "Maneuver", "MarkPoint", "Minimize", "NonlinearConstraint", "PenDown",
+               "PenUp", "Propagate", "Report", "RunEstimator", "RunSimulator", "RunSmoother", "Set", "Stop",
+               "Toggle", "UpdateDynamicData", "Vary", "Write")
+DISABLED = re.compile(r"%\s*((?:" + "|".join(COMMENTABLE) + r")\b.*);")
+BURN = re.compile(r"([A-Za-z_]\w*)\s*\(([^()]*)\)")
+PROPAGATE = re.compile(r"(?:(Synchronized)\s+)?(?:(BackProp)\s+)?((?:[A-Za-z_]\w*\s*\([^()]*\)\s*)+)(?:\{(.*)\})?")
 
 
 def _is_quote(s: str, i: int) -> bool:
@@ -96,6 +105,36 @@ def value(s: str, names: set[str]):
     return None
 
 
+def _names(s: str) -> list[str] | None:
+    out = [t.strip() for t in s.split(",")]
+    return out if all(IDENT.fullmatch(t) for t in out) else None
+
+
+def _args(cmd: str, text: str) -> dict:
+    """Vista estructurada de `text` para los formularios ({} si no se reconoce). El serializer
+    escribe `text`: los formularios reescriben `text` y `args` juntos."""
+    if cmd == "Propagate" and (m := PROPAGATE.fullmatch(text)):
+        props = [{"prop": p, "sats": _names(sats)} for p, sats in BURN.findall(m[3])]
+        stops = []
+        for item in _split(m[4], ",") if m[4] and m[4].strip() else []:
+            k, _, v = item.partition("=")
+            stops.append({"param": k.strip(), "value": v.strip()})
+        if all(p["sats"] for p in props) and all(st["param"] for st in stops):
+            return {"mode": m[1] or "", "backwards": bool(m[2]), "props": props, "stops": stops}
+    elif cmd in ("Maneuver", "BeginFiniteBurn", "EndFiniteBurn") and (m := BURN.fullmatch(text)):
+        if sats := _names(m[2]):
+            return {"burn": m[1], "sats": sats}
+    elif cmd in ("Report", "Toggle"):
+        toks = [t for t in _split(text, " \t,") if t.strip()]
+        if cmd == "Report" and toks and IDENT.fullmatch(toks[0]):
+            return {"file": toks[0], "params": toks[1:]}
+        if cmd == "Toggle" and len(toks) > 1 and toks[-1] in ("On", "Off") and all(map(IDENT.fullmatch, toks[:-1])):
+            return {"subs": toks[:-1], "state": toks[-1]}
+    elif cmd == "GMAT" and (m := re.fullmatch(r"(.+?)\s*=(?!=)\s*(.*)", text, re.S)):
+        return {"lhs": m[1], "rhs": m[2]}
+    return {}
+
+
 def _cmd(stmt: str, comments: list[str]) -> dict:
     if stmt.startswith("GMAT ") or SEQ_ASSIGN.match(stmt):
         cmd, rest = "GMAT", stmt[5:] if stmt.startswith("GMAT ") else stmt
@@ -106,7 +145,7 @@ def _cmd(stmt: str, comments: list[str]) -> dict:
     if rest.startswith("'") and "'" in rest[1:]:
         j = rest.index("'", 1)
         label, rest = rest[1:j], rest[j + 1:].strip()
-    out = {"cmd": cmd, "text": rest, "args": {}, "comments": comments}
+    out = {"cmd": cmd, "text": rest, "args": _args(cmd, rest), "comments": comments}
     if label is not None:
         out["label"] = label
     return out
@@ -137,7 +176,13 @@ def parse(text: str) -> dict:
 
     for it in items:
         if it[0] == "comment":
-            pending.append(it[1])
+            if in_seq and (m := DISABLED.fullmatch(it[1])):
+                c = _cmd(m[1].strip(), pending)
+                c["disabled"] = True
+                (stack[-1]["children"] if stack else root).append(c)
+                pending = []
+            else:
+                pending.append(it[1])
             continue
         _, s, inline = it
         if not in_seq and s == "BeginMissionSequence":

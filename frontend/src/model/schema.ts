@@ -28,3 +28,13 @@ export interface TypeInfo {
   category: string
   objectType: number
 }
+
+/** Elemento de GET /api/parameters: parámetro calculado para `Obj[.Dep].name`. */
+export interface ParamInfo {
+  name: string
+  /** Qué va entre objeto y nombre: sistema de coordenadas (X), cuerpo de referencia (Altitude) o nada. */
+  dep: '' | 'CoordinateSystem' | 'Origin'
+  /** Valor que pone el motor por defecto (EarthMJ2000Eq, Earth…). */
+  depDefault: string
+  unit: string
+}

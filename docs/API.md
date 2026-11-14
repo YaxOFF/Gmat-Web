@@ -16,6 +16,7 @@
 | `POST /convert/epoch` | `{fromFormat,toFormat,epoch}` (formatos `A1/TAI/UTC/TT/TDB` + `ModJulian/Gregorian`) | `{format, epoch}`; 422 |
 | `GET /schema` | | lista `{type, category, objectType}` |
 | `GET /schema/{type}` | | `{type, fields}`; 404 si el tipo no es creable |
+| `GET /parameters` | | lista `{name, dep, depDefault, unit}` (parámetros calculados del motor, caché como esquemas); 503 si el motor se cae |
 
 Aún no existen (plan): `GET /runs/{id}/results`, `GET /runs/{id}/files/{name}`.
 Límites y variables: `README.md`. Forma del modelo: `shared/mission.schema.json`.
@@ -47,5 +48,7 @@ Una corrida inexistente no da 404: el socket se acepta, llega un `error` y se ci
 | `unit?` | string | |
 | `refType?` | number | `Gmat::ObjectType` del objeto referido; solo `Object`/`ObjectArray` |
 | `stateType?` | string | solo elementos de estado de `Spacecraft`: representación a la que pertenece |
+
+`GET /parameters`: `dep` es `""` (`Sat.ElapsedDays`), `"Origin"` (`Sat.Earth.Altitude`) o `"CoordinateSystem"` (`Sat.EarthMJ2000Eq.X`); `depDefault` es el que pone el motor (`Earth`, `EarthMJ2000Eq`, `EarthFixed`). El motor no dice el dueño (nave, tanque…): el selector ofrece todos los recursos.
 
 Espejo en TypeScript: `frontend/src/model/schema.ts`.

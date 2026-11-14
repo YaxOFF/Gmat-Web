@@ -46,7 +46,8 @@
         "cmd": { "type": "string", "description": "Palabra clave del comando; 'GMAT' para asignaciones" },
         "label": { "type": "string", "description": "Etiqueta 'Nombre' del comando" },
         "text": { "type": "string", "description": "Resto del comando tal cual (sin etiqueta ni ';')" },
-        "args": { "type": "object", "description": "Reservado para argumentos estructurados" },
+        "args": { "type": "object", "description": "Vista estructurada de text que llena el parser ({} si no se reconoce): Propagate {mode, backwards, props:[{prop, sats}], stops:[{param, value}]}; Maneuver/BeginFiniteBurn/EndFiniteBurn {burn, sats}; Report {file, params}; Toggle {subs, state}; GMAT {lhs, rhs}. El serializer escribe text." },
+        "disabled": { "type": "boolean", "description": "Comando comentado: se escribe como '% Cmd ...;' (no aplica a bloques). El parser lo reconoce en la secuencia para los comandos de parser.COMMENTABLE." },
         "comments": { "type": "array", "items": { "type": "string" } },
         "children": {
           "description": "Solo en bloques: Target, Optimize, If, While, For, BeginScript. Else va como hijo de If.",

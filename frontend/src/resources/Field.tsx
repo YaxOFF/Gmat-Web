@@ -26,7 +26,7 @@ function parse(text: string, f: FieldSchema, names: Set<string>): Value | null |
   return t
 }
 
-function TextField({ value, placeholder, list, onCommit, label, help }: {
+export function TextField({ value, placeholder, list, onCommit, label, help }: {
   value: string
   placeholder: string
   list?: string

@@ -7,11 +7,10 @@ import type { FieldSchema } from '../model/schema'
 import { useApp } from '../store'
 import { Field } from './Field'
 import s from './Resources.module.css'
-import { show } from './value'
+import { BODIES, show } from './value'
 
 type Props = { r: Resource; schema: FieldSchema[] }
 
-const BODIES = ['Earth', 'Luna', 'Sun', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto']
 const DATE_FORMATS = ['A1', 'TAI', 'UTC', 'TT', 'TDB'].flatMap((t) => [`${t}ModJulian`, `${t}Gregorian`])
 const ATMOSPHERES = ['None', 'Exponential', 'MSISE86', 'MSISE90', 'JacchiaRoberts', 'NRLMSISE00']
 const INTEGRATORS = ['RungeKutta89', 'RungeKutta68', 'RungeKutta56', 'PrinceDormand45', 'PrinceDormand78',

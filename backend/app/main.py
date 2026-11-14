@@ -148,6 +148,14 @@ async def list_schema_types():
     return await schema.types()
 
 
+@app.get("/api/parameters")
+async def list_parameters():
+    out = await schema.parameters()
+    if out is None:
+        raise HTTPException(503, "El motor no dio la lista de parámetros")
+    return out
+
+
 @app.get("/api/schema/{type_name}")
 async def get_schema(type_name: str):
     fields = await schema.fields(type_name)

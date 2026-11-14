@@ -1,10 +1,10 @@
 import { create } from 'zustand'
 import { es } from './i18n/es'
-import type { Mission } from './model/mission'
-import type { FieldSchema, TypeInfo } from './model/schema'
+import type { Command, Mission } from './model/mission'
+import type { FieldSchema, ParamInfo, TypeInfo } from './model/schema'
 
 export type LeftTab = 'resources' | 'mission'
-export type CenterTab = 'editor' | 'resource' | 'view3d' | 'plots' | 'reports'
+export type CenterTab = 'editor' | 'resource' | 'command' | 'view3d' | 'plots' | 'reports'
 type Engine = { state: 'checking' | 'ready' | 'error'; version?: string; detail?: string }
 export type LogLevel = 'info' | 'warning' | 'error' | 'system'
 export type LogEntry = { level: LogLevel; text: string; line?: number }
@@ -35,6 +35,9 @@ type AppState = {
   types: TypeInfo[] | null
   schemas: Record<string, FieldSchema[] | 'error'>
   selected: string | null
+  /** Ruta del comando seleccionado en la secuencia (índices desde la raíz). */
+  selectedCmd: number[] | null
+  parameters: ParamInfo[] | 'error' | null
   setLeftTab: (t: LeftTab) => void
   setCenterTab: (t: CenterTab) => void
   checkEngine: () => Promise<void>
@@ -48,6 +51,11 @@ type AppState = {
   fetchTypes: () => Promise<void>
   fetchSchema: (type: string) => Promise<void>
   select: (name: string | null) => void
+  selectCmd: (path: number[] | null) => void
+  /** GET /api/parameters (parámetros calculados del motor), una vez. */
+  fetchParameters: () => Promise<void>
+  /** Una línea de la secuencia → comando (con args) usando el parser del backend; null si no es un comando. */
+  parseCommand: (line: string) => Promise<Command | null>
   /** Cambio hecho desde formularios/árbol: reescribe el script desde el modelo. */
   setMission: (m: Mission, selected?: string | null) => void
   /** POST /api/convert/{state|epoch} (lo calcula el motor). Lanza Error con el detalle si falla. */
@@ -94,6 +102,8 @@ export const useApp = create<AppState>((set, get) => {
     types: null,
     schemas: {},
     selected: null,
+    selectedCmd: null,
+    parameters: null,
     setLeftTab: (leftTab) => set({ leftTab }),
     setCenterTab: (centerTab) => set({ centerTab }),
     checkEngine: async () => {
@@ -110,7 +120,7 @@ export const useApp = create<AppState>((set, get) => {
       }
     },
     loadText: (text, name) => {
-      set((st) => ({ doc: { text, name, rev: st.doc.rev + 1 }, centerTab: 'editor', selected: null }))
+      set((st) => ({ doc: { text, name, rev: st.doc.rev + 1 }, centerTab: 'editor', selected: null, selectedCmd: null }))
       parseLater()
     },
     editText: (text) => {
@@ -203,6 +213,24 @@ export const useApp = create<AppState>((set, get) => {
       set((st) => ({ schemas: { ...st.schemas, [type]: fields } }))
     },
     select: (selected) => set(selected ? { selected, centerTab: 'resource' } : { selected }),
+    selectCmd: (selectedCmd) => set(selectedCmd ? { selectedCmd, centerTab: 'command' } : { selectedCmd }),
+    fetchParameters: async () => {
+      if (get().parameters) return
+      try {
+        const r = await fetch('/api/parameters')
+        set({ parameters: r.ok ? await r.json() : 'error' })
+      } catch {
+        set({ parameters: 'error' })
+      }
+    },
+    parseCommand: async (line) => {
+      const r = await post('/api/script/parse', { script: `BeginMissionSequence;
+${line};
+` })
+      if (!r.ok) return null
+      const m: Mission = await r.json()
+      return m.sequence.length === 1 && !m.raw.length ? m.sequence[0] : null
+    },
     setMission: (mission, selected) => {
       clearTimeout(timer)
       const mine = ++seq

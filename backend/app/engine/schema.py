@@ -52,6 +52,25 @@ def engine_types() -> list[dict]:
                   for t in USER_PARAMETERS if t in factory]
 
 
+def engine_parameters() -> list[dict]:
+    """Parámetros calculados (SMA, Altitude, ElapsedDays…) para `Obj[.Dep].Nombre`. `dep` dice qué
+    va en medio: CoordinateSystem (X → Sat.EarthMJ2000Eq.X), Origin (Altitude → Sat.Earth.Altitude)
+    o nada; `depDefault` es el que pone el motor. El dueño (nave, tanque…) no lo expone el motor."""
+    g = worker.gmat
+    out = []
+    for t in g.Moderator.Instance().GetListOfFactoryItems(g.PARAMETER):
+        if t in USER_PARAMETERS:
+            continue
+        try:  # algunos (ModEquinoctial, BrouwerMeanShort…) no se pueden crear sueltos
+            p = g.Construct(t, f"Param{len(out)}")
+            dep, unit = p.GetField("DepObject"), p.GetField("Unit")
+        except Exception:
+            continue
+        kind = "" if not dep else "Origin" if dep == "Earth" else "CoordinateSystem"
+        out.append({"name": t, "dep": kind, "depDefault": dep, "unit": unit})
+    return out
+
+
 def _value(text: str, ptype: str):
     if ptype in NUMERIC:
         try:
@@ -159,7 +178,8 @@ async def _load() -> dict:
     if _cache is None:
         file = _cache_file(_version)
         data = json.loads(file.read_text("utf-8")) if file.exists() else {}
-        _cache = {"file": str(file), "types": data.get("types"), "fields": data.get("fields", {})}
+        _cache = {"file": str(file), "types": data.get("types"), "fields": data.get("fields", {}),
+                  "parameters": data.get("parameters")}
     return _cache
 
 
@@ -183,7 +203,7 @@ def _save(c: dict) -> None:
     file = Path(c["file"])
     file.parent.mkdir(parents=True, exist_ok=True)
     tmp = file.with_name(f"{file.name}.{os.getpid()}")
-    tmp.write_text(json.dumps({"types": c["types"], "fields": c["fields"]}), "utf-8")
+    tmp.write_text(json.dumps({k: c[k] for k in ("types", "fields", "parameters")}), "utf-8")
     os.replace(tmp, file)
 
 
@@ -206,6 +226,17 @@ async def fields(type_name: str) -> list[dict] | None:
             c["fields"][type_name] = await _isolated(engine_fields, type_name)
             _save(c)
         return c["fields"][type_name]
+
+
+async def parameters() -> list[dict] | None:
+    """Parámetros calculados del motor; proceso aislado (Construct deja objetos en la configuración)."""
+    async with _lock:
+        c = await _load()
+        if c["parameters"] is None:
+            c["parameters"] = await _isolated(engine_parameters)
+            if c["parameters"] is not None:
+                _save(c)
+        return c["parameters"]
 
 
 def reset() -> None:

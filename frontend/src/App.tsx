@@ -7,6 +7,8 @@ import s from './App.module.css'
 const ScriptEditor = lazy(() => import('./editor/ScriptEditor'))
 const ResourceTree = lazy(() => import('./resources/ResourceTree'))
 const ResourceForm = lazy(() => import('./resources/ResourceForm'))
+const MissionTree = lazy(() => import('./mission/MissionTree'))
+const CommandForm = lazy(() => import('./mission/CommandForm'))
 const goto = (line: number) => import('./editor/gmat').then((m) => m.revealLine(line))
 
 function Tabs<T extends string>({ items, value, onChange }: {
@@ -132,7 +134,7 @@ export default function App() {
         <Tabs<LeftTab> items={es.left} value={leftTab} onChange={setLeftTab} />
         {leftTab === 'resources'
           ? <Suspense fallback={null}><ResourceTree /></Suspense>
-          : <div className={s.pane}>{es.empty}</div>}
+          : <Suspense fallback={null}><MissionTree /></Suspense>}
       </aside>
       <main className={s.center}>
         <Tabs<CenterTab> items={es.center} value={centerTab} onChange={setCenterTab} />
@@ -141,7 +143,8 @@ export default function App() {
           <Suspense fallback={null}><ScriptEditor /></Suspense>
         </div>
         {centerTab === 'resource' && <Suspense fallback={null}><ResourceForm /></Suspense>}
-        {centerTab !== 'editor' && centerTab !== 'resource' && <div className={s.pane}>{es.empty}</div>}
+        {centerTab === 'command' && <Suspense fallback={null}><CommandForm /></Suspense>}
+        {!['editor', 'resource', 'command'].includes(centerTab) && <div className={s.pane}>{es.empty}</div>}
       </main>
       <Console />
       {gallery && <SampleGallery onClose={() => setGallery(false)} />}

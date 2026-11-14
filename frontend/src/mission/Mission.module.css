@@ -1,0 +1,49 @@
+.node {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.node:hover { background: var(--surface-2); }
+.node:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.node[aria-selected='true'] { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.node[data-disabled] { color: var(--text-muted); font-style: italic; }
+.node[data-disabled] .cmd { text-decoration: line-through; }
+.node[data-over='before'] { border-top-color: var(--accent); }
+.node[data-over='after'] { border-bottom-color: var(--accent); }
+.node[data-over='inside'] { outline: 2px dashed var(--accent); outline-offset: -2px; }
+.cmd { font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
+.end { composes: node; cursor: default; font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
+.end:hover { background: none; }
+.tail { min-height: 24px; flex: 1; }
+.tail[data-over] { border-top: 2px solid var(--accent); }
+
+.list { display: flex; flex-direction: column; gap: 4px; padding: 4px 0; }
+.listRow { display: flex; align-items: center; gap: 6px; }
+.listRow > input, .listRow > select { flex: 1; }
+.param { display: flex; flex: 1; gap: 4px; min-width: 0; }
+.param > input { flex: 1; }
+.text { width: 100%; min-height: 48px; font-family: var(--mono); font-size: 13px; resize: vertical; }
+
+.dialog {
+  width: min(560px, 92vw);
+  height: min(600px, 86vh);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: inherit;
+}
+.dialog[open] { display: flex; flex-direction: column; }
+.dialogHead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--gap); padding: 10px; border-bottom: 1px solid var(--border); }
+.dialogBody { flex: 1; overflow: auto; padding: 4px 10px; }
+.dialogFoot { display: flex; align-items: center; gap: var(--gap); padding: 10px; border-top: 1px solid var(--border); }
+.dialogFoot code { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.option { composes: node; display: flex; justify-content: space-between; width: 100%; border-left: 0; border-right: 0; background: none; text-align: left; }

@@ -68,6 +68,36 @@ def test_parse_features():
     assert parse(text) == m
 
 
+def test_command_args_and_disabled():
+    m = parse("""BeginMissionSequence;
+Propagate 'P' Synchronized BackProp Prop(Sat1, Sat2) Prop2(Sat3) {Sat1.ElapsedSecs = 60, Sat1.Apoapsis};
+Propagate Prop(Sat);
+Maneuver Burn1(Sat);
+BeginFiniteBurn FB(Sat, Sat2);
+Report RF Sat.A1ModJulian Sat.Earth.Altitude;
+Toggle RF XY Off;
+GMAT x = Sat.SMA + 1;
+Propagate Prop(Sat, 'Covariance') {Sat.ElapsedDays = 1};
+%Maneuver 'off' Burn1(Sat);
+% Propagate to apoapsis
+""")
+    p, p2, man, fb, rep, tog, asg, odd, off = m["sequence"]
+    assert p["args"] == {"mode": "Synchronized", "backwards": True,
+                         "props": [{"prop": "Prop", "sats": ["Sat1", "Sat2"]}, {"prop": "Prop2", "sats": ["Sat3"]}],
+                         "stops": [{"param": "Sat1.ElapsedSecs", "value": "60"}, {"param": "Sat1.Apoapsis", "value": ""}]}
+    assert p2["args"]["stops"] == [] and man["args"] == {"burn": "Burn1", "sats": ["Sat"]}
+    assert fb["args"]["sats"] == ["Sat", "Sat2"]
+    assert rep["args"] == {"file": "RF", "params": ["Sat.A1ModJulian", "Sat.Earth.Altitude"]}
+    assert tog["args"] == {"subs": ["RF", "XY"], "state": "Off"}
+    assert asg["args"] == {"lhs": "x", "rhs": "Sat.SMA + 1"}
+    assert odd["args"] == {}  # sintaxis no reconocida: el formulario cae al editor de texto
+    assert off["disabled"] is True and off["label"] == "off" and off["args"]["burn"] == "Burn1"
+    assert m["raw"] == ["% Propagate to apoapsis"]  # comentario normal: no es comando
+    text = serialize(m)
+    assert "\n% Maneuver 'off' Burn1(Sat);\n" in text
+    assert parse(text) == m
+
+
 def test_parse_keeps_unknown_lines():
     m = parse("Create Spacecraft Sat;\nSat.Epoch = 19 Aug 2015;\nCreate 3D;\nfoo bar;\n")
     assert m["raw"] == ["Sat.Epoch = 19 Aug 2015;", "Create 3D;", "foo bar;"]

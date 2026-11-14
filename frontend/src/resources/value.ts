@@ -5,3 +5,6 @@ export const show = (v: Value | null | undefined): string =>
   v === null || v === undefined ? ''
     : Array.isArray(v) ? v.map(show).join(Array.isArray(v[0]) ? '; ' : ', ')
       : typeof v === 'object' ? v.ref : String(v)
+
+/** Cuerpos que ofrecen los editores (lista fija: el motor no la expone por tipo). */
+export const BODIES = ['Earth', 'Luna', 'Sun', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto']
