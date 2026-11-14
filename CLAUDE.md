@@ -16,9 +16,11 @@ Con el archivo ubicado, `Grep` del símbolo y `Read` con `offset`. Al terminar u
 
 ## Al empezar cada sesión
 
-1. Leer `PLAN.md` → **Avance** y tomar la primera fase sin marcar.
-2. Seguir el **Protocolo por sesión** de `PLAN.md`: una sola fase, verificarla, actualizar Avance y Bitácora, commit + push.
-3. Leer solo los archivos que la fase toca. Las **Decisiones tomadas** de `PLAN.md` mandan.
+Hay dos planes. El activo es `PLAN-JUEGO.md` (juego "Viaje a la Luna", fases J0-J6); `PLAN.md` (port web) sigue en su Fase 9 cuando el juego llegue a J4 o el usuario lo pida.
+
+1. Leer `PLAN-JUEGO.md` → **Avance** y tomar la primera fase sin marcar.
+2. Seguir su **Protocolo por sesión**: una sola fase, verificarla, actualizar Avance y Bitácora, commit + push.
+3. Leer solo los archivos que la fase toca. Mandan las **Decisiones tomadas** de `PLAN-JUEGO.md` y, en lo que no cubre, las de `PLAN.md`.
 
 ## Restricciones duras
 

@@ -265,4 +265,4 @@ Ordenado de menor a mayor esfuerzo.
 | Trampas del motor, parser y sincronía | `docs/GOTCHAS.md` |
 | Rutas y eventos de la API | `docs/API.md` |
 | Qué samples corren | `docs/COMPATIBILIDAD.md` |
-| Fases, decisiones y bitácora | `PLAN.md` |
+| Fases, decisiones y bitácora | `PLAN.md` (port web), `PLAN-JUEGO.md` (juego Viaje a la Luna) |

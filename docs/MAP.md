@@ -7,7 +7,7 @@
 - `backend/app/engine/worker.py`: pool de procesos con `gmatpy`; `submit(fn, ...)`.
 - `frontend/src/main.tsx` y `App.tsx`: shell (barra, pestañas, consola).
 - `frontend/src/store.ts`: estado Zustand único.
-- `PLAN.md`: fases, decisiones, avance y bitácora.
+- `PLAN.md`: fases, decisiones, avance y bitácora del port web. `PLAN-JUEGO.md`: lo mismo para el juego "Viaje a la Luna" (plan activo).
 
 ## Conceptos → archivo
 | Concepto | Dónde vive |
