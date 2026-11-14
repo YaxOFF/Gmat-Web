@@ -19,7 +19,16 @@ Leídas del código y comprobadas con el motor real donde dice "(verificado)".
 - **Códigos de salida:** 0 = `done`; 2 = `LoadScript` falló; 3 = `RunScript` falló; otro = caída del motor ("El motor terminó con código N").
 - **`MAX_RUNS` cuenta corridas sin terminar.** Validar no cuenta y lanza un proceso propio por petición.
 - **Nivel de log por texto (`classify`).** `**** ERROR ****` o `Exception` en cualquier parte = error; `warning` sin distinguir mayúsculas = warning; una línea citada (`"  57: ..."`) = error con `line`. Los textos de error traen la ruta temporal del script.
-- **`done.results.files`** lista solo archivos del primer nivel de la carpeta, sin `HIDDEN` (`gmat.log`, `mission.script`, `startup.txt`, `GmatLog.txt`). Aún no hay endpoint para bajarlos.
+- **`done.results.files`** lista solo archivos del primer nivel de la carpeta, sin `HIDDEN` (`gmat.log`, `mission.script`, `startup.txt`, `GmatLog.txt`) ni `gmatweb_*`. `/files/{name}` sirve cualquier otro del primer nivel (incluye los `gmatweb_*`).
+
+## Resultados (`engine/results.py`)
+- **Los reportes ocultos se inyectan como texto**, no con la API: `Construct('ReportFile')` + `SetField('Add')` no crea los parámetros ni los wrappers y `ScriptInterpreter.ValidateSubscriber` hace `RunScript` caer con access violation (verificado). Van justo antes de la primera línea `BeginMissionSequence`; sin ella no hay resultados.
+- **Líneas corridas:** el script que corre tiene N líneas más; `_supervise` resta N a toda `line` desde `manifest["at"]`. Un error dentro de las líneas inyectadas apunta a una línea cercana del usuario.
+- **Naves, XYPlot y ReportFile salen del texto** (`Create` y `X.Campo = ...` de una línea, como sanitize): un `Create` con `...` no cuenta. El ReportFile del usuario sin `Filename` se busca como `<nombre>.txt`.
+- **`SolverIterations = Current`** en los ocultos: con `None` GMAT omite también la pasada final de un Target; con `Current` escribe solo la pasada final, sin iteraciones (verificado en Hohmann, Mars B-Plane, TargetFiniteBurn). No se recorta nada por tiempo: los tramos `BackProp` quedan tal cual.
+- **Sin épocas de maniobra:** GMAT no publica el estado justo tras un `Maneuver` (no hay dos filas con la misma época).
+- **XYPlot oculto no sigue `Toggle`** ni el `SolverIterations` del XYPlot. Lat/lon siempre respecto a la Tierra (ignora `CentralBody` del GroundTrackPlot).
+- **ReportFile del usuario** (ancho fijo) se parte por 2+ espacios: una celda que llena su ancho exacto se pega a la vecina. Filas de `Report` con otras columnas salen con otro largo. Con `WriteHeaders = false` las cabeceras son los nombres del `Add` (de una sola línea) si cuadran con las columnas, si no `1..n`.
 
 ## Saneo (`engine/sanitize.py`)
 - **Trabaja línea por línea y no une `...`.** Un visor GUI con continuación queda a medias y el script no carga: `OV.Add = {Sat, ...` se comenta y la línea `Earth};` no (verificado). Un `Create` con continuación no se registra.

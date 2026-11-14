@@ -16,7 +16,7 @@
 | Proceso por corrida | `runner.create` + `_supervise` | correr scripts con timeout, cancelación y log en vivo | evento `error` con el código de salida |
 
 ## Flujo: correr un script
-`store.run` → `POST /api/runs` → `runner.create`: `sanitize` a una carpeta `run-*`, proceso `_child` (`LoadScript`, `RunScript`) → `_supervise` lee `gmat.log` cada 0.2 s y guarda eventos en `Run.events` → `WS /api/ws/runs/{id}` reenvía desde el primer evento y sigue en vivo hasta `done`/`error` → consola. Varios clientes pueden ver la misma corrida.
+`store.run` → `POST /api/runs` → `runner.create`: `sanitize` a una carpeta `run-*`, proceso `_child` (`LoadScript`, `RunScript`) → `_supervise` lee `gmat.log` cada 0.2 s y guarda eventos en `Run.events` → `WS /api/ws/runs/{id}` reenvía desde el primer evento y sigue en vivo hasta `done`/`error` → consola. Antes de correr, `results.inject` agrega `ReportFile` ocultos (`gmatweb_*.csv`) justo antes de `BeginMissionSequence` y `_supervise` resta esas líneas a las que cita GMAT; `GET /runs/{id}/results` los lee con `results.read`. Varios clientes pueden ver la misma corrida.
 
 ## Flujo: validar sin correr
 `store.validate` → `POST /api/script/validate` → `sanitize` a una carpeta `val-*` → `_isolated(worker.validate_script)` (solo `LoadScript`) → se lee el log y se devuelven las líneas de nivel error/warning.

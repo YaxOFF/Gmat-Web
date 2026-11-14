@@ -5,11 +5,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from app import config, samples, script
-from app.engine import runner, schema, worker
+from app.engine import results, runner, schema, worker
 from app.engine.sanitize import ScriptRejected, sanitize
 
 
@@ -171,6 +171,31 @@ def cancel_run(run_id: str):
         raise HTTPException(404, "Corrida no encontrada")
     runner.cancel(run)
     return {"ok": True}
+
+
+def _finished_run(run_id: str) -> runner.Run:
+    run = runner.runs.get(run_id)
+    if run is None:
+        raise HTTPException(404, "Corrida no encontrada")
+    if not run.finished:
+        raise HTTPException(409, "La corrida no ha terminado")
+    return run
+
+
+@app.get("/api/runs/{run_id}/results")
+def run_results(run_id: str):
+    run = _finished_run(run_id)
+    return results.read(run.dir, run.manifest)
+
+
+@app.get("/api/runs/{run_id}/files/{name}")
+def run_file(run_id: str, name: str):
+    run = _finished_run(run_id)
+    # Solo nombres simples del primer nivel de la carpeta de la corrida.
+    path = run.dir / name
+    if Path(name).name != name or name in ("", ".", "..", *runner.HIDDEN) or path.resolve().parent != run.dir.resolve()             or not path.is_file():
+        raise HTTPException(404, "Archivo no encontrado")
+    return FileResponse(path, filename=name)
 
 
 @app.websocket("/api/ws/runs/{run_id}")

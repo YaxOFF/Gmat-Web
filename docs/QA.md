@@ -78,3 +78,10 @@ await window.__dnd(__find('Prop 1 Day'),__find('Prop to Perigee'),0.2)
 ## Por fase
 - Fase 5a: parameters, parse/serialize de `% Cmd;`, árbol Misión, formulario Propagate, picker, drag, ↑/↓, agregar, comentar, borrar, corrida Hohmann, regresión de recursos.
 - Fase 5b: Target/Vary/Achieve/If/For formularios, `parser._args`, comandos nuevos con el primer recurso, Hohmann armado desde cero (TOI 2.24028397735, GOI 1.432966302), regresión 5a (drag, comentar, borrar).
+
+### Fase 6a (Resultados)
+- Números: añadir al script un `ReportFile` propio (`RFq.Add={DefaultSC.A1ModJulian,DefaultSC.EarthMJ2000Eq.X,...}`) y comparar contra `GET /api/runs/{id}/results` (`ships[].columns`, `reports[]`, `xyplots[]`): Hohmann dio diferencia máx. 0 en 151 filas. Con `WriteHeaders=false` la 1.ª fila de datos se toma como cabecera (tabla pierde 1 fila).
+- `/files/..%2F..`, `a%2Fb`, `..%5C..`, `gmatweb_*.csv` -> 404. Ayudante de corrida: POST `/api/runs` y sondear `/results` (409 hasta terminar).
+- BackProp: `Propagate BackProp` con `ElapsedDays` POSITIVO nunca termina (usar negativo). Con `Propagate +0.5d; BackProp -0.3d` los datos de nave quedan 0..0.2 d (176 filas) mientras el ReportFile crudo tiene 698: `_csv` recorta mal.
+- UI: Ejemplos -> Correr -> pestaña Resultados; el select "Vista" se maneja con setter nativo + `change` (valores `gt:`/`sc:`/`rf:`/`xy:`). Ctrl hook de descargas: sobrescribir `HTMLAnchorElement.prototype.click` y leer `a.download`/blob.
+- Al cargar otro ejemplo, Resultados conserva los de la corrida anterior hasta correr de nuevo; al correr se vacía.

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from app import config
-from app.engine import worker
+from app.engine import results, worker
 from app.engine.sanitize import sanitize
 
 LOG = "gmat.log"
@@ -56,6 +56,7 @@ class Run:
     events: list[dict] = field(default_factory=list)
     cond: asyncio.Condition = field(default_factory=asyncio.Condition)
     cancelled: bool = False
+    manifest: dict = field(default_factory=dict)
 
     @property
     def finished(self) -> bool:
@@ -84,8 +85,9 @@ def create(text: str) -> Run:
     except Exception:
         run_dir.rmdir()
         raise
+    safe, manifest = results.inject(safe, run_dir)
     (run_dir / SCRIPT).write_text(safe, encoding="utf-8")
-    run = Run(id=uuid.uuid4().hex, dir=run_dir)
+    run = Run(id=uuid.uuid4().hex, dir=run_dir, manifest=manifest)
     run.proc = mp.get_context("spawn").Process(
         target=_child, args=(config.GMAT_HOME, str(config.CACHE_DIR), str(run_dir)), daemon=True)
     run.proc.start()
@@ -112,7 +114,10 @@ async def _supervise(run: Run) -> None:
             lines, buf = lines + [buf], ""
         for line in lines:
             if line.strip():
-                await run.emit(classify(line.rstrip("\r")))
+                ev = classify(line.rstrip("\r"))
+                if "line" in ev:  # el script corrido lleva líneas inyectadas antes de BeginMissionSequence
+                    ev["line"] = results.original_line(ev["line"], run.manifest)
+                await run.emit(ev)
 
     while run.proc.is_alive():
         await asyncio.sleep(0.2)
@@ -133,9 +138,12 @@ async def _supervise(run: Run) -> None:
     if code != 0:
         await run.emit({"type": "error", "message": EXIT_MSG.get(code, f"El motor terminó con código {code}")})
         return
-    files = sorted(p.name for p in run.dir.iterdir() if p.is_file() and p.name not in HIDDEN)
+    files = sorted(p.name for p in run.dir.iterdir()
+                   if p.is_file() and p.name not in HIDDEN and not p.name.startswith(results.PREFIX))
+    m = run.manifest
     await run.emit({"type": "done", "results": {
-        "elapsed": round(time.monotonic() - start, 2), "files": files}})
+        "elapsed": round(time.monotonic() - start, 2), "files": files,
+        "available": bool(m.get("ships") or m.get("reports") or m.get("xyplots"))}})
 
 
 def cancel(run: Run) -> None:

@@ -130,6 +130,8 @@ reset	backend/app/engine/schema.py
 revealLine	frontend/src/editor/gmat.ts
 root	backend/app/samples.py
 run_events	backend/app/main.py
+run_file	backend/app/main.py
+run_results	backend/app/main.py
 sanitize	backend/app/engine/sanitize.py
 serialize	backend/app/script/serializer.py
 serialize_script	backend/app/main.py

@@ -1,0 +1,24 @@
+.root { flex: 1; display: flex; flex-direction: column; gap: var(--gap); padding: 10px; min-height: 0; overflow: auto; }
+.empty { flex: 1; padding: 12px; color: var(--text-muted); }
+.pick { display: flex; align-items: center; gap: var(--gap); }
+.pick select { padding: 3px 6px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); color: var(--text); }
+.view { display: flex; flex-direction: column; gap: var(--gap); min-height: 0; flex: 1; }
+.bar { display: flex; align-items: center; gap: var(--gap); flex-wrap: wrap; }
+.btn {
+  padding: 3px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface-2); color: var(--text); cursor: pointer; text-decoration: none; font: inherit;
+}
+.btn:hover { border-color: var(--accent); }
+.muted { color: var(--text-muted); font-size: .9em; }
+.chart { color: var(--text); background: var(--surface); }
+.tableWrap { overflow: auto; flex: 1; min-height: 0; border: 1px solid var(--border); }
+.table { border-collapse: collapse; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+.table th { position: sticky; top: 0; background: var(--surface-2); text-align: left; }
+.table th, .table td { padding: 2px 8px; border-bottom: 1px solid var(--border); }
+.track { width: 100%; max-height: 70vh; background: var(--surface); }
+.sea { fill: var(--surface-2); }
+.grid { stroke: var(--border); stroke-width: .3; }
+.axis { stroke: var(--text-muted); stroke-width: .4; }
+.path { fill: none; stroke: var(--accent); stroke-width: .6; vector-effect: non-scaling-stroke; }
+.start { fill: var(--ok); }
+.end { fill: var(--error); }

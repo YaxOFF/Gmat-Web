@@ -13,6 +13,7 @@
 | Concepto | Dónde vive |
 |---|---|
 | Correr un script (proceso por corrida, log en vivo, timeout, cancelar) | `backend/app/engine/runner.py`, ruta `/api/runs` y WS en `main.py` |
+| Resultados (ReportFile ocultos por nave/XYPlot, lectura, `/results`, `/files`) | `backend/app/engine/results.py` (`inject`, `read`), rutas en `main.py`; pestaña `frontend/src/results/Results.tsx` (uPlot, tabla, traza en tierra SVG), tipos `model/results.ts`, `store.results` |
 | Seguridad de scripts (prohibidos, rutas de salida) | `backend/app/engine/sanitize.py` |
 | Script ↔ modelo JSON | `backend/app/script/parser.py`, `serializer.py`; tipos en `frontend/src/model/mission.ts`, `shared/mission.schema.json` |
 | Excepciones del round-trip | `docs/EXCEPCIONES_ROUNDTRIP.md`, `backend/tests/test_script.py` |

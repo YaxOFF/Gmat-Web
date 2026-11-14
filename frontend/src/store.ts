@@ -1,10 +1,11 @@
 import { create } from 'zustand'
 import { es } from './i18n/es'
 import type { Command, Mission } from './model/mission'
+import type { Results } from './model/results'
 import type { FieldSchema, ParamInfo, TypeInfo } from './model/schema'
 
 export type LeftTab = 'resources' | 'mission'
-export type CenterTab = 'editor' | 'resource' | 'command' | 'view3d' | 'plots' | 'reports'
+export type CenterTab = 'editor' | 'resource' | 'command' | 'view3d' | 'results'
 type Engine = { state: 'checking' | 'ready' | 'error'; version?: string; detail?: string }
 export type LogLevel = 'info' | 'warning' | 'error' | 'system'
 export type LogEntry = { level: LogLevel; text: string; line?: number }
@@ -14,7 +15,7 @@ type Doc = { text: string; name: string; rev: number }
 type RunEvent =
   | { type: 'log'; level: LogLevel; text: string; line?: number }
   | { type: 'progress'; elapsed: number }
-  | { type: 'done'; results: { elapsed: number; files: string[] } }
+  | { type: 'done'; results: { elapsed: number; files: string[]; available?: boolean } }
   | { type: 'error'; message: string }
 
 // shortcut: la consola guarda solo las últimas líneas; subir o virtualizar si hace falta el log completo.
@@ -38,6 +39,8 @@ type AppState = {
   /** Ruta del comando seleccionado en la secuencia (índices desde la raíz). */
   selectedCmd: number[] | null
   parameters: ParamInfo[] | 'error' | null
+  /** Resultados de la última corrida terminada con datos (se vacía al correr de nuevo). */
+  results: Results | null
   setLeftTab: (t: LeftTab) => void
   setCenterTab: (t: CenterTab) => void
   checkEngine: () => Promise<void>
@@ -104,6 +107,7 @@ export const useApp = create<AppState>((set, get) => {
     selected: null,
     selectedCmd: null,
     parameters: null,
+    results: null,
     setLeftTab: (leftTab) => set({ leftTab }),
     setCenterTab: (centerTab) => set({ centerTab }),
     checkEngine: async () => {
@@ -120,7 +124,7 @@ export const useApp = create<AppState>((set, get) => {
       }
     },
     loadText: (text, name) => {
-      set((st) => ({ doc: { text, name, rev: st.doc.rev + 1 }, centerTab: 'editor', selected: null, selectedCmd: null }))
+      set((st) => ({ doc: { text, name, rev: st.doc.rev + 1 }, centerTab: 'editor', selected: null, selectedCmd: null, results: null }))
       parseLater()
     },
     editText: (text) => {
@@ -143,7 +147,7 @@ export const useApp = create<AppState>((set, get) => {
     },
     run: async () => {
       if (get().runId) return
-      set({ logs: [{ level: 'system', text: es.run.starting(get().doc.name) }], elapsed: 0 })
+      set({ logs: [{ level: 'system', text: es.run.starting(get().doc.name) }], elapsed: 0, results: null })
       let body
       try {
         const r = await fetch('/api/runs', {
@@ -169,6 +173,15 @@ export const useApp = create<AppState>((set, get) => {
         else if (ev.type === 'done') {
           log({ level: 'system', text: es.run.done(ev.results.elapsed, ev.results.files) })
           finish()
+          if (ev.results.available) {
+            fetch(`/api/runs/${runId}/results`)
+              .then(async (r) => {
+                if (!r.ok) throw new Error(String(r.status))
+                set({ results: { runId, ...(await r.json()) } })
+                log({ level: 'system', text: es.results.ready })
+              })
+              .catch((e) => log({ level: 'error', text: `${es.results.failed}: ${e}` }))
+          }
         } else {
           log({ level: 'error', text: ev.message })
           finish()
