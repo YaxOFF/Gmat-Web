@@ -147,7 +147,7 @@ Cuentas, misiones guardadas en servidor (PostgreSQL), compartir por enlace, cuot
 ## Avance
 
 - [x] Fase 0 — Preparar
-- [ ] Fase 1 — Esqueleto backend + frontend
+- [x] Fase 1 — Esqueleto backend + frontend
 - [ ] Fase 2 — Correr scripts (editor + consola)
 - [ ] Fase 3 — Modelo de misión: parser/serializer + esquemas
 - [ ] Fase 4 — Árbol de recursos + formularios
@@ -163,3 +163,4 @@ Cuentas, misiones guardadas en servidor (PostgreSQL), compartir por enlace, cuot
 ## Bitácora
 
 - **2026-11-14 · Fase 0** — Repo creado con `origin` a `YaxOFF/Gmat-Web`. Elegido backend Python + `gmatpy` (motor real) en lugar de WebAssembly o reescritura; frontend React + Vite + TS + Cesium; alcance v1 = núcleo de diseño de misión; deploy Docker/Portainer + local. Comprobado que `gmatpy` R2026a corre samples con Python 3.14 en Windows y que existe build Ubuntu R2026a para Docker. Código fuente C++ de referencia clonado en `C:\Users\Yaxon\Downloads\GMAT-src` (tag `R2026a`).
+- **2026-11-14 · Fase 1** — Backend FastAPI con `ProcessPoolExecutor` (spawn) cuyo initializer importa `gmatpy`; `GET /api/health` devuelve versión vía worker (`{status:"error"}` si el motor falla). Si falta `GMAT_HOME/bin/api_startup_file.txt` se genera uno equivalente en `backend/.cache/`. Límites por env: `GMAT_WEB_WORKERS=2`, `GMAT_WEB_TASK_TIMEOUT=60`. Frontend Vite 8 + TS 7 + oxlint (en vez de eslint), Zustand, tokens `light-dark()`, textos en `es.ts`. Verificado: pytest, lint, build, health por proxy, shell visible sin errores de consola. Pendiente: `GMAT_HOME` debe estar definido (pytest y `dev.ps1` fallan sin él, a propósito); `dev.sh` solo con `sh -n`.

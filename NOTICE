@@ -1,0 +1,9 @@
+GMAT Web
+Copyright (c) 2026 YaxOFF
+
+Este proyecto usa el General Mission Analysis Tool (GMAT) y su API de Python
+(gmatpy) como motor de cálculo. GMAT se distribuye bajo la Apache License,
+Version 2.0: https://www.apache.org/licenses/LICENSE-2.0
+
+GMAT no se redistribuye en este repositorio; debe instalarse por separado.
+Este proyecto no está afiliado ni respaldado por los autores de GMAT.

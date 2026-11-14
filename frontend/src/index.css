@@ -1,0 +1,30 @@
+/* Tokens de diseño. Claro/oscuro según el sistema; forzar con :root[data-theme='dark'|'light']. */
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#f6f7f9, #14161a);
+  --surface: light-dark(#ffffff, #1c1f24);
+  --surface-2: light-dark(#eef0f3, #252930);
+  --border: light-dark(#d9dde3, #333842);
+  --text: light-dark(#1d2129, #e3e6eb);
+  --text-muted: light-dark(#5d6573, #9aa2ae);
+  --accent: light-dark(#1f6feb, #4c8dff);
+  --ok: light-dark(#1a7f37, #3fb950);
+  --warn: light-dark(#9a6700, #d29922);
+  --error: light-dark(#cf222e, #f85149);
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
+  --radius: 4px;
+  --gap: 8px;
+
+  font: 14px/1.4 var(--sans);
+  color: var(--text);
+  background: var(--bg);
+}
+
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+button { font: inherit; color: inherit; }

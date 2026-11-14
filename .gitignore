@@ -7,3 +7,5 @@ __pycache__/
 .env
 runs/
 .cache/
+*.egg-info/
+*.tsbuildinfo
