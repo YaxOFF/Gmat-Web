@@ -20,3 +20,11 @@ export interface TypeSchema {
   type: string
   fields: FieldSchema[]
 }
+
+/** Elemento de GET /api/schema: tipo creable, categoría del motor y Gmat::ObjectType. */
+export interface TypeInfo {
+  type: string
+  /** SPACECRAFT, HARDWARE, ODE_MODEL, PROP_SETUP, BURN, COORDINATE_SYSTEM, SOLVER, SUBSCRIBER, PARAMETER... */
+  category: string
+  objectType: number
+}

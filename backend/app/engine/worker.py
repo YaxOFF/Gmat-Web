@@ -8,6 +8,7 @@ import multiprocessing as mp
 import os
 import re
 import sys
+import tempfile
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
@@ -75,6 +76,36 @@ def snapshot(script_path: str) -> dict | None:
         cmds.append(cmd.GetGeneratingString(g.NO_COMMENTS))
         cmd = cmd.GetNext()
     return {"objects": objs, "commands": cmds}
+
+
+def _load_text(text: str) -> bool:
+    os.chdir(Path(config.GMAT_HOME, "bin"))
+    fd, path = tempfile.mkstemp(suffix=".script")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    try:
+        return bool(gmat.LoadScript(path))
+    finally:
+        os.unlink(path)
+
+
+def convert_state(from_type: str, to_type: str, elements: dict[str, float]) -> dict[str, float] | None:
+    """Convierte el estado de una nave (EarthMJ2000Eq por defecto) con el propio Spacecraft de GMAT.
+    El llamador valida tipos y etiquetas: aquí ya son seguros para el script. None si no carga."""
+    lines = ["Create Spacecraft ConvSat;", f"ConvSat.DisplayStateType = {from_type};"]
+    lines += [f"ConvSat.{k} = {float(v)!r};" for k, v in elements.items()]
+    if not _load_text("\n".join(lines + ["BeginMissionSequence;", ""])):
+        return None
+    sc = gmat.GetObject("ConvSat")
+    sc.SetField("DisplayStateType", to_type)
+    return {label: float(sc.GetField(label)) for label in sc.GetStateElementLabels(to_type)}
+
+
+def validate_script(script_path: str, log_path: str) -> bool:
+    """Carga (sin correr) un script ya saneado; los errores quedan en log_path."""
+    os.chdir(Path(config.GMAT_HOME, "bin"))
+    gmat.UseLogFile(log_path)
+    return bool(gmat.LoadScript(script_path))
 
 
 def start() -> None:

@@ -19,12 +19,16 @@ def client(tmp_path_factory):
 
 
 def test_types(client):
-    types = client.get("/api/schema").json()
+    info = client.get("/api/schema").json()
+    types = {t["type"]: t for t in info}
     for t in ("Spacecraft", "ChemicalTank", "ChemicalThruster", "ForceModel", "Propagator", "ImpulsiveBurn",
               "FiniteBurn", "CoordinateSystem", "DifferentialCorrector", "Variable", "Array", "String",
               "ReportFile", "XYPlot", "EphemerisFile"):
         assert t in types
     assert "SMA" not in types  # parámetros calculados no son creables
+    assert types["ChemicalTank"]["category"] == "HARDWARE"
+    assert types["Variable"]["category"] == "PARAMETER"
+    assert types["ForceModel"]["objectType"] != types["Propagator"]["objectType"]
 
 
 def test_spacecraft(client):

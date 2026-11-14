@@ -1,0 +1,56 @@
+.tree { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.bar { display: flex; gap: 4px; padding: 6px 8px 0; }
+.btn {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn:disabled { opacity: .5; cursor: default; }
+.select, .input {
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: inherit;
+  font: inherit;
+}
+.select { flex: 1; }
+.input[aria-invalid='true'] { border-color: var(--error); }
+.list { flex: 1; overflow: auto; padding: 4px 8px 12px; }
+.group { margin: 10px 0 2px; font-size: 12px; text-transform: uppercase; color: var(--text-muted); }
+.item, .itemActive {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--gap);
+  width: 100%;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.item:hover { background: var(--surface-2); }
+.itemActive { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.item small, .itemActive small, .title small, .label small { color: var(--text-muted); font-weight: 400; }
+.muted { padding: 12px; color: var(--text-muted); }
+.warn { margin: 6px 8px 0; color: var(--warn); font-size: 12px; }
+
+.form { flex: 1; overflow: auto; padding: 8px 16px 24px; }
+.title { margin: 4px 0 10px; font-size: 16px; }
+.row {
+  display: grid;
+  grid-template-columns: minmax(140px, 260px) minmax(0, 360px) auto;
+  align-items: center;
+  gap: var(--gap);
+  padding: 2px 0;
+}
+.row[data-set] .label { font-weight: 600; }
+.label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 13px; }
+.row input[type='checkbox'] { justify-self: start; }
+.reset { border: 0; background: none; cursor: pointer; color: var(--text-muted); }
+.reset:disabled { visibility: hidden; }

@@ -1,8 +1,10 @@
 import { create } from 'zustand'
 import { es } from './i18n/es'
+import type { Mission } from './model/mission'
+import type { FieldSchema, TypeInfo } from './model/schema'
 
 export type LeftTab = 'resources' | 'mission'
-export type CenterTab = 'editor' | 'view3d' | 'plots' | 'reports'
+export type CenterTab = 'editor' | 'resource' | 'view3d' | 'plots' | 'reports'
 type Engine = { state: 'checking' | 'ready' | 'error'; version?: string; detail?: string }
 export type LogLevel = 'info' | 'warning' | 'error' | 'system'
 export type LogEntry = { level: LogLevel; text: string; line?: number }
@@ -27,6 +29,12 @@ type AppState = {
   runId: string | null
   elapsed: number
   logs: LogEntry[]
+  /** Modelo del script; si el texto no se puede analizar queda la última versión buena. */
+  mission: Mission
+  parseError: string | null
+  types: TypeInfo[] | null
+  schemas: Record<string, FieldSchema[] | 'error'>
+  selected: string | null
   setLeftTab: (t: LeftTab) => void
   setCenterTab: (t: CenterTab) => void
   checkEngine: () => Promise<void>
@@ -36,10 +44,39 @@ type AppState = {
   loadSample: (s: Sample) => Promise<void>
   run: () => Promise<void>
   stop: () => Promise<void>
+  validate: () => Promise<void>
+  fetchTypes: () => Promise<void>
+  fetchSchema: (type: string) => Promise<void>
+  select: (name: string | null) => void
+  /** Cambio hecho desde formularios/árbol: reescribe el script desde el modelo. */
+  setMission: (m: Mission, selected?: string | null) => void
 }
+
+const PARSE_DELAY_MS = 400
+const post = (url: string, body: unknown) => fetch(url, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+})
 
 export const useApp = create<AppState>((set, get) => {
   const log = (...entries: LogEntry[]) => set((st) => ({ logs: [...st.logs, ...entries].slice(-MAX_LOG) }))
+  // seq descarta respuestas viejas: gana el último cambio, venga del texto o del modelo.
+  let seq = 0
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const parseLater = () => {
+    clearTimeout(timer)
+    const mine = ++seq
+    timer = setTimeout(async () => {
+      try {
+        const r = await post('/api/script/parse', { script: get().doc.text })
+        const body = await r.json()
+        if (mine !== seq) return
+        if (!r.ok) return set({ parseError: String(body.detail ?? r.status) })
+        set({ mission: body, parseError: null })
+      } catch (e) {
+        if (mine === seq) set({ parseError: String(e) })
+      }
+    }, PARSE_DELAY_MS)
+  }
 
   return {
     leftTab: 'resources',
@@ -50,6 +87,11 @@ export const useApp = create<AppState>((set, get) => {
     runId: null,
     elapsed: 0,
     logs: [],
+    mission: { resources: [], sequence: [], raw: [] },
+    parseError: null,
+    types: null,
+    schemas: {},
+    selected: null,
     setLeftTab: (leftTab) => set({ leftTab }),
     setCenterTab: (centerTab) => set({ centerTab }),
     checkEngine: async () => {
@@ -65,8 +107,15 @@ export const useApp = create<AppState>((set, get) => {
         set({ engine: { state: 'error', detail: String(e) } })
       }
     },
-    loadText: (text, name) => set((st) => ({ doc: { text, name, rev: st.doc.rev + 1 }, centerTab: 'editor' })),
-    editText: (text) => set((st) => ({ doc: { ...st.doc, text } })),
+    loadText: (text, name) => {
+      set((st) => ({ doc: { text, name, rev: st.doc.rev + 1 }, centerTab: 'editor', selected: null }))
+      parseLater()
+    },
+    editText: (text) => {
+      if (text === get().doc.text) return  // eco del editor tras setMission/loadText
+      set((st) => ({ doc: { ...st.doc, text } }))
+      parseLater()
+    },
     fetchSamples: async () => {
       if (get().samples) return
       try {
@@ -121,6 +170,51 @@ export const useApp = create<AppState>((set, get) => {
     stop: async () => {
       const { runId } = get()
       if (runId) await fetch(`/api/runs/${runId}`, { method: 'DELETE' })
+    },
+    validate: async () => {
+      set({ logs: [{ level: 'system', text: es.validate.starting }] })
+      try {
+        const r = await post('/api/script/validate', { script: get().doc.text })
+        const body: { ok: boolean; errors: LogEntry[] } = await r.json()
+        if (!r.ok) return log({ level: 'error', text: `${es.validate.failed}: ${(body as { detail?: string }).detail}` })
+        log(...body.errors.map((e) => ({ ...e, line: e.line ?? undefined })),
+          { level: body.ok ? 'system' : 'error', text: body.ok ? es.validate.ok : es.validate.bad })
+      } catch (e) {
+        log({ level: 'error', text: `${es.validate.failed}: ${e}` })
+      }
+    },
+    fetchTypes: async () => {
+      if (get().types) return
+      try {
+        set({ types: await (await fetch('/api/schema')).json() })
+      } catch (e) {
+        log({ level: 'error', text: `${es.resources.schemaError}: ${e}` })
+      }
+    },
+    fetchSchema: async (type) => {
+      if (get().schemas[type]) return
+      let fields: FieldSchema[] | 'error' = 'error'
+      try {
+        const r = await fetch(`/api/schema/${encodeURIComponent(type)}`)
+        if (r.ok) fields = (await r.json()).fields ?? 'error'
+      } catch { /* queda 'error' */ }
+      set((st) => ({ schemas: { ...st.schemas, [type]: fields } }))
+    },
+    select: (selected) => set(selected ? { selected, centerTab: 'resource' } : { selected }),
+    setMission: (mission, selected) => {
+      clearTimeout(timer)
+      const mine = ++seq
+      set({ mission, parseError: null, ...(selected !== undefined && { selected }) })
+      void (async () => {
+        try {
+          const r = await post('/api/script/serialize', mission)
+          const body = await r.json()
+          if (!r.ok) return log({ level: 'error', text: `${es.resources.serializeError}: ${body.detail}` })
+          if (mine === seq) set((st) => ({ doc: { ...st.doc, text: body.script, rev: st.doc.rev + 1 } }))
+        } catch (e) {
+          log({ level: 'error', text: `${es.resources.serializeError}: ${e}` })
+        }
+      })()
     },
   }
 })

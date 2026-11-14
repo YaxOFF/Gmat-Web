@@ -35,14 +35,21 @@ NUMERIC = {"Real", "Integer", "UnsignedInt"}
 
 # ---------- dentro del worker ----------
 
-def engine_types() -> list[str]:
+def engine_types() -> list[dict]:
+    """Tipos creables con su categoría y Gmat::ObjectType (para agrupar y filtrar referencias)."""
     g = worker.gmat
     mod = g.Moderator.Instance()
-    out: list[str] = []
+    out: list[dict] = []
+    seen: set[str] = set()
     for cat in CATEGORIES:
-        out += [ALIASES.get(t, t) for t in mod.GetListOfViewableItems(getattr(g, cat)) if t not in out]
+        for t in mod.GetListOfViewableItems(getattr(g, cat)):
+            t = ALIASES.get(t, t)
+            if t not in seen:
+                seen.add(t)
+                out.append({"type": t, "category": cat, "objectType": int(getattr(g, cat))})
     factory = set(mod.GetListOfFactoryItems(g.PARAMETER))
-    return out + [t for t in USER_PARAMETERS if t in factory]
+    return out + [{"type": t, "category": "PARAMETER", "objectType": int(g.PARAMETER)}
+                  for t in USER_PARAMETERS if t in factory]
 
 
 def _value(text: str, ptype: str):
@@ -141,7 +148,8 @@ _lock = asyncio.Lock()
 
 
 def _cache_file(version: str) -> Path:
-    return Path(config.CACHE_DIR, "schema", re.sub(r"[^\w.-]+", "_", version) + ".json")
+    # v2: `types` pasó de lista de nombres a lista de objetos
+    return Path(config.CACHE_DIR, "schema", re.sub(r"[^\w.-]+", "_", version) + ".v2.json")
 
 
 async def _load() -> dict:
@@ -179,7 +187,7 @@ def _save(c: dict) -> None:
     os.replace(tmp, file)
 
 
-async def types() -> list[str]:
+async def types() -> list[dict]:
     async with _lock:
         c = await _load()
         if c["types"] is None:
@@ -190,7 +198,7 @@ async def types() -> list[str]:
 
 async def fields(type_name: str) -> list[dict] | None:
     """Campos del tipo; None si no es un tipo creable."""
-    if type_name not in await types():
+    if type_name not in {t["type"] for t in await types()}:
         return None
     async with _lock:
         c = await _load()

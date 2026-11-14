@@ -1,4 +1,8 @@
+import math
+import re
+import tempfile
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
@@ -6,7 +10,7 @@ from pydantic import BaseModel
 
 from app import config, samples, script
 from app.engine import runner, schema, worker
-from app.engine.sanitize import ScriptRejected
+from app.engine.sanitize import ScriptRejected, sanitize
 
 
 @asynccontextmanager
@@ -72,6 +76,48 @@ def serialize_script(model: dict):
         return {"script": script.serialize(model)}
     except (KeyError, TypeError, AttributeError) as e:
         raise HTTPException(422, f"Modelo inválido: {type(e).__name__}: {e}")
+
+
+@app.post("/api/script/validate")
+async def validate_script(req: RunRequest):
+    """Carga el script en un proceso aislado (sin correrlo) y devuelve errores con línea."""
+    config.RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="val-", dir=config.RUNS_DIR, ignore_cleanup_errors=True) as d:
+        try:
+            safe = sanitize(req.script, Path(d))
+        except ScriptRejected as e:
+            return {"ok": False, "errors": [{"level": "error", "text": str(e), "line": e.line}]}
+        path, log = Path(d, runner.SCRIPT), Path(d, runner.LOG)
+        path.write_text(safe, encoding="utf-8")
+        ok = await schema._isolated(worker.validate_script, str(path), str(log))
+        lines = log.read_text("utf-8", errors="replace").splitlines() if log.exists() else []
+    errors = [ev for ev in map(runner.classify, lines) if ev["level"] in ("error", "warning")]
+    if ok is None:
+        errors.append({"level": "error", "text": "El motor se cayó al cargar el script"})
+    return {"ok": bool(ok) and not any(e["level"] == "error" for e in errors), "errors": errors}
+
+
+STATE_TYPES = set(schema.ENUM_CANDIDATES[("Spacecraft", "DisplayStateType")])
+
+
+class ConvertRequest(BaseModel):
+    fromType: str
+    toType: str
+    elements: dict[str, float]
+
+
+@app.post("/api/convert/state")
+async def convert_state(req: ConvertRequest):
+    if not {req.fromType, req.toType} <= STATE_TYPES:
+        raise HTTPException(422, "Representación de estado desconocida")
+    # van al script como `Sat.Campo = valor`: solo identificadores y números finitos
+    if not req.elements or not all(re.fullmatch(r"[A-Za-z]\w*", k) and math.isfinite(v)
+                                   for k, v in req.elements.items()):
+        raise HTTPException(422, "Elemento de estado inválido")
+    out = await worker.submit(worker.convert_state, req.fromType, req.toType, req.elements)
+    if out is None:
+        raise HTTPException(422, "El motor no aceptó el estado")
+    return {"type": req.toType, "elements": out}
 
 
 @app.get("/api/schema")

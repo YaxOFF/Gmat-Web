@@ -5,6 +5,8 @@ import s from './App.module.css'
 
 // Monaco pesa: se carga aparte del shell.
 const ScriptEditor = lazy(() => import('./editor/ScriptEditor'))
+const ResourceTree = lazy(() => import('./resources/ResourceTree'))
+const ResourceForm = lazy(() => import('./resources/ResourceForm'))
 const goto = (line: number) => import('./editor/gmat').then((m) => m.revealLine(line))
 
 function Tabs<T extends string>({ items, value, onChange }: {
@@ -95,7 +97,7 @@ function Console() {
 }
 
 export default function App() {
-  const { leftTab, centerTab, setLeftTab, setCenterTab, checkEngine, doc, loadText, runId, run, stop } = useApp()
+  const { leftTab, centerTab, setLeftTab, setCenterTab, checkEngine, doc, loadText, runId, run, stop, validate } = useApp()
   const [gallery, setGallery] = useState(false)
   const file = useRef<HTMLInputElement>(null)
   useEffect(() => { void checkEngine() }, [checkEngine])
@@ -119,6 +121,7 @@ export default function App() {
           onChange={(e) => { void open(e.target.files?.[0]); e.target.value = '' }} />
         <button className={s.btn} onClick={() => setGallery(true)}>{es.toolbar.samples}</button>
         <button className={s.btn} onClick={save}>{es.toolbar.save}</button>
+        <button className={s.btn} onClick={() => void validate()} disabled={!doc.text.trim()}>{es.toolbar.validate}</button>
         {runId
           ? <button className={s.btnStop} onClick={() => void stop()}>{es.toolbar.stop}</button>
           : <button className={s.btnRun} onClick={() => void run()} disabled={!doc.text.trim()}>{es.toolbar.run}</button>}
@@ -127,7 +130,9 @@ export default function App() {
       </header>
       <aside className={s.left}>
         <Tabs<LeftTab> items={es.left} value={leftTab} onChange={setLeftTab} />
-        <div className={s.pane}>{es.empty}</div>
+        {leftTab === 'resources'
+          ? <Suspense fallback={null}><ResourceTree /></Suspense>
+          : <div className={s.pane}>{es.empty}</div>}
       </aside>
       <main className={s.center}>
         <Tabs<CenterTab> items={es.center} value={centerTab} onChange={setCenterTab} />
@@ -135,7 +140,8 @@ export default function App() {
         <div className={s.editorPane} hidden={centerTab !== 'editor'}>
           <Suspense fallback={null}><ScriptEditor /></Suspense>
         </div>
-        {centerTab !== 'editor' && <div className={s.pane}>{es.empty}</div>}
+        {centerTab === 'resource' && <Suspense fallback={null}><ResourceForm /></Suspense>}
+        {centerTab !== 'editor' && centerTab !== 'resource' && <div className={s.pane}>{es.empty}</div>}
       </main>
       <Console />
       {gallery && <SampleGallery onClose={() => setGallery(false)} />}
