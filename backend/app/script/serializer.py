@@ -1,5 +1,5 @@
 """Modelo JSON → script GMAT con formato estable (estilo de GMAT escritorio)."""
-from app.script.parser import BLOCKS, IDENT
+from app.script.parser import BLOCKS, IDENT, SEQ_ASSIGN
 
 INDENT = "   "
 
@@ -26,8 +26,10 @@ def _seq(cmds: list[dict], depth: int, out: list[str]) -> None:
     pad = INDENT * depth
     for c in cmds:
         out.extend(pad + x for x in c.get("comments", []))
-        head = " ".join(x for x in (c["cmd"], f"'{c['label']}'" if "label" in c else "") if x)
         text = c.get("text", "")
+        # asignación sin etiqueta: sin `GMAT`, como la escriben los samples (con etiqueta hace falta)
+        cmd = "" if c["cmd"] == "GMAT" and "label" not in c and SEQ_ASSIGN.match(text) else c["cmd"]
+        head = " ".join(x for x in (cmd, f"'{c['label']}'" if "label" in c else "") if x)
         sep = "" if not head or not text or text.startswith("(") else " "
         off = "% " if c.get("disabled") and c["cmd"] not in BLOCKS else ""  # comando deshabilitado
         out.append(f"{pad}{off}{head}{sep}{text};")
@@ -48,7 +50,7 @@ def serialize(model: dict) -> str:
         if r["type"] == "Array" and "NumRows" in fields and "NumCols" in fields:
             name += f"[{fields.pop('NumRows')},{fields.pop('NumCols')}]"
         out.append(f"Create {r['type']} {name};")
-        out.extend(f"GMAT {r['name']}.{k} = {fmt(v, names)};" for k, v in fields.items())
+        out.extend(f"{r['name']}.{k} = {fmt(v, names)};" for k, v in fields.items())
         out.append("")
     out.extend(model.get("raw", []))
     out += ["", "BeginMissionSequence;"]

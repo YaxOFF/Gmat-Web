@@ -59,6 +59,7 @@ export const es = {
       `${solver} NO convergió${n != null ? ` tras ${es.solver.iters(n)}` : ''}. Revisa valores iniciales, tolerancias, MaxStep o MaximumIterations.`,
     initial: (solver: string) => `${solver} corrió solo la estimación inicial (SolveMode = RunInitialGuess).`,
     failedLog: (solver: string, n?: number) => `Aviso: el solver ${solver} no convergió${n != null ? ` (${es.solver.iters(n)})` : ''}.`,
+    silentLog: (solver: string) => `Aviso: ${solver} tiene ShowProgress = false; GMAT no imprime su progreso y la pestaña Solver no mostrará sus iteraciones.`,
     iteration: 'Iteración',
     evaluation: 'Evaluación',
     cost: 'Costo',
@@ -96,6 +97,8 @@ export const es = {
     remove: 'Borrar',
     none: 'Sin recursos. Crea uno o abre un script.',
     renamePrompt: (name: string) => `Nuevo nombre para ${name}:`,
+    removeTitle: (name: string) => `Borrar ${name}`,
+    cancel: 'Cancelar',
     badName: (name: string) => `"${name}" no es un nombre válido o ya existe (letra inicial, luego letras, números o _).`,
     confirmRemove: (name: string, refs: string[]) => refs.length
       ? `${name} se usa en:\n${refs.slice(0, 15).join('\n')}${refs.length > 15 ? '\n…' : ''}\n\n` +

@@ -9,6 +9,7 @@ import argparse
 import asyncio
 import multiprocessing as mp
 import re
+import shutil
 import sys
 import tempfile
 import time
@@ -58,7 +59,7 @@ def solver_summary(evs: list[dict]) -> dict | None:
     costo de su última iteración (valores finales)."""
     out: dict = {}
     for e in evs:
-        if e.get("type") != "solver":
+        if e.get("type") != "solver" or e["event"] == "silent":
             continue
         s = out.setdefault(e["solver"], {"runs": 0, "final": []})
         if e["event"] == "start":
@@ -112,14 +113,18 @@ def run_desktop(script: Path, timeout: float = 300) -> list[dict]:
     p = mp.get_context("spawn").Process(target=_desktop_child, daemon=True,
                                         args=(config.GMAT_HOME, str(config.CACHE_DIR), str(script), str(out)))
     p.start()
-    p.join(timeout)
-    if p.is_alive():
-        p.terminate()
-        raise TimeoutError(script.name)
-    assert p.exitcode == 0, f"{script.name}: código {p.exitcode}"
-    log = SolverLog(script.read_text(encoding="utf-8", errors="replace"))
-    lines = (out / "gmat.log").read_text(encoding="utf-8", errors="replace").splitlines()
-    return [ev for line in lines for ev in log.feed(line)]
+    try:
+        p.join(timeout)
+        if p.is_alive():
+            p.terminate()
+            p.join(5)
+            raise TimeoutError(script.name)
+        assert p.exitcode == 0, f"{script.name}: código {p.exitcode}"
+        log = SolverLog(script.read_text(encoding="utf-8", errors="replace"))
+        lines = (out / "gmat.log").read_text(encoding="utf-8", errors="replace").splitlines()
+        return [ev for line in lines for ev in log.feed(line)]
+    finally:
+        shutil.rmtree(out, ignore_errors=True)
 
 
 def _solver_cell(r: dict) -> str:
@@ -154,12 +159,12 @@ def write_doc(rows: list[dict]) -> None:
         "## Límites conocidos (no son bugs del port)",
         "",
         "- `rechazado`: `GmatFunction`, `Python.*` e `#Include` están prohibidos en el servidor (`engine/sanitize.py`).",
-        "- Rutas de entrada relativas: GMAT las busca primero en la carpeta del script (`GmatFileUtil::FindFile`). "
-        "En la web el script vive en la carpeta de la corrida, así que `'../samples/SupportFiles/...'` no se "
-        "encuentra; en escritorio sí, porque el sample se abre desde `samples/`.",
-        "- `TrackingFileSet.FileName` es salida del Simulator y entrada del BatchEstimator: `sanitize` lo "
-        "reescribe a la carpeta de la corrida, así que un estimador que lee un `.gmd` existente no lo encuentra "
-        "(Tut_Orbit_Estimation...). Dejarlo sin reescribir permitiría escribir fuera de la corrida.",
+        "- Rutas de entrada relativas: GMAT las busca en la carpeta del script (`GmatFileUtil::FindFile`), que "
+        "en la web es la corrida; `sanitize` pasa a absoluta la que existe desde `GMAT_HOME/samples` "
+        "(`'../samples/SupportFiles/...'`). Una ruta relativa a otra carpeta no se encuentra.",
+        "- `TrackingFileSet.FileName`: con un `Simulator` en el script es salida y va a la corrida; sin él es "
+        "entrada (`.gmd` que lee el estimador) y no se reescribe. Un script que simula y además lee otro "
+        "`.gmd` existente no lo encuentra.",
         "- `plugin`: librerías con su línea `PLUGIN` comentada en el startup file que usa el worker "
         "(en R2026a: MarsGRAM, ExternalForceModel, VF13ad, SNOPT, CSALT, entre otras). Activarlas es "
         "decisión de despliegue, no del port.",

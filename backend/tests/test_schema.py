@@ -38,6 +38,7 @@ def test_spacecraft(client):
     assert isinstance(fields["SMA"]["default"], float) and fields["SMA"]["default"] > 6378
     assert "Keplerian" in fields["DisplayStateType"]["enum"]
     assert fields["DisplayStateType"]["default"] == "Cartesian"
+    assert {"UTCGregorian", "TAIModJulian"} <= set(fields["DateFormat"]["enum"])
     assert fields["DryMass"]["default"] == 850 and fields["DryMass"]["readOnly"] is False
     assert fields["A1Epoch"]["readOnly"] is True
 
@@ -79,3 +80,14 @@ def test_cache_reused(client, monkeypatch):
     assert client.get("/api/schema/Spacecraft").json() == first
     assert client.get("/api/parameters").json() == params
     assert list(config.CACHE_DIR.glob("schema/*.json"))
+
+
+def test_isolated_crash_and_timeout(monkeypatch):
+    import asyncio
+    import os
+    import time
+
+    assert asyncio.run(schema._isolated(os._exit, 1)) is None  # el hijo muere sin responder
+    monkeypatch.setattr(config, "TASK_TIMEOUT_S", 5)
+    with pytest.raises(TimeoutError):
+        asyncio.run(schema._isolated(time.sleep, 60))

@@ -44,7 +44,8 @@ export function TextField({ value, placeholder, list, onCommit, label, help }: {
   )
 }
 
-export function Field({ f, r }: { f: FieldSchema; r: Resource }) {
+/** `tidy` ajusta los demás campos del recurso en el mismo cambio (p. ej. quitar los que dependen de este). */
+export function Field({ f, r, tidy }: { f: FieldSchema; r: Resource; tidy?: (fields: Resource['fields']) => void }) {
   const { mission, types, setMission } = useApp()
   const names = new Set(mission.resources.map((x) => x.name))
   const set = r.fields[f.name] !== undefined
@@ -54,6 +55,7 @@ export function Field({ f, r }: { f: FieldSchema; r: Resource }) {
     const fields = { ...r.fields }
     if (v === null) delete fields[f.name]
     else fields[f.name] = v
+    tidy?.(fields)
     setMission({ ...mission, resources: mission.resources.map((x) => (x === r ? { ...r, fields } : x)) })
   }
   const current = set ? r.fields[f.name] : f.default

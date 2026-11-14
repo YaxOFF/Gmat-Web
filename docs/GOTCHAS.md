@@ -13,7 +13,7 @@ Leídas del código y comprobadas con el motor real donde dice "(verificado)".
 - **`cwd = GMAT_HOME/bin`** en corridas, validación, esquemas y `snapshot`: las rutas de entrada `../data/...` son relativas a `bin`.
 
 ## Corridas (`engine/runner.py`)
-- **Nada se limpia.** El dict `runs`, la lista de eventos de cada corrida y las carpetas `run-*` de `GMAT_WEB_RUNS` quedan hasta reiniciar o borrar a mano (verificado: 203 carpetas locales). Solo las `val-*` de validar se borran. `stop_all` termina procesos, no borra carpetas.
+- **Limpieza por edad (`runner.prune`).** Al arrancar y en cada `create`: corridas terminadas hace más de `GMAT_WEB_RUN_KEEP` (3600 s) salen de `runs` y se borra su carpeta; carpetas `run-*`/`desk-*`/`val-*` de `GMAT_WEB_RUNS` que no están en `runs` se borran si su mtime pasó ese límite. Una corrida sin terminar nunca se borra. `run_desktop` borra su `desk-*` al acabar. `/files/{name}` de una corrida podada da 404.
 - **Cancelar es una bandera.** `DELETE /runs/{id}` marca `cancelled`; `_supervise` lo ve en su siguiente vuelta (0.2 s), hace `terminate` y emite `error` "Corrida detenida". Si el proceso acaba antes, la corrida termina con `done`. `DELETE` sobre una corrida terminada responde `{ok:true}` sin efecto.
 - **El timeout incluye cargar `gmatpy`.** `RUN_TIMEOUT_S` se mide desde que arranca el supervisor.
 - **Códigos de salida:** 0 = `done`; 2 = `LoadScript` falló; 3 = `RunScript` falló; otro = caída del motor ("El motor terminó con código N").
@@ -24,33 +24,33 @@ Leídas del código y comprobadas con el motor real donde dice "(verificado)".
 ## Resultados (`engine/results.py`)
 - **Los reportes ocultos se inyectan como texto**, no con la API: `Construct('ReportFile')` + `SetField('Add')` no crea los parámetros ni los wrappers y `ScriptInterpreter.ValidateSubscriber` hace `RunScript` caer con access violation (verificado). Van justo antes de la primera línea `BeginMissionSequence`; sin ella no hay resultados.
 - **Líneas corridas:** el script que corre tiene N líneas más; `_supervise` resta N a toda `line` desde `manifest["at"]`. Un error dentro de las líneas inyectadas apunta a una línea cercana del usuario.
-- **Naves, XYPlot y ReportFile salen del texto** (`Create` y `X.Campo = ...` de una línea, como sanitize): un `Create` con `...` no cuenta. El ReportFile del usuario sin `Filename` se busca como `<nombre>.txt`.
+- **Naves, XYPlot y ReportFile salen del texto** (`Create` y `X.Campo = ...`; las líneas con `...` se unen solo para leer, el texto no cambia). El ReportFile del usuario sin `Filename` se busca como `<nombre>.txt`.
 - **`SolverIterations = Current`** en los ocultos: con `None` GMAT omite también la pasada final de un Target; con `Current` escribe solo la pasada final, sin iteraciones (verificado en Hohmann, Mars B-Plane, TargetFiniteBurn). No se recorta nada por tiempo: los tramos `BackProp` quedan tal cual.
 - **Sin épocas de maniobra:** GMAT no publica el estado justo tras un `Maneuver` (no hay dos filas con la misma época).
 - **XYPlot oculto no sigue `Toggle`** ni el `SolverIterations` del XYPlot. Lat/lon siempre respecto a la Tierra (ignora `CentralBody` del GroundTrackPlot).
-- **ReportFile del usuario** (ancho fijo) se parte por 2+ espacios: una celda que llena su ancho exacto se pega a la vecina. Filas de `Report` con otras columnas salen con otro largo. Con `WriteHeaders = false` las cabeceras son los nombres del `Add` (de una sola línea) si cuadran con las columnas, si no `1..n`.
+- **ReportFile del usuario** (ancho fijo) se parte por 2+ espacios: una celda que llena su ancho exacto se pega a la vecina. Filas de `Report` con otras columnas salen con otro largo. Con `WriteHeaders = false` las cabeceras son los nombres del `Add` si cuadran con las columnas, si no `1..n`.
 
 ## Solvers (`engine/solver.py`)
-- **Se leen del texto de progreso de GMAT en `gmat.log`** (formato de `DifferentialCorrector::GetProgressString` y `Yukonad::GetProgressString`); si una versión de GMAT cambia esos textos, no salen eventos `solver` (el log sigue igual). Con `ShowProgress = false` no hay eventos (verificado en el código, no probado).
+- **Se leen del texto de progreso de GMAT en `gmat.log`** (formato de `DifferentialCorrector::GetProgressString` y `Yukonad::GetProgressString`); si una versión de GMAT cambia esos textos, no salen eventos `solver` (el log sigue igual). Con `ShowProgress = false` no hay iteraciones: `SolverLog.silent` lista esos solvers (campo del script) y `_supervise` emite un evento `solver` `silent` al inicio; el frontend lo muestra como aviso en la consola. fmincon imprime `Control Sequence Pass N; Fmincon Pass` y restricciones `Cn  Achieved: v` (sin Desired), a veces dos secciones en una línea (formato del código, no probado: fmincon no está instalado).
 - **La tolerancia no sale en el log:** viene del `Achieve` del script (`{Tolerance = x}`, default 0.1); si es una expresión va como texto y no hay `met`. `met` = `|Variance| <= Tolerance`, el mismo criterio del DC.
-- **El cierre (`converged`/`did not converge`) no nombra al solver:** se asigna al último activo del mismo tipo. Optimizadores que no son Yukon (base `Optimizer`) no imprimen costo ni restricciones: solo variables.
+- **El cierre (`converged`/`did not converge`/`Completed in N`) no nombra al solver:** se asigna al último que empezó del mismo tipo (el más interno si hay anidados; una cabecera repetida sin cierre lo pasa al final). VF13ad y otros de base `Optimizer` no imprimen costo ni restricciones: solo variables.
 - **Un Target en un bucle** da una corrida de solver por pasada; el frontend guarda las últimas 200.
 
 ## Saneo (`engine/sanitize.py`)
 - **Trabaja línea por línea y no une `...`.** Un visor GUI con continuación queda a medias y el script no carga: `OV.Add = {Sat, ...` se comenta y la línea `Earth};` no (verificado). Un `Create` con continuación no se registra.
 - **`FORBIDDEN` es por token, sensible a mayúsculas.** Rechaza `CallPythonFunction`, `CallMatlabFunction`, `CallGmatFunction`, `SystemCommand`, `System`, `PythonFunction`, `MatlabFunction`, `GmatFunction`, `Save`, `SaveMission`, `Python.x`, `#Include`. Ignora strings y comentarios. Falso positivo: un recurso o variable llamado `System` o `Save` (verificado). No mira tokens precedidos de `.` (`Obj.Save` pasa).
 - **Solo se reescriben 4 campos de salida** (`Filename`, `OutputFile`, `ReportFile`, `MatlabFile`, sin distinguir mayúsculas), en cualquier objeto y también dentro de la secuencia. Se conserva solo el nombre del archivo: dos salidas con el mismo nombre en carpetas distintas chocan. Valor vacío = `output.txt`. [TODO: inventariar campos de salida del motor fuera de esta lista].
-- **Las rutas de entrada no se tocan ni se validan.** `Filename` de `ThrustHistoryFile` y `FileInterface` se deja igual (`INPUT_TYPES`), y cualquier otro campo con ruta también: un script puede leer archivos fuera de la corrida.
+- **Rutas de entrada (`_in_path`).** Todo campo que no es de salida (y `Filename` de `INPUT_TYPES`: `ThrustHistoryFile`, `FileInterface`, y `TrackingFileSet` si el script no tiene `Simulator`) con una ruta relativa que contiene `/` o `\` y existe desde `GMAT_HOME/samples` pasa a absoluta; si no existe se deja igual. No se validan: un script puede leer archivos fuera de la corrida (nunca escribir). `TrackingFileSet.FileName` con `Simulator` en el script es salida (el Simulator escribe el `.gmd`).
 - **Visores GUI** (`OpenFramesInterface`, `OpenFramesView`, `OrbitView`, `GroundTrackPlot`): se comenta toda línea que nombre uno, así que `Toggle OV RF On` pierde también `RF`.
 - **Conserva el número de líneas**; convierte CRLF a LF.
 - **El límite de tamaño vive aquí.** `/runs` responde 400 y `/script/validate` 200 con `ok:false`; solo `/script/parse` da 413. `/script/serialize` no tiene límite.
 
 ## Esquemas (`engine/schema.py`)
-- **Algunos tipos tumban el motor** al leer sus campos (ej. `NuclearPowerSystem`). `_isolated` usa un proceso por llamada y lo mata con `pool._processes` (API privada). Timeout de `_isolated` = excepción sin capturar (500).
+- **Algunos tipos tumban el motor** al leer sus campos (ej. `NuclearPowerSystem`). `_isolated` lanza un `Process` spawn por llamada con un `Pipe`; si el hijo muere da `None`, si pasa `TASK_TIMEOUT_S` lo mata y lanza `TimeoutError` (sin capturar en las rutas: 500). Una excepción del motor llega como `RuntimeError` con el texto.
 - **Un tipo que tumba el motor queda en caché como `null`** en disco. `GET /schema/{type}` responde 200 con `fields: null` y el frontend muestra error. Para reintentar hay que borrar el archivo de caché.
-- **Caché:** `GMAT_WEB_CACHE/schema/<versión>.v2.json`, reescrito completo con cada tipo nuevo. Si cambia la forma de lo guardado, subir el sufijo `.v2`. La versión y la caché en memoria duran lo que el proceso (`schema.reset()` es para pruebas). `_lock` global: las consultas de esquema van en serie.
+- **Caché:** `GMAT_WEB_CACHE/schema/<versión>.v3.json`, reescrito completo con cada tipo nuevo. Si cambia la forma de lo guardado, subir el sufijo `.v3`. La versión y la caché en memoria duran lo que el proceso (`schema.reset()` es para pruebas). `_lock` global: las consultas de esquema van en serie.
 - **Nombres de tipo.** `PropSetup` se publica como `Propagator`. Del factory de PARAMETER solo salen `Variable`, `String`, `Array`. FminconOptimizer, VF13ad y GroundStation no salen (el motor no los lista). Hoy son 47 tipos.
-- **`ENUM_CANDIDATES` solo cubre `Spacecraft.DisplayStateType`** y se filtra probando `SetField`. `main.STATE_TYPES` usa la lista sin filtrar.
+- **`ENUM_CANDIDATES` cubre `Spacecraft.DisplayStateType` y `Spacecraft.DateFormat`** (el motor da enum vacío) y se filtra probando `SetField`. `main.STATE_TYPES` usa la lista sin filtrar.
 - **`stateType` es la primera representación que usa el elemento.** `INC`, `RAAN`, `AOP`, `TA` y `SMA` salen como `Keplerian`; `RMAG`, `RA`, `DEC`, `VMAG` como `SphericalAZFPA` (verificado). `Editors.tsx` filtra por igualdad, así que en `ModifiedKeplerian` solo muestra `RadPer` y `RadApo`. Los cartesianos (`X`…`VZ`) no llevan `stateType`: el editor los trata como `Cartesian` a mano (`CART`).
 - **`default` es `null` en campos de solo lectura** (leerlos puede tumbar el motor).
 
@@ -58,7 +58,7 @@ Leídas del código y comprobadas con el motor real donde dice "(verificado)".
 - **Nunca descarta líneas:** lo no entendido va a `raw`. Qué va a `raw` y qué cambia de lugar: `docs/EXCEPCIONES_ROUNDTRIP.md` (Límites conocidos).
 - **`raw` se escribe después de todos los recursos y antes de `BeginMissionSequence`.** También caen ahí los comentarios del final del script (verificado), un `Create` repetido y las asignaciones de un recurso cuyo `Create` no se entendió.
 - **Sin `BeginMissionSequence` todo es zona de recursos:** los comandos van a `raw` y el serializer agrega la línea siempre.
-- **Formato estable, no idéntico al original.** Prefijo `GMAT` en toda asignación, sangría de 3 espacios, línea en blanco tras cada recurso, comentarios del recurso juntos antes del `Create`. Los números salen con `repr`: `7100.` pasa a `7100.0`, `1.0e3` a `1000.0`; los enteros siguen enteros.
+- **Formato estable, no idéntico al original.** Asignaciones sin prefijo `GMAT` (recursos y comandos `GMAT` sin etiqueta; con etiqueta se conserva), sangría de 3 espacios, línea en blanco tras cada recurso, comentarios del recurso juntos antes del `Create`. Los números salen con `repr`: `7100.` pasa a `7100.0`, `1.0e3` a `1000.0`; los enteros siguen enteros.
 - **Campos en orden de script.** Un campo anidado `Sat.Tank.X` tiene clave `Tank.X`.
 - **Valores:** identificador suelto que no es recurso = string (enum); cualquier otro token sin comillas (recurso, `Sat.X`, ruta) = `{ref}`. Valor con espacios fuera de `{}`/`[]` = no se entiende, va a `raw`.
 - **Comandos:** `text` es el resto tal cual y es lo único que escribe el serializer. `args` es una vista derivada de `text` (`_args`) para Propagate, Maneuver, Begin/EndFiniteBurn, Report, Toggle, `GMAT`, Target/Optimize (`{solver, opts}`), Vary/Achieve/Minimize/NonlinearConstraint (`{solver, lhs, op?, rhs?, opts?}`), If/While (`conds` con `join` `&`/`|`) y For (`step` vacío = forma `inicio:fin`); valores de `opts` van como texto (pueden ser expresiones); sintaxis rara (`Prop(Sat, {stop})`, `'Covariance'`) da `{}` y el formulario cae al editor de línea. Los formularios reescriben `text` y `args` juntos (`commands.toText`). Bloques: `Target`, `Optimize`, `If`, `While`, `For`, `BeginScript`. `Else` es un hijo más. Un bloque sin cerrar se serializa con su `End...`; un `End...` sin pareja queda como comando suelto.
@@ -71,7 +71,8 @@ Leídas del código y comprobadas con el motor real donde dice "(verificado)".
 - **Reescribir el texto sube `doc.rev`** y `ScriptEditor` hace `setValue`: se pierde el undo de Monaco y el cursor.
 - **Correr y validar usan `doc.text`,** no el modelo; ambos vacían la consola (máximo 5000 líneas).
 - **`parseError` casi nunca aparece:** el parser no rechaza scripts; solo 413 o fallo de red. Con error queda el último modelo bueno.
-- **El modelo va ~400 ms detrás del texto** (debounce).
+- **El modelo va ~400 ms detrás del texto** (debounce). Excepción: `loadText('')` (Nuevo) vacía el modelo al instante.
+- **Marcadores de Monaco** salen de `store.logs` con `line` (validar o correr) y se borran al reemplazar el texto (`doc.rev`). Tras editar a mano pueden quedar en una línea corrida hasta la siguiente validación.
 - **Sin reintentos.** `schemas[tipo] = 'error'` dura hasta recargar la página. Si falla `fetchTypes`, todo el árbol cae en "other" y solo se puede crear `Spacecraft`.
 - **WebSocket cerrado sin `done`/`error`** = mensaje de conexión perdida. `stop` solo manda el `DELETE`; el fin llega por el WebSocket.
 
@@ -79,7 +80,8 @@ Leídas del código y comprobadas con el motor real donde dice "(verificado)".
 - **Crear `Array` desde el árbol da `Create Array Array1;` sin dimensiones y GMAT no lo carga** (verificado).
 - **Nombres:** el árbol exige `^[A-Za-z]\w*$`; el parser también acepta `_` inicial.
 - **Renombrar** reemplaza el nombre como token suelto en valores `{ref}`, texto de comandos (incluye strings entre comillas dentro del comando), `endText` y líneas `raw`. No toca etiquetas, comentarios ni valores string.
-- **Borrar no limpia referencias:** solo las lista en el `confirm`. Clonar pierde los comentarios. Crear/renombrar/borrar usan `prompt`/`alert`/`confirm` nativos.
+- **Borrar no limpia referencias:** solo las lista en el diálogo. Clonar pierde los comentarios. Renombrar/borrar usan un `<dialog>` propio (`AskDialog` en `ResourceTree.tsx`); renombrar valida en el campo.
+- **Quitar un cuerpo de `PrimaryBodies`** quita sus `GravityField.<cuerpo>.*` (`tidy` de `Field`, en `ForceModelEditor`). Editar el texto a mano no lo hace.
 - **Grupos del árbol:** `EVENT_LOCATOR`, `FIELD_OF_VIEW` y los tipos que el motor no lista caen en "other".
 - **Controles del formulario:** `Boolean` = casilla; campo con `enum` = lista; resto = texto, con sugerencias si trae `refType`. No se muestran los de solo lectura. Texto vacío o ↺ quita el campo del script (vuelve al default).
 - **Listas y matrices:** todo tipo con `Array`, `Rvector`, `Rmatrix` o `Unsigned` se parte por espacios y comas en una lista plana. Una `Rmatrix` pierde sus filas.
@@ -104,7 +106,6 @@ Leídas del código y comprobadas con el motor real donde dice "(verificado)".
 ## Entorno de desarrollo
 - **`dev.ps1` no avisa si los puertos están ocupados** (verificado). Con un backend viejo en `:8000`, uvicorn falla con `[Errno 10048]`, Vite sube a `:5174` y el proxy habla con el backend viejo: `/api/health` da `ok` y las rutas nuevas dan 404. Revisar con `netstat -ano | findstr ":8000 :5173"`.
 - **Avisos esperados:** pytest muestra `StarletteDeprecationWarning` (httpx); `npm run build` avisa de un chunk mayor a 500 kB (Monaco).
-- **Samples:** 74 de 88 samples raíz corren (tabla en `docs/COMPATIBILIDAD.md`, `python -m app.batch`); 8 rechazados por sanitize, 3 usan plugins comentados en el startup file (MarsGRAM, ExternalForceModel), 2 no encuentran su archivo de entrada y 1 falla porque sanitize reescribe `TrackingFileSet.FileName`. El lote solo marca `plugin` lo que el startup activo deja comentado. No es bug del port.
-- **`TrackingFileSet.FileName` es entrada y salida.** Sanitize lo reescribe siempre (el Simulator escribe ahí), así que un BatchEstimator que lee un `.gmd` existente falla (verificado: `Tut_Orbit_Estimation_using_DSN_Range_and_Doppler_Data`).
-- **Rutas de entrada relativas se buscan en la carpeta del script** (`GmatFileUtil::FindFile`: script, luego bin solo si se pide). En la web es la carpeta de la corrida: `Ex_Propagate_ThrustHistoryFile` (`Thrust_Sim.thf`) y `Ex_Contact_Location_Station_Mask` (`ElevationMaskFileName`) fallan con `'../samples/SupportFiles/...'`; en escritorio corren (verificado con el primero).
+- **Samples:** 77 de 88 samples raíz corren (tabla en `docs/COMPATIBILIDAD.md`, `python -m app.batch`); 8 rechazados por sanitize y 3 usan plugins comentados en el startup file (MarsGRAM, ExternalForceModel). El lote solo marca `plugin` lo que el startup activo deja comentado. No es bug del port.
+- **Rutas de entrada relativas se buscan en la carpeta del script** (`GmatFileUtil::FindFile`), que en la web es la corrida: por eso sanitize pasa a absolutas las que existen desde `GMAT_HOME/samples` (verificado: `Ex_Propagate_ThrustHistoryFile`, `Ex_Contact_Location_Station_Mask`, `Tut_Orbit_Estimation_using_DSN_Range_and_Doppler_Data` corren).
 - **Windows:** Git avisa `LF` → `CRLF` al commitear. `dev.sh` solo se verificó con `sh -n`.

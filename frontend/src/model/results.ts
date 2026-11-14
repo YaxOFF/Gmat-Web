@@ -19,6 +19,7 @@ type SolverBase = { run: number; solver: string }
 export type SolverEvent =
   | SolverBase & { event: 'start'; kind: 'Target' | 'Optimize'; algorithm: string }
   | SolverBase & SolverRow & { event: 'iteration' }
+  | { event: 'silent'; solver: string }
   | SolverBase & { event: 'end'; status: 'converged' | 'failed' | 'initial'; converged: boolean; iterations?: number; message: string }
 export type SolverRun = {
   run: number; solver: string; kind: 'Target' | 'Optimize'; algorithm: string; rows: SolverRow[]

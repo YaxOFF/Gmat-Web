@@ -14,6 +14,11 @@ SAMPLES = [
     "Ex_NewMathFunctions.script",
     "Ex_TLE_Propagation.script",
     "Ex_WriteCommand.script",
+    # rutas de entrada '../samples/SupportFiles/...' (sanitize las pasa a absolutas)
+    "Ex_Propagate_ThrustHistoryFile.script",
+    "Ex_Contact_Location_Station_Mask.script",
+    # TrackingFileSet.FileName de entrada (sin Simulator); ~1 min
+    pytest.param("Tut_Orbit_Estimation_using_DSN_Range_and_Doppler_Data.script", marks=pytest.mark.slow),
 ]
 
 
@@ -75,3 +80,26 @@ def test_cancel_run(client):
         while ev["type"] not in ("done", "error"):
             ev = ws.receive_json()
     assert ev == {"type": "error", "message": "Corrida detenida"}
+
+
+def test_prune_forgets_old_runs_and_folders(monkeypatch, tmp_path):
+    import os
+    import time
+    from pathlib import Path
+
+    from app.engine import runner
+
+    monkeypatch.setattr(config, "RUNS_DIR", tmp_path)
+    monkeypatch.setattr(config, "RUN_KEEP_S", 60)
+    monkeypatch.setattr(runner, "runs", {})
+    old, new, stray, keep = (tmp_path / n for n in ("run-old", "run-new", "desk-stray", "other-x"))
+    for d in (old, new, stray, keep):
+        d.mkdir()
+    past = time.time() - 120
+    os.utime(stray, (past, past))
+    os.utime(keep, (past, past))
+    runner.runs.update(a=runner.Run("a", old, ended=past), b=runner.Run("b", new, ended=time.time()),
+                       c=runner.Run("c", Path(tmp_path / "run-live")))
+    runner.prune()
+    assert set(runner.runs) == {"b", "c"}
+    assert not old.exists() and not stray.exists() and new.exists() and keep.exists()

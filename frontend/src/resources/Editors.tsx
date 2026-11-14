@@ -159,8 +159,18 @@ function SpacecraftEditor({ r, schema }: Props) {
 
 function ForceModelEditor({ r, schema }: Props) {
   const central = show(r.fields.CentralBody ?? pick(schema, 'CentralBody').default) || 'Earth'
-  const primaries = Array.isArray(r.fields.PrimaryBodies) ? r.fields.PrimaryBodies.map(show)
-    : show(r.fields.PrimaryBodies ?? pick(schema, 'PrimaryBodies').default).replace(/[{}]/g, '').split(/[\s,]+/).filter(Boolean)
+  const primaryField = pick(schema, 'PrimaryBodies')
+  const bodiesOf = (v: Value | null | undefined) => Array.isArray(v) ? v.map(show)
+    : show(v ?? primaryField.default).replace(/[{}]/g, '').split(/[\s,]+/).filter(Boolean)
+  const primaries = bodiesOf(r.fields.PrimaryBodies)
+  // quitar un cuerpo primario quita su GravityField.<cuerpo>.* (si no, quedaría en el script)
+  const tidyGravity = (fields: Resource['fields']) => {
+    const keep = bodiesOf(fields.PrimaryBodies)
+    for (const k of Object.keys(fields)) {
+      const b = /^GravityField\.(\w+)\./.exec(k)?.[1]
+      if (b && !keep.includes(b)) delete fields[k]
+    }
+  }
   const atm = show(r.fields['Drag.AtmosphereModel'] ?? r.fields.Drag ?? 'None')
   // GMAT rechaza Drag.* / SRP.* con el modelo apagado: al cambiarlo se quitan (GMAT pone sus defaults al volver)
   const drop = (base: string) =>
@@ -171,7 +181,8 @@ function ForceModelEditor({ r, schema }: Props) {
   return (
     <>
       <Section title={es.editors.central}>
-        <Rows r={r} fields={[pick(schema, 'CentralBody', { enum: BODIES }), pick(schema, 'PrimaryBodies')]} />
+        <Rows r={r} fields={[pick(schema, 'CentralBody', { enum: BODIES })]} />
+        <Field f={primaryField} r={r} tidy={tidyGravity} />
       </Section>
       <Section title={es.editors.gravity}>
         {primaries.length ? primaries.map((b) => (

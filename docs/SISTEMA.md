@@ -15,7 +15,7 @@ No hay base de datos ni cuentas (v1). Despliegue Docker: fase 9 del plan, [TODO:
 - Formato de intercambio: el modelo de misión JSON (`resources`, `sequence`, `raw`). El texto `.script` es la fuente de verdad.
 - Errores: `HTTPException` con `{detail}`; `/runs` rechazado por sanitize devuelve `{detail, line}` con 400.
 - Corridas: `POST /api/runs` y luego `WS /api/ws/runs/{id}` (log en vivo). El WebSocket usa el mismo host que la página (`ws` o `wss` según el protocolo). Eventos en `docs/API.md`. Al llegar `done` con `available`, `store` pide `GET /api/runs/{id}/results` y lo muestran las pestañas Resultados y 3D.
-- Cesium (vista 3D): sin Cesium ion. `vite.config.ts` copia `node_modules/cesium/Build/Cesium/{Assets,Workers,ThirdParty,Widgets}` a `frontend/public/cesium/` (gitignored; borrarla al actualizar cesium) y `results/cesiumBase.ts` fija `CESIUM_BASE_URL=/cesium/`. Si el frontend se sirve desde otra ruta, `/cesium/` debe seguir disponible.
+- Cesium (vista 3D): sin Cesium ion ni su crédito (`creditContainer` fuera del DOM). `vite.config.ts` copia `node_modules/cesium/Build/Cesium/{Assets,Workers,ThirdParty,Widgets}` a `frontend/public/cesium/` (gitignored; borrarla al actualizar cesium) y `results/cesiumBase.ts` fija `CESIUM_BASE_URL=/cesium/`. Si el frontend se sirve desde otra ruta, `/cesium/` debe seguir disponible.
 
 ## Qué toca cada tipo de cambio
 | Cambio | Backend | Frontend |

@@ -12,7 +12,7 @@
 ## Conceptos → archivo
 | Concepto | Dónde vive |
 |---|---|
-| Correr un script (proceso por corrida, log en vivo, timeout, cancelar) | `backend/app/engine/runner.py`, ruta `/api/runs` y WS en `main.py` |
+| Correr un script (proceso por corrida, log en vivo, timeout, cancelar, limpieza `prune`) | `backend/app/engine/runner.py`, ruta `/api/runs` y WS en `main.py` |
 | Solvers en vivo (eventos `solver` por iteración de Target/Optimize, tolerancias de los Achieve) | `backend/app/engine/solver.py` (`SolverLog.feed`, `tolerances`), llamado desde `runner._supervise`; pestaña `frontend/src/results/SolverPanel.tsx` (reusa `XYChart`/`Table` de `Results.tsx`), tipos `SolverEvent`/`SolverRun` en `model/results.ts`, `store.solvers`; pruebas `tests/test_solver.py` |
 | Resultados (ReportFile ocultos por nave/XYPlot, lectura, `/results`, `/files`) | `backend/app/engine/results.py` (`inject`, `read`), rutas en `main.py`; pestaña `frontend/src/results/Results.tsx` (uPlot, tabla, traza en tierra SVG), tipos `model/results.ts`, `store.results` |
 | Vista 3D (Cesium: Tierra offline NaturalEarthII, trayectorias, reloj/timeline, seguir nave, cámara inercial) | `frontend/src/results/View3D.tsx` (pestaña `view3d`, lazy en `App.tsx`), `results/cesiumBase.ts`, copia de assets en `frontend/vite.config.ts` |
@@ -23,7 +23,7 @@
 | Conversión de estado orbital y de época | `worker.convert_state`/`convert_epoch`, rutas `/api/convert/state`, `/api/convert/epoch`; `store.convert` |
 | Variables de entorno y límites | `backend/app/config.py`; tabla en `README.md` |
 | Validar script sin correrlo | `worker.validate_script`, ruta `/api/script/validate` |
-| Árbol de recursos (crear/renombrar/clonar/borrar) | `frontend/src/resources/ResourceTree.tsx`, `frontend/src/model/refs.ts` |
+| Árbol de recursos (crear/renombrar/clonar/borrar; diálogo `AskDialog`) | `frontend/src/resources/ResourceTree.tsx`, `frontend/src/model/refs.ts` |
 | Formulario de recurso | `frontend/src/resources/ResourceForm.tsx` (marco), `Field.tsx` (un campo), `value.ts` (`show`) |
 | Editores dedicados Spacecraft/ForceModel/Propagator | `frontend/src/resources/Editors.tsx`; prueba LEO modelo = script a mano en `backend/tests/test_leo.py` |
 | Árbol de secuencia (agregar, arrastrar/soltar, ↑/↓, comentar, borrar) | `frontend/src/mission/MissionTree.tsx`; rutas y `newCommand`/`toText` en `mission/commands.ts` |
@@ -31,7 +31,7 @@
 | Comando comentado (`disabled`) | `parser.COMMENTABLE`/`DISABLED`, `serializer._seq`; espejo en `commands.ts` (`canDisable`) |
 | Parámetros calculados del motor y selector | `schema.engine_parameters`, ruta `/api/parameters`; `frontend/src/mission/ParamPicker.tsx`, `store.fetchParameters` |
 | Sincronía editor de script ↔ modelo | `store.ts` (`editText`, `setMission`, contador `seq`) |
-| Editor Monaco + resaltado GMAT | `frontend/src/editor/ScriptEditor.tsx`, `gmat.ts` |
+| Editor Monaco + resaltado GMAT + marcadores de error (`store.logs` con línea) | `frontend/src/editor/ScriptEditor.tsx`, `gmat.ts` |
 | Ejemplos de GMAT | `backend/app/samples.py` (lee `GMAT_HOME/samples`) |
 | Lote de samples y comparación con escritorio | `backend/app/batch.py` (`python -m app.batch` regenera `docs/COMPATIBILIDAD.md`); `backend/tests/test_desktop.py` (`pytest -m slow`) |
 | Textos de UI | `frontend/src/i18n/es.ts` |

@@ -7,6 +7,7 @@ const dark = window.matchMedia('(prefers-color-scheme: dark)')
 export default function ScriptEditor() {
   const host = useRef<HTMLDivElement>(null)
   const rev = useApp((st) => st.doc.rev)
+  const logs = useApp((st) => st.logs)
 
   useEffect(() => {
     const ed = monaco.editor.create(host.current!, {
@@ -33,8 +34,24 @@ export default function ScriptEditor() {
   useEffect(() => {
     const ed = editorRef.current
     const { text } = useApp.getState().doc
-    if (ed && ed.getValue() !== text) ed.setValue(text)
+    if (ed && ed.getValue() !== text) {
+      ed.setValue(text)
+      monaco.editor.setModelMarkers(ed.getModel()!, 'gmat', [])  // los errores eran del texto anterior
+    }
   }, [rev])
+
+  // Errores/avisos con línea (validar o correr) como marcadores en el margen.
+  useEffect(() => {
+    const model = editorRef.current?.getModel()
+    if (!model) return
+    monaco.editor.setModelMarkers(model, 'gmat', logs
+      .filter((l) => l.line && l.line <= model.getLineCount())
+      .map((l) => ({
+        severity: l.level === 'warning' ? monaco.MarkerSeverity.Warning : monaco.MarkerSeverity.Error,
+        message: l.text, startLineNumber: l.line!, endLineNumber: l.line!,
+        startColumn: 1, endColumn: model.getLineMaxColumn(l.line!),
+      })))
+  }, [logs])
 
   return <div ref={host} style={{ flex: 1, minHeight: 0 }} />
 }

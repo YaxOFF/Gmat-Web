@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from app import config
 from app.engine.sanitize import ScriptRejected, sanitize
 
 OUT = Path("C:/tmp/run-x")
@@ -19,12 +20,32 @@ def test_absolute_output_path_is_rewritten_to_run_dir():
 
 def test_list_of_output_files_and_input_types():
     src = ("Create TrackingFileSet T;\nT.FileName = {'../a/b.gmd', 'c.gmd'};\n"
+           "Create Simulator Sim;\nSim.AddData = {T};\n"
            "Create ThrustHistoryFile TH;\nTH.FileName = '../samples/x.thf';\n"
            "Sat.DryMass = 850;\n")
     out = sanitize(src, OUT)
-    assert "T.FileName = {'C:/tmp/run-x/b.gmd', 'C:/tmp/run-x/c.gmd'};" in out
-    assert "TH.FileName = '../samples/x.thf';" in out  # solo lectura: se deja
+    assert "T.FileName = {'C:/tmp/run-x/b.gmd', 'C:/tmp/run-x/c.gmd'};" in out  # el Simulator escribe
+    assert "TH.FileName = '../samples/x.thf';" in out  # solo lectura y no existe: se deja
     assert "Sat.DryMass = 850;" in out
+
+
+def test_tracking_file_without_simulator_is_input():
+    src = "Create TrackingFileSet T;\nT.FileName = {'../a/b.gmd'};\nCreate BatchEstimator B;\n"
+    assert "T.FileName = {'../a/b.gmd'};" in sanitize(src, OUT)
+
+
+def test_relative_input_found_from_samples_becomes_absolute(monkeypatch, tmp_path):
+    (tmp_path / "samples" / "SupportFiles").mkdir(parents=True)
+    (tmp_path / "samples" / "SupportFiles" / "m.txt").write_text("x")
+    monkeypatch.setattr(config, "GMAT_HOME", str(tmp_path))
+    src = ("Create GroundStation G;\nG.HorizonMaskFileName = '../samples/SupportFiles/m.txt';\n"
+           "Create TrackingFileSet T;\nT.FileName = {'SupportFiles/m.txt', 'none.gmd'};\n"
+           "Create ReportFile RF;\nRF.Filename = '../samples/SupportFiles/m.txt';\n")
+    out = sanitize(src, OUT)
+    abs_ = (tmp_path / "samples" / "SupportFiles" / "m.txt").resolve().as_posix()
+    assert f"G.HorizonMaskFileName = '{abs_}';" in out
+    assert f"T.FileName = {{'{abs_}', 'none.gmd'}};" in out
+    assert "RF.Filename = 'C:/tmp/run-x/m.txt';" in out  # salida: nunca fuera de la corrida
 
 
 @pytest.mark.parametrize("line", [

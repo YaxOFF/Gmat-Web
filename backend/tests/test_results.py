@@ -94,3 +94,13 @@ def test_backprop_kept_and_report_without_headers(client):
     epochs = res["ships"][0]["columns"]["A1ModJulian"]
     assert epochs == pytest.approx([r[0] for r in raw], abs=1e-9)
     assert min(epochs[epochs.index(max(epochs)):]) < max(epochs)  # el tramo hacia atrás sigue ahí
+
+
+def test_inject_reads_continued_lines(tmp_path):
+    src = "\n".join(["Create Spacecraft Sat;", "Create XYPlot XY;", "XY.XVariable = Sat.A1ModJulian;",
+                     "XY.YVariables = {Sat.Earth.Altitude, ...", "   Sat.Earth.SMA};", "Create ReportFile RF;",
+                     "RF.Add = {Sat.X, ...  % comentario", " Sat.Y};", "BeginMissionSequence;", ""])
+    out, m = results.inject(src, tmp_path)
+    assert m["xyplots"]["XY"]["y"] == ["Sat.Earth.Altitude", "Sat.Earth.SMA"]
+    assert m["reports"]["RF"]["add"] == ["Sat.X", "Sat.Y"]
+    assert src.split("BeginMissionSequence")[0] in out  # el texto del usuario no cambia

@@ -103,3 +103,14 @@ await window.__dnd(__find('Prop 1 Day'),__find('Prop to Perigee'),0.2)
 ### Fase 7b (lote de samples)
 - `python -m app.batch --jobs 4` (~1 min) regenera docs/COMPATIBILIDAD.md; sacar copia antes (el archivo no estaba en git) y comparar con `sed -E 's/\| [0-9.]+ \|/| T |/'` para ignorar tiempos. Dejó 64/8/0/0/1/15 estable; no deja procesos huérfanos (GMAT.exe de escritorio ya abierto es del usuario).
 - Ver si un `plugin` de verdad no corre: script con `sys.path.insert(0,'.')` y `python -I`, bajo `if __name__=='__main__'` (spawn), llamando `batch.run_desktop(path)` y `await batch.run_web(texto)`. En 7b: 8 de 9 samples "plugin" probados (MarsOrbit, Constellation, EclipseLocation, PlanetographicRegion, Covariance, StationContactLocator, IntrusionLocator, Inter_Spacecraft_Tracking) corren ok por la web; Contact_Location_Station_Mask da falta archivo (ruta relativa).
+
+### Fase 7c1 (pendientes de QA)
+- Cargar sample por UI sin diálogo: `__load(nombre, texto?)` = `fetch('/api/samples/X.script')` + `File` en `input[type=file]` + `change`; `__btn('Correr')` busca botón por texto. Esperar 15-20 s y leer `document.body.innerText.slice(-500)`.
+- Rutas relativas: Ex_Propagate_ThrustHistoryFile y Ex_Contact_Location_Station_Mask corren desde la UI ("Corrida terminada", 1 y 3 archivos).
+- sanitize directo (`from app.engine.sanitize import sanitize; sanitize(texto, Path('C:/run/out'))`): ReportFile/ContactLocator `../samples/x.txt` y absolutas -> `C:/run/out/x.txt`; ThrustHistoryFile y TrackingFileSet sin Simulator quedan como entrada (no escriben); con Simulator, TrackingFileSet va a la corrida. Ojo: ThrustHistoryFile con ruta inexistente fuera de samples se deja tal cual (solo lectura).
+- ShowProgress: `DC.ShowProgress = false;` antes de BeginMissionSequence -> línea "Aviso: DC tiene ShowProgress = false..." en consola.
+- Diálogos propios: Renombrar (nombre `1 bad name` y `GOI` repetido deshabilitan el botón con mensaje), Borrar TOI lista "Vary 'Vary TOI.V' / Maneuver 'Apply TOI'". Enter/Escape funcionan.
+- ForceModel: PrimaryBodies `{Earth, Luna}` agrega GravityField.Luna.*; volver a `{Earth}` los quita del script.
+- Marcadores Monaco: tras Validar con `DefaultSC.Bogus = 3;` aparece squiggle (`.squiggly-error`); Ctrl+G + número para llegar a la línea. Hoy NO se limpia al editar a mano (ScriptEditor.tsx solo limpia en setValue externo).
+- Guardar: hook `HTMLAnchorElement.prototype.click` y `fetch(this.href)` para leer el contenido; sin líneas `GMAT `.
+- Móvil: iframe 390 px sigue con scrollWidth 717 (preexistente).

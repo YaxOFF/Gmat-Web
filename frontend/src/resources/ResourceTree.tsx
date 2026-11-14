@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { es } from '../i18n/es'
 import type { Resource } from '../model/mission'
 import { findRefs, IDENT, renameResource, uniqueName } from '../model/refs'
@@ -13,9 +13,51 @@ const GROUP: Record<string, string> = {
 }
 const ORDER = ['ships', 'hardware', 'propagators', 'burns', 'coords', 'solvers', 'variables', 'outputs', 'other']
 
+type Ask = { kind: 'rename' | 'remove'; r: Resource }
+
+/** Renombrar (con validación en el campo) o confirmar borrado, en un diálogo propio. */
+function AskDialog({ ask, onClose }: { ask: Ask; onClose: () => void }) {
+  const { mission, setMission } = useApp()
+  const dlg = useRef<HTMLDialogElement>(null)
+  const [to, setTo] = useState(ask.r.name)
+  useEffect(() => { dlg.current?.showModal() }, [])
+  const name = to.trim()
+  const bad = ask.kind === 'rename' && name !== ask.r.name
+    && (!IDENT.test(name) || mission.resources.some((x) => x.name === name))
+  const ok = (e: FormEvent) => {
+    e.preventDefault()
+    if (bad) return
+    if (ask.kind === 'remove') setMission({ ...mission, resources: mission.resources.filter((x) => x !== ask.r) }, null)
+    else if (name !== ask.r.name) setMission(renameResource(mission, ask.r.name, name), name)
+    dlg.current?.close()
+  }
+  const title = ask.kind === 'rename' ? es.resources.renamePrompt(ask.r.name) : es.resources.removeTitle(ask.r.name)
+  return (
+    <dialog ref={dlg} className={s.dialog} onClose={onClose} aria-label={title}>
+      <form className={s.ask} onSubmit={ok}>
+        <strong>{title}</strong>
+        {ask.kind === 'rename'
+          ? <>
+              <input className={s.input} autoFocus value={to} onChange={(e) => setTo(e.target.value)}
+                aria-label={es.resources.rename} aria-invalid={bad} />
+              {bad && <p className={s.warn} role="alert">{es.resources.badName(name)}</p>}
+            </>
+          : <p className={s.askText}>{es.resources.confirmRemove(ask.r.name, findRefs(mission, ask.r.name))}</p>}
+        <div className={s.askBar}>
+          <button type="button" className={s.btn} onClick={() => dlg.current?.close()}>{es.resources.cancel}</button>
+          <button type="submit" className={s.btn} disabled={bad}>
+            {ask.kind === 'rename' ? es.resources.rename : es.resources.remove}
+          </button>
+        </div>
+      </form>
+    </dialog>
+  )
+}
+
 export default function ResourceTree() {
   const { mission, types, selected, parseError, fetchTypes, select, setMission } = useApp()
   const [newType, setNewType] = useState('Spacecraft')
+  const [ask, setAsk] = useState<Ask | null>(null)
   useEffect(() => { void fetchTypes() }, [fetchTypes])
 
   const groupOf = (type: string) => GROUP[types?.find((t) => t.type === type)?.category ?? ''] ?? 'other'
@@ -25,18 +67,12 @@ export default function ResourceTree() {
     groups.set(g, [...(groups.get(g) ?? []), r])
   }
   const current = mission.resources.find((r) => r.name === selected)
-  const validName = (n: string) => IDENT.test(n) && !mission.resources.some((r) => r.name === n)
 
   const create = () => {
     const name = uniqueName(mission, newType)
     setMission({ ...mission, resources: [...mission.resources, { type: newType, name, fields: {} }] }, name)
   }
-  const rename = (r: Resource) => {
-    const to = prompt(es.resources.renamePrompt(r.name), r.name)?.trim()
-    if (!to || to === r.name) return
-    if (!validName(to)) return alert(es.resources.badName(to))
-    setMission(renameResource(mission, r.name, to), to)
-  }
+  const rename = (r: Resource) => setAsk({ kind: 'rename', r })
   const clone = (r: Resource) => {
     const name = uniqueName(mission, `${r.name}_`)
     const i = mission.resources.indexOf(r)
@@ -44,10 +80,7 @@ export default function ResourceTree() {
     resources.splice(i + 1, 0, { ...structuredClone(r), name, comments: [] })
     setMission({ ...mission, resources }, name)
   }
-  const remove = (r: Resource) => {
-    if (!confirm(es.resources.confirmRemove(r.name, findRefs(mission, r.name)))) return
-    setMission({ ...mission, resources: mission.resources.filter((x) => x !== r) }, null)
-  }
+  const remove = (r: Resource) => setAsk({ kind: 'remove', r })
 
   return (
     <div className={s.tree}>
@@ -87,6 +120,7 @@ export default function ResourceTree() {
           </div>
         ))}
       </div>
+      {ask && <AskDialog ask={ask} onClose={() => setAsk(null)} />}
     </div>
   )
 }

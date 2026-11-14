@@ -56,6 +56,8 @@ function Globe({ ships }: { ships: ShipResult[] }) {
       baseLayer: ImageryLayer.fromProviderAsync(TileMapServiceImageryProvider.fromUrl(buildModuleUrl('Assets/Textures/NaturalEarthII'))),
       baseLayerPicker: false, geocoder: false, homeButton: false, sceneModePicker: false, navigationHelpButton: false,
       fullscreenButton: false, infoBox: false, selectionIndicator: false, scene3DOnly: true,
+      // sin ion no hay crédito que dar; NaturalEarthII es dominio público. Créditos a un div fuera del DOM.
+      creditContainer: document.createElement('div'),
     })
     viewer.current = v
     const instances: GeometryInstance[] = [], all: Cartesian3[] = []

@@ -16,6 +16,8 @@ from app.engine.sanitize import ScriptRejected, sanitize
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     worker.start()
+    config.RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    runner.prune()
     try:
         yield
     finally:

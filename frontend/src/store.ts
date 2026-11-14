@@ -97,6 +97,7 @@ export const useApp = create<AppState>((set, get) => {
   }
 
   const onSolver = (ev: SolverEvent) => {
+    if (ev.event === 'silent') return log({ level: 'warning', text: es.solver.silentLog(ev.solver) })
     if (ev.event === 'start') {
       const { event: _, ...rest } = ev
       return set((st) => ({ solvers: [...st.solvers, { ...rest, rows: [], status: 'running' as const }].slice(-MAX_SOLVERS) }))
@@ -148,6 +149,8 @@ export const useApp = create<AppState>((set, get) => {
     loadText: (text, name) => {
       set((st) => ({ doc: { text, name, rev: st.doc.rev + 1 }, centerTab: 'editor', selected: null, selectedCmd: null, results: null, solvers: [] }))
       parseLater()
+      // Nuevo: modelo vacío ya, sin esperar al parse (los árboles no deben mostrar el documento anterior)
+      if (!text.trim()) set({ mission: { resources: [], sequence: [], raw: [] }, parseError: null })
     },
     editText: (text) => {
       if (text === get().doc.text) return  // eco del editor tras setMission/loadText

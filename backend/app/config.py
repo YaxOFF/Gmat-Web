@@ -12,4 +12,6 @@ WORKERS = int(os.environ.get("GMAT_WEB_WORKERS", "2"))
 TASK_TIMEOUT_S = float(os.environ.get("GMAT_WEB_TASK_TIMEOUT", "60"))
 MAX_RUNS = int(os.environ.get("GMAT_WEB_MAX_RUNS", "2"))
 RUN_TIMEOUT_S = float(os.environ.get("GMAT_WEB_RUN_TIMEOUT", "300"))
+# Corridas terminadas (y sus carpetas) se borran pasado este tiempo (s).
+RUN_KEEP_S = float(os.environ.get("GMAT_WEB_RUN_KEEP", "3600"))
 MAX_SCRIPT_BYTES = int(os.environ.get("GMAT_WEB_MAX_SCRIPT_BYTES", "524288"))

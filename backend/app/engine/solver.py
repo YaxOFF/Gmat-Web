@@ -3,10 +3,12 @@ Python puro: no importa gmatpy ni calcula nada; solo lee lo que imprime el motor
 
 Formatos (GMAT-src `DifferentialCorrector::GetProgressString`, `Yukonad::GetProgressString`):
   *** Performing Differential Correction (using "DC")
-  DC Iteration 3; Nominal Pass                       (Yukon: `Iteration 1; Function Evaluation 2; ...`)
+  DC Iteration 3; Nominal Pass                       (Yukon: `Iteration 1; Function Evaluation 2; ...`,
+                                                      fmincon: `Control Sequence Pass 3; Fmincon Pass`)
      Variables:  TOI.Element1 = 0.9, GOI.Element1 = 0.83
         DefaultSC.ECC  Desired: 0  Achieved: 0.008  Variance: -0.008
-     Cost Function Value: 8 / Delta G = -4            (Yukon)
+     Cost Function Value: 8 / Delta G = -4            (Yukon; fmincon: `C1  Achieved: 3,  C2  Achieved: 4`)
+  Optimizer base (VF13ad): solo variables, GMAT no imprime costo ni restricciones.
   *** The Targeter converged! / *** Targeting did not converge in 3 iterations
 """
 import re
@@ -14,17 +16,20 @@ import re
 from app.script.parser import parse
 
 HEADER = re.compile(r'^\*\*\* Performing (.+?) \(using "(\w+)"\)')
-ITER = re.compile(r"^(\w+) Iteration (\d+); (?:Function Evaluation (\d+); )?Nominal Pass")
+ITER = re.compile(r"^(\w+) (?:Iteration|Control Sequence Pass) (\d+); (?:Function Evaluation (\d+); )?"
+                  r"(?:Nominal|Fmincon) Pass")
 VARS = re.compile(r"^\s+Variables:\s+(.*=.*)$")
 PAIR = re.compile(r"\s*(.+?) = (\S+?)(?:,|$)")
 GOAL = re.compile(r"^\s+(\S+)\s+Desired: (\S+)\s+Achieved: (\S+)\s+Variance: (\S+)")
 COST = re.compile(r"^\s+Cost Function Value: (\S+)")
+ACHIEVED = re.compile(r"(\S+)  Achieved: ([^,\s]+)")  # restricción de fmincon (sin Desired)
+SECTION = re.compile(r"(?i)((?:in)?equality constraint variances)")
 DELTA = re.compile(r"^\s+Delta (.+?) = (\S+)")
 STATE = re.compile(r"^\s+\w+ State: (.+)")
 DONE = re.compile(r"^\*\*\* (?:The Targeter converged|The Optimizer Converged)")
 FAIL = re.compile(r"^\*\*\* (Targeting|Optimization) (?:did not converge|terminated) in (\d+)|^\*\*\* An error occurred during optimization")
 INITIAL = re.compile(r"^\*\*\* Targeting Completed Initial Guess Run")
-COMPLETED = re.compile(r"^\*\*\* (?:Targeting|Optimization) Completed in (\d+)")
+COMPLETED = re.compile(r"^\*\*\* (Targeting|Optimization) Completed in (\d+)")
 DEFAULT_TOL = 0.1  # Achieve sin Tolerance (default de GMAT)
 
 
@@ -55,6 +60,8 @@ class SolverLog:
 
     def __init__(self, script: str):
         self.tol = tolerances(script)
+        # solvers con ShowProgress = false: GMAT no imprime su progreso, no habrá eventos
+        self.silent = [r["name"] for r in parse(script)["resources"] if r["fields"].get("ShowProgress") is False]
         self.count = 0
         self.active: dict[str, dict] = {}  # solver → {run, kind, row}
         self.cur: str | None = None  # último solver que imprimió cabecera o iteración
@@ -65,9 +72,13 @@ class SolverLog:
         row = st and st.pop("row", None)
         return [row] if row else []
 
+    def _last(self, kind: str) -> str | None:
+        """El cierre no nombra al solver: es del último que empezó de ese tipo (el más interno si
+        hay anidados; `active` va en orden de inicio)."""
+        return next((n for n in reversed(list(self.active)) if self.active[n]["kind"] == kind), None)
+
     def _end(self, kind: str, status: str, iterations: int | None, text: str) -> list[dict]:
-        # shortcut: el cierre no nombra al solver; se asigna al último activo del mismo tipo (Target/Optimize).
-        name = next((n for n in reversed(list(self.active)) if self.active[n]["kind"] == kind), None)
+        name = self._last(kind)
         if name is None:
             return []
         out = self._flush(name)
@@ -83,6 +94,7 @@ class SolverLog:
             out = self._flush(name)
             self.count += 1
             kind = "Target" if "Differential Correction" in m[1] else "Optimize"
+            self.active.pop(name, None)  # reinicio sin cierre: pasa al final (más interno)
             self.active[name] = {"run": self.count, "kind": kind}
             self.cur = name
             return out + [{"type": "solver", "event": "start", "run": self.count, "solver": name,
@@ -96,9 +108,8 @@ class SolverLog:
                          "variables": [], "goals": [], "constraints": []}
             return out
         if m := COMPLETED.match(line):
-            st = next((s for s in reversed(self.active.values())), None)
-            if st:
-                st["completed"] = int(m[1])
+            if name := self._last("Target" if m[1] == "Targeting" else "Optimize"):
+                self.active[name]["completed"] = int(m[2])
             return []
         if DONE.match(line):
             return self._end("Target" if "Targeter" in line else "Optimize", "converged", None, line)
@@ -121,10 +132,14 @@ class SolverLog:
             row["goals"].append(g)
         elif m := COST.match(line):
             row["cost"] = _num(m[1])
-        elif "Inequality Constraint Variances" in line:
-            self.section = "ineq"
-        elif "Equality Constraint Variances" in line:
-            self.section = "eq"
+        elif "constraint variances" in line.lower() or ("Achieved:" in line and "Desired:" not in line):
+            # fmincon puede dejar en una línea los valores de igualdad y la cabecera de desigualdad
+            for part in SECTION.split(line):
+                if part.lower().endswith("constraint variances"):
+                    self.section = "ineq" if part.lower().startswith("in") else "eq"
+                else:
+                    row["constraints"] += [{"name": n, "kind": self.section, "value": _num(v)}
+                                           for n, v in ACHIEVED.findall(part)]
         elif m := DELTA.match(line):
             row["constraints"].append({"name": m[1], "kind": self.section, "value": _num(m[2])})
         elif m := STATE.match(line):

@@ -28,9 +28,13 @@ def inject(text: str, run_dir: Path) -> tuple[str, dict]:
     lines = text.split("\n")
     types: dict[str, str] = {}
     fields: dict[tuple[str, str], str] = {}
-    begin = None
+    begin, cont = None, ""
     for i, line in enumerate(lines):
         code, _ = _split_comment(line)
+        if code.rstrip().endswith("..."):  # continuación: se une para leer, el texto no cambia
+            cont += code.rstrip()[:-3] + " "
+            continue
+        code, cont = cont + code, ""
         m = CREATE.match(code)
         if m:
             types.update((n, m[1]) for n in re.split(r"[\s,]+", m[2]) if n)

@@ -9,8 +9,7 @@ import multiprocessing as mp
 import os
 import re
 import tempfile
-from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures.process import BrokenProcessPool
+import time
 from pathlib import Path
 
 from app import config
@@ -25,11 +24,14 @@ CATEGORIES = ("SPACECRAFT", "FORMATION", "HARDWARE", "BURN", "ODE_MODEL", "PROP_
 USER_PARAMETERS = ("Variable", "String", "Array")
 # Nombre que usan los scripts (GMAT escritorio escribe `Create Propagator`).
 ALIASES = {"PropSetup": "Propagator"}
-# Enums que el motor valida pero no lista (Spacecraft.cpp `representations`); se filtran con el motor.
+# Enums que el motor valida pero no lista (Spacecraft.cpp `representations`, formatos de época de
+# SystemTime.cpp `validFormats`); se filtran con el motor.
 ENUM_CANDIDATES = {("Spacecraft", "DisplayStateType"): [
     "Cartesian", "Keplerian", "ModifiedKeplerian", "SphericalAZFPA", "SphericalRADEC", "Equinoctial",
     "ModifiedEquinoctial", "AlternateEquinoctial", "Delaunay", "Planetodetic", "IncomingAsymptote",
-    "OutgoingAsymptote", "BrouwerMeanShort", "BrouwerMeanLong"]}
+    "OutgoingAsymptote", "BrouwerMeanShort", "BrouwerMeanLong"],
+    ("Spacecraft", "DateFormat"): [f"{t}{f}" for t in ("A1", "TAI", "UTC", "TT", "TDB")
+                                   for f in ("ModJulian", "Gregorian")]}
 NUMERIC = {"Real", "Integer", "UnsignedInt"}
 
 
@@ -137,7 +139,7 @@ def _engine_fields(type_name: str) -> list[dict] | None:
             continue
     for f in fields:
         cands = ENUM_CANDIDATES.get((obj.GetTypeName(), f["name"]))
-        if cands and "enum" not in f:
+        if cands and not f.get("enum"):
             orig = obj.GetField(f["name"])
             f["enum"] = [c for c in cands if _accepts(obj, f["name"], c)]
             obj.SetField(f["name"], orig)
@@ -167,8 +169,8 @@ _lock = asyncio.Lock()
 
 
 def _cache_file(version: str) -> Path:
-    # v2: `types` pasó de lista de nombres a lista de objetos
-    return Path(config.CACHE_DIR, "schema", re.sub(r"[^\w.-]+", "_", version) + ".v2.json")
+    # v2: `types` pasó de lista de nombres a lista de objetos; v3: enum de Spacecraft.DateFormat
+    return Path(config.CACHE_DIR, "schema", re.sub(r"[^\w.-]+", "_", version) + ".v3.json")
 
 
 async def _load() -> dict:
@@ -183,20 +185,41 @@ async def _load() -> dict:
     return _cache
 
 
+def _isolated_child(conn, fn, args, gmat_home: str, cache_dir: str) -> None:
+    worker._init(gmat_home, cache_dir)
+    try:
+        conn.send((True, fn(*args)))
+    except Exception as e:  # las excepciones SWIG no se pueden mandar al padre
+        conn.send((False, str(e)))
+
+
 async def _isolated(fn, *args):
     """Corre en un proceso propio: algunos tipos tiran abajo el motor al leerlos (p. ej.
-    NuclearPowerSystem sin sistema solar) y eso rompería el pool compartido. None si se cae."""
-    pool = ProcessPoolExecutor(1, mp_context=mp.get_context("spawn"), initializer=worker._init,
-                               initargs=(config.GMAT_HOME, str(config.CACHE_DIR)))
+    NuclearPowerSystem sin sistema solar) y eso rompería el pool compartido. None si se cae;
+    TimeoutError pasado TASK_TIMEOUT_S (el proceso se mata)."""
+    recv, send = mp.Pipe(duplex=False)
+    proc = mp.get_context("spawn").Process(target=_isolated_child, daemon=True,
+                                           args=(send, fn, args, config.GMAT_HOME, str(config.CACHE_DIR)))
+    proc.start()
+    send.close()  # si el hijo muere, recv da EOF
+    deadline = time.monotonic() + config.TASK_TIMEOUT_S
     try:
-        fut = asyncio.get_running_loop().run_in_executor(pool, fn, *args)
-        return await asyncio.wait_for(fut, config.TASK_TIMEOUT_S)
-    except BrokenProcessPool:
-        return None
+        try:
+            while not recv.poll():
+                if time.monotonic() > deadline:
+                    raise TimeoutError(f"{getattr(fn, '__name__', fn)}: más de {config.TASK_TIMEOUT_S:.0f} s")
+                await asyncio.sleep(0.05)
+            ok, value = recv.recv()
+        except (EOFError, BrokenPipeError):  # BrokenPipe: así lo da poll en Windows
+            return None
+        if not ok:
+            raise RuntimeError(value)
+        return value
     finally:
-        for p in list(getattr(pool, "_processes", {}).values()):  # sin API pública para matar el worker
-            p.terminate()
-        pool.shutdown(wait=False, cancel_futures=True)
+        recv.close()
+        if proc.is_alive():
+            proc.terminate()
+        proc.join(5)
 
 
 def _save(c: dict) -> None:

@@ -3,6 +3,7 @@ con log en vivo leído del archivo de log de GMAT, timeout y cancelación."""
 import asyncio
 import multiprocessing as mp
 import re
+import shutil
 import sys
 import tempfile
 import time
@@ -58,6 +59,7 @@ class Run:
     cond: asyncio.Condition = field(default_factory=asyncio.Condition)
     cancelled: bool = False
     manifest: dict = field(default_factory=dict)
+    ended: float | None = None
 
     @property
     def finished(self) -> bool:
@@ -66,6 +68,8 @@ class Run:
     async def emit(self, ev: dict) -> None:
         async with self.cond:
             self.events.append(ev)
+            if ev["type"] in ("done", "error"):
+                self.ended = time.time()
             self.cond.notify_all()
 
 
@@ -77,9 +81,25 @@ def active() -> int:
     return sum(not r.finished for r in runs.values())
 
 
+def prune() -> None:
+    """Olvida las corridas terminadas hace más de RUN_KEEP_S y borra su carpeta; también borra
+    carpetas viejas de corridas (`run-*`, `desk-*`, `val-*`) que no están en `runs` (reinicios, lote)."""
+    limit = time.time() - config.RUN_KEEP_S
+    for rid, run in list(runs.items()):
+        if run.ended and run.ended < limit:
+            del runs[rid]
+            shutil.rmtree(run.dir, ignore_errors=True)
+    live = {r.dir.resolve() for r in runs.values()}
+    for d in config.RUNS_DIR.glob("*-*"):
+        if d.name.split("-")[0] in ("run", "desk", "val") and d.is_dir() and d.resolve() not in live \
+                and d.stat().st_mtime < limit:
+            shutil.rmtree(d, ignore_errors=True)
+
+
 def create(text: str) -> Run:
     """Sanea (puede lanzar ScriptRejected), prepara la carpeta y arranca el proceso."""
     config.RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    prune()
     run_dir = Path(tempfile.mkdtemp(prefix="run-", dir=config.RUNS_DIR))
     try:
         safe = sanitize(text, run_dir)
@@ -103,6 +123,8 @@ async def _supervise(run: Run) -> None:
     start, pos, buf, last_tick = time.monotonic(), 0, "", 0
     log = run.dir / LOG
     solver = SolverLog((run.dir / SCRIPT).read_text(encoding="utf-8"))
+    for name in solver.silent:
+        await run.emit({"type": "solver", "event": "silent", "solver": name})
 
     async def drain(final: bool = False):
         nonlocal pos, buf

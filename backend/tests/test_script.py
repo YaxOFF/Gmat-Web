@@ -63,7 +63,8 @@ def test_parse_features():
     assert iff["children"][0]["text"] == "M = M'"
     assert (assign["cmd"], assign["text"]) == ("GMAT", "x = 3")
     text = serialize(m)
-    assert "Create Array M[2,2];" in text and "GMAT Sat.OrbitColor = [255 0 0];" in text
+    assert "Create Array M[2,2];" in text and "\nSat.OrbitColor = [255 0 0];" in text
+    assert "\nx = 3;\n" in text and "GMAT " not in text  # sin prefijo, como los samples (QA 4b)
     assert "   EndIf;\n   % antes de EndTarget\n   % fin\nEndTarget;" in text
     assert parse(text) == m
 
