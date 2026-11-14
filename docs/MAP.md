@@ -1,4 +1,4 @@
-<!-- fuente: backend/app, frontend/src, shared | rev: e02ff0e -->
+<!-- fuente: backend/app, frontend/src, shared | rev: 893d974 -->
 # Mapa
 
 ## Entradas
@@ -35,6 +35,13 @@
 | Ejemplos de GMAT | `backend/app/samples.py` (lee `GMAT_HOME/samples`) |
 | Lote de samples y comparación con escritorio | `backend/app/batch.py` (`python -m app.batch` regenera `docs/COMPATIBILIDAD.md`); `backend/tests/test_desktop.py` (`pytest -m slow`) |
 | Misiones propias con referencia de escritorio | `backend/tests/missions/` (`m1..m6.script`, `reference.json`, `make_reference.py` la regenera); `backend/tests/test_missions.py` (`pytest -m slow`) |
+| Plantillas de misión (Viaje a la Luna, LEO, Hohmann a GEO, traza) y su asistente | `frontend/src/templates.ts` (scripts y límites), `TemplateDialog` en `frontend/src/Dialogs.tsx`, textos `es.templates`; lunar verificada contra escritorio en `backend/tests/missions/m7_viaje_luna.script` |
+| Paleta de comandos (Ctrl+K), recorrido guiado, atajos | `Palette` y `Tour` en `frontend/src/Dialogs.tsx`; atajos y lista de acciones en `App.tsx`; `store.tourSeen` |
+| Validación en vivo y errores ubicados en recurso/campo | `store.checkLater`, `store.issues`; `frontend/src/model/issues.ts` (`toIssues`, `locate`, `clean`); se muestran en `IssueChip` (`App.tsx`), `Field.tsx`, `ResourceForm.tsx`, `ResourceTree.tsx`, `ScriptEditor.tsx` |
+| Deshacer/rehacer (historial de Monaco, también para formularios) | `gmat.history`, efecto `rev`/`load` de `frontend/src/editor/ScriptEditor.tsx` |
+| Borrador autoguardado | `store.ts` (`readDraft`, `useApp.subscribe`), clave `gmatweb.draft` |
+| Luna en resultados y vista lunar del 3D | `results.LUNA_CS`/`LUNA_COLS` (backend), `track` y `Globe` con `center` en `frontend/src/results/View3D.tsx` |
+| Responsive (tablet, móvil solo visor) | `@media` al final de `frontend/src/App.module.css` |
 | Textos de UI | `frontend/src/i18n/es.ts` |
 | Guía de uso, agregar misiones, diagnóstico web → C++ original | `docs/GUIA.md` |
 

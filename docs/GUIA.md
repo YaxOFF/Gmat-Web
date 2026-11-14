@@ -1,9 +1,9 @@
-<!-- fuente: frontend/src/i18n/es.ts, frontend/src/mission/commands.ts, backend/app/engine/sanitize.py, backend/app/samples.py, backend/app/batch.py, backend/tests/missions/make_reference.py, backend/tests/test_missions.py, dev.ps1 | rev: 9979ad3 -->
+<!-- fuente: frontend/src/i18n/es.ts, frontend/src/mission/commands.ts, backend/app/engine/sanitize.py, backend/app/samples.py, backend/app/batch.py, backend/tests/missions/make_reference.py, backend/tests/test_missions.py, dev.ps1 | rev: 893d974 -->
 # Guía de uso
 
 Cómo usar el simulador, cómo agregar misiones, qué más se puede hacer con él y dónde mirar (web y C++ original) cuando algo falla.
 
-Estado: fases 0 a 7c2 terminadas. Faltan UX/plantillas (8), Docker (9), E2E (10). Detalle en `PLAN.md`.
+Estado: fases 0 a 8 terminadas. Faltan Docker (9) y E2E (10). Detalle en `PLAN.md`.
 
 ## 1. Qué es
 
@@ -26,17 +26,36 @@ Variables y límites (timeout de 300 s por corrida, 2 corridas a la vez, script 
 
 | Zona | Qué hace |
 |---|---|
-| Barra: **Nuevo, Abrir, Ejemplos, Guardar, Validar, Correr/Detener** | Abrir y Guardar usan archivos `.script` locales. Ejemplos lista los 162 scripts de `GMAT_HOME/samples`. Validar carga el script en el motor sin correrlo y marca los errores en el editor. |
+| Barra: **Nuevo, Abrir, Plantillas, Ejemplos, Guardar, ↶ ↷, Validar, Correr/Detener** | Abrir y Guardar usan archivos `.script` locales. Plantillas crea una misión completa con unos pocos datos. Ejemplos lista los 162 scripts de `GMAT_HOME/samples`. ↶ ↷ deshacen y rehacen cambios del texto y de los formularios. Validar carga el script en el motor sin correrlo. |
+| Barra: **✓ Sin errores / ⚠ N errores** | Validación en vivo: el motor revisa el script cada vez que dejas de escribir. Clic en el aviso lleva al primer error. El error también sale junto al campo y con ⚠ en el árbol de recursos. |
+| Barra: **Comandos** y **?** | Comandos (Ctrl+K) busca cualquier acción, pestaña o recurso. ? repite el recorrido guiado. |
 | Izquierda, **Recursos** | Árbol de objetos (naves, hardware, propagadores, maniobras, solvers, variables, salidas). Crear, renombrar (actualiza referencias), clonar, borrar. |
 | Izquierda, **Misión** | Árbol de la secuencia. Agregar comando por categoría, arrastrar, ↑/↓, comentar, borrar. |
 | Centro, **Editor** | El script en Monaco. Editar aquí actualiza los árboles (unos 400 ms después) y al revés. |
 | Centro, **Recurso / Comando** | Formulario del elemento seleccionado. Spacecraft, ForceModel y Propagator tienen editor propio; el resto usa uno genérico sacado del motor. |
 | Centro, **Resultados** | Gráficas de cada XYPlot, tablas de cada ReportFile, estado de cada nave y traza en tierra 2D. Exporta PNG y CSV. |
-| Centro, **3D** | Trayectorias sobre la Tierra con barra de tiempo, seguir nave y cámara inercial. |
+| Centro, **3D** | Trayectorias con barra de tiempo, seguir nave y cámara inercial. Dibuja la Luna y su recorrido; **Centro = Luna** muestra la órbita alrededor de la Luna. |
 | Centro, **Solver** | Iteraciones de cada Target/Optimize: tabla, gráfica de convergencia y aviso si no converge. |
 | Abajo, **Consola** | Log de GMAT en vivo. Un error con número de línea es clicable. |
 
+Atajos: **Ctrl+S** guardar, **F5** correr, **Ctrl+Z / Ctrl+Y** deshacer y rehacer, **Ctrl+K** paleta de comandos.
+
+El texto se guarda solo en el navegador (borrador): al recargar la página vuelve, con un aviso en la consola. Nuevo lo descarta.
+
+En tablet el panel izquierdo se angosta. En móvil la app es solo visor: Editor, 3D, Resultados, Solver y consola.
+
 ## 4. Primera misión
+
+### Viaje a la Luna en un minuto
+1. **Plantillas** → **Viaje a la Luna**. Deja los datos por defecto o cambia fecha de salida, radio de la órbita lunar (2000 a 20000 km), días en órbita e inclinación (28,7° a 60°). **Crear misión**.
+2. **Correr** (F5). Tarda unos 3 s.
+3. **Solver**: dos corridas. La primera gira la órbita de salida hasta apuntar a la Luna; la segunda ajusta el impulso TLI y calcula el frenado LOI. Con los datos por defecto: TLI = 3.1295 km/s, LOI = -0.6439 km/s.
+4. **Resultados** → Gráfica Distancias: la distancia a la Tierra sube y la distancia a la Luna cae hasta el radio pedido.
+5. **3D**: la nave sale de la Tierra y alcanza a la Luna. Cambia **Centro** a **Luna** para ver la órbita lunar.
+
+La plantilla usa dos naves: `Sonda` hace el apuntado de prueba y `Nave` hace el viaje real. Las otras plantillas (Órbita LEO, Hohmann a GEO, Traza en tierra) funcionan igual.
+
+### Con un ejemplo de GMAT
 
 1. **Ejemplos** → `Ex_HohmannTransfer`. Es la referencia: converge con TOI = 2.24028397735 y GOI = 1.432966302.
 2. **Correr**. La consola muestra el log; al terminar aparecen Resultados, 3D y Solver.
@@ -87,7 +106,7 @@ La galería lee todos los `*.script` bajo `GMAT_HOME/samples`, con subcarpetas (
 
 Los archivos de entrada (efemérides, historiales de empuje) van también bajo `samples/` y se citan con ruta relativa a `samples` que contenga `/`, como `'../samples/Propias/datos.thf'`. Una ruta relativa a la subcarpeta del script no se encuentra.
 
-Las plantillas dentro de la app ("Órbita LEO", "Hohmann a GEO", "Viaje a la Luna") son la Fase 8 y aún no existen.
+Para que salga en **Plantillas** con su asistente de datos: `docs/TAREAS.md`, "Plantilla de misión nueva".
 
 ### 6.3 Como misión de regresión (comparada contra escritorio)
 
@@ -109,7 +128,7 @@ Sirve para garantizar que la web sigue dando los números de GMAT. Modelo: `back
    ```
 4. Una misión que debe fallar (como `m6_errors.script`) también vale: se comparan las líneas con error y los mensajes.
 
-Las seis que ya hay cubren: LEO con arrastre, GEO con Target dentro de un For, transferencia lunar, finite burn hasta vaciar el tanque, Optimize con Yukon y restricciones, y un script con errores.
+Las siete que ya hay cubren: LEO con arrastre, GEO con Target dentro de un For, transferencia lunar, finite burn hasta vaciar el tanque, Optimize con Yukon y restricciones, un script con errores y el viaje a la Luna completo de la plantilla (`m7`).
 
 ### 6.4 Implementar algo que la UI aún no tiene
 
@@ -180,6 +199,7 @@ Documentos de la instalación (`GMAT_HOME/docs`): `GMATMathSpec.pdf` para las ec
 |---|---|
 | "Script rechazado" con línea | Regla de seguridad de `sanitize` (sección 5). |
 | `Non-ASCII character` | Una tilde o símbolo en el script. |
+| `Jacchia-Roberts ... below 100 km` | El satélite reentró por arrastre: sube la altitud o baja `DragArea`. |
 | `Hardware Exception` en un finite burn | El tanque cruzó cero: baja `MaxStep` o para antes de `FuelMass = 0`. |
 | `Create Array A;` no carga | Faltan dimensiones: `Create Array A[3,3];`. |
 | Resultados vacíos | Falta `BeginMissionSequence`. |
@@ -220,7 +240,7 @@ Estado de cada sample: `docs/COMPATIBILIDAD.md`.
 
 - **Plugins comentados en el startup file** (28 samples): VF13ad, SNOPT, CSALT (control óptimo), MarsGRAM, ExternalForceModel. VF13ad, SNOPT, CSALT y MarsGRAM son librerías propietarias que la distribución pública no trae. Para activar uno que sí tengas: descomenta su línea `PLUGIN` en `GMAT_HOME/bin/gmat_startup_file.txt`, reinicia el backend y borra `backend/.cache/schema/` para que sus tipos aparezcan.
 - **GmatFunction, Python, MATLAB, `#Include`** (12 samples): prohibidos a propósito, porque ejecutan código en el servidor. En un uso solo local se podrían permitir relajando `FORBIDDEN` en `sanitize.py`; nunca en un VPS.
-- **Límites de las vistas:** el 3D va siempre centrado en la Tierra y no dibuja la Luna; no hay marcadores de maniobra; la traza en tierra es siempre respecto a la Tierra; las conversiones del editor de nave solo usan `EarthMJ2000Eq`.
+- **Límites de las vistas:** el 3D solo centra en la Tierra o la Luna (no en Marte u otros cuerpos) y sus esferas auxiliares no tienen textura; no hay marcadores de maniobra; la traza en tierra es siempre respecto a la Tierra; las conversiones del editor de nave solo usan `EarthMJ2000Eq`.
 
 ### 8.3 Para sacarle más provecho
 
@@ -229,7 +249,7 @@ Ordenado de menor a mayor esfuerzo.
 1. **Usar la API sin la interfaz.** `POST /api/runs` con un script, luego `GET /api/runs/{id}/results` devuelve trayectorias y reportes en JSON (`docs/API.md`). Con eso un script de Python puede hacer barridos: variar inclinación, masa o fecha de lanzamiento, lanzar N corridas (máximo `GMAT_WEB_MAX_RUNS` a la vez) y graficar el resultado. Es la forma más rápida de hacer estudios paramétricos o Monte Carlo.
 2. **Banco de misiones propio.** Cada misión en `tests/missions/` queda verificada contra escritorio para siempre (6.3). Sirve como material de curso con resultados garantizados.
 3. **Docencia.** Los `Tut_*` siguen los tutoriales del manual de GMAT; la pestaña Solver enseña la convergencia de un Target mejor que el escritorio.
-4. **Fase 8:** plantillas y asistentes, deshacer, autoguardado, validación en vivo, tablet.
+4. **Más plantillas:** cada una son unas 60 líneas en `templates.ts` (`docs/TAREAS.md`). Candidatas: Marte con B-plane, station-keeping GEO, finite burn.
 5. **Fase 9:** Docker y VPS, para usarlo desde cualquier equipo sin instalar GMAT.
 6. **Fase 11, vistas por plugin:** línea de tiempo de eclipses y contactos (EventLocator), residuos de estimación, formaciones. El motor ya los calcula; falta mostrarlos.
 7. **Mejoras del 3D:** cuerpo central distinto de la Tierra, la Luna, marcadores de maniobra, conos de sensor.

@@ -104,3 +104,24 @@ def test_inject_reads_continued_lines(tmp_path):
     assert m["xyplots"]["XY"]["y"] == ["Sat.Earth.Altitude", "Sat.Earth.SMA"]
     assert m["reports"]["RF"]["add"] == ["Sat.X", "Sat.Y"]
     assert src.split("BeginMissionSequence")[0] in out  # el texto del usuario no cambia
+
+
+def test_moon_columns_and_static_ship(client):
+    """Posición respecto a la Luna de GMAT (para dibujar la Luna y la vista lunar) y nave nunca propagada fuera."""
+    text = client.get("/api/samples/Ex_HohmannTransfer.script").json()["text"]
+    user = ("Create Spacecraft Quieta;\nCreate CoordinateSystem LunaEq;\nLunaEq.Origin = Luna;\nLunaEq.Axes = MJ2000Eq;\n"
+            "Create ReportFile MoonRF;\nMoonRF.Filename = 'moon.txt';\n"
+            "MoonRF.Add = {DefaultSC.LunaEq.X, DefaultSC.Luna.RMAG};\n")
+    run_id, _ = run(client, text.replace("BeginMissionSequence", user + "BeginMissionSequence", 1))
+    res = client.get(f"/api/runs/{run_id}/results").json()
+    assert [s["name"] for s in res["ships"]] == ["DefaultSC"]  # Quieta no se propaga: no sale
+    cols = res["ships"][0]["columns"]
+    rep = next(r for r in res["reports"] if r["name"] == "MoonRF")
+    for i in (0, len(rep["rows"]) // 2, -1):
+        x, rmag = rep["rows"][i]
+        assert cols["LunaMJ2000Eq.X"][i] == pytest.approx(x, rel=1e-9)
+        d = sum(cols[f"LunaMJ2000Eq.{a}"][i] ** 2 for a in "XYZ") ** 0.5
+        assert d == pytest.approx(rmag, rel=1e-9)
+        # Luna vista desde la Tierra = nave(Tierra) - nave(Luna): a distancia lunar
+        moon = sum((cols[f"EarthMJ2000Eq.{a}"][i] - cols[f"LunaMJ2000Eq.{a}"][i]) ** 2 for a in "XYZ") ** 0.5
+        assert 356000 < moon < 407000

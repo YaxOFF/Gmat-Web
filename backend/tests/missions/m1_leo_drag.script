@@ -37,6 +37,10 @@ Prop.Accuracy        = 1e-11;
 Prop.MinStep         = 0.001;
 Prop.MaxStep         = 600;
 
+Create XYPlot AltPlot;
+AltPlot.XVariable  = Sat.ElapsedDays;
+AltPlot.YVariables = {Sat.Altitude};
+
 Create ReportFile R;
 R.Filename     = 'm1_leo_drag.txt';
 R.WriteHeaders = false;

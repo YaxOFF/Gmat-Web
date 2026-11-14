@@ -18,7 +18,7 @@
 | `GET /schema/{type}` | | `{type, fields}`; 404 si el tipo no es creable |
 | `GET /parameters` | | lista `{name, dep, depDefault, unit}` (parámetros calculados del motor, caché como esquemas); 503 si el motor se cae |
 
-| `GET /runs/{id}/results` | | `{ships:[{name, columns:{A1ModJulian, UTCGregorian, EarthMJ2000Eq.X…VZ, Earth.Latitude, Earth.Longitude}}], reports:[{name, file, headers, rows}], xyplots:[{name, x:{name,data}, series:[{name,data}]}]}`; 404; 409 si no terminó. Máx. 200 000 filas por archivo |
+| `GET /runs/{id}/results` | | `{ships:[{name, columns:{A1ModJulian, UTCGregorian, EarthMJ2000Eq.X…VZ, Earth.Latitude, Earth.Longitude, LunaMJ2000Eq.X/Y/Z (posición respecto a la Luna)}}] (sin las naves que nunca se propagan), reports:[{name, file, headers, rows}], xyplots:[{name, x:{name,data}, series:[{name,data}]}]}`; 404; 409 si no terminó. Máx. 200 000 filas por archivo |
 | `GET /runs/{id}/files/{name}` | | el archivo (descarga); 404 si no es un nombre simple del primer nivel de la carpeta, es interno (`gmat.log`, `mission.script`, `startup.txt`, `GmatLog.txt`) o no existe; 409 si no terminó |
 Límites y variables: `README.md`. Forma del modelo: `shared/mission.schema.json`.
 

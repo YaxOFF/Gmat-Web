@@ -3,6 +3,9 @@ export const es = {
   toolbar: {
     new: 'Nuevo', open: 'Abrir', samples: 'Ejemplos', save: 'Guardar', validate: 'Validar', run: 'Correr',
     stop: 'Detener',
+    templates: 'Plantillas', undo: 'Deshacer', redo: 'Rehacer', palette: 'Comandos', tour: 'Recorrido',
+    keys: { save: 'Ctrl+S', run: 'F5', undo: 'Ctrl+Z', redo: 'Ctrl+Y', palette: 'Ctrl+K' },
+    main: 'Acciones del documento',
   },
   left: { resources: 'Recursos', mission: 'Misión' },
   center: { editor: 'Editor', resource: 'Recurso', command: 'Comando', view3d: '3D', results: 'Resultados', solver: 'Solver' },
@@ -13,6 +16,82 @@ export const es = {
     error: 'Motor no disponible',
   },
   empty: 'Sin contenido todavía.',
+  draft: {
+    restored: (name: string) => `Se recuperó el borrador de ${name} guardado en este navegador. Nuevo lo descarta; Guardar lo baja como archivo.`,
+  },
+  issues: {
+    ok: 'Sin errores',
+    count: (n: number) => `${n} ${n === 1 ? 'error' : 'errores'}`,
+    okHelp: 'El motor cargó el script sin errores (validación en vivo).',
+    goto: 'Ir al primer error en el Editor',
+    line: (n: number) => `Línea ${n}`,
+    inResource: 'El motor rechazó este recurso:',
+    marker: (n: number) => `${n} ${n === 1 ? 'error' : 'errores'} del motor`,
+    // Mensajes frecuentes de GMAT en español; lo que no coincide se muestra tal cual lo escribe GMAT.
+    known: [
+      [/^The value of "(.*)" for field "(.*)" on object "(.*)" is not an allowed value\.(?:\s*The allowed values? (?:is|are):?\s*\[?\s*(.*?)\s*\]?\.?)?$/,
+        (m) => `"${m[1]}" no es un valor permitido para ${m[2]}.${m[4] ? ` Se espera: ${m[4]}.` : ''}`],
+      [/^The field name "(.*)" on object "(.*)" is not permitted$/, (m) => `El campo ${m[1]} no existe en ${m[2]}.`],
+      [/^Nonexistent (\w+) "(.*)" referenced in the (\w+)/, (m) => `No existe el recurso ${m[2]} (${m[1]}) que usa ${m[3]}.`],
+      [/^Undefined function, object, or disallowed object field "(.*)" found$/, (m) => `${m[1]} no existe o no se puede usar aquí.`],
+      [/^The object named "(.*)" (?:of type "(.*)" )?(?:does not exist|was not found)/i, (m) => `No existe el recurso ${m[1]}.`],
+      [/Non-ASCII character/, () => 'El script tiene caracteres no ASCII (tildes, ñ, símbolos): GMAT no los acepta ni en comentarios.'],
+    ] as [RegExp, (m: RegExpExecArray) => string][],
+  },
+  templates: {
+    title: 'Plantillas de misión',
+    intro: 'Elige una misión, ajusta sus datos y créala. Queda como un script normal: después puedes cambiar todo.',
+    create: 'Crear misión',
+    close: 'Cerrar',
+    outOfRange: (min: number, max: number) => `Entre ${min} y ${max}`,
+    badDate: 'Fecha inválida',
+    after: 'Luego pulsa Correr (F5).',
+    items: {
+      luna: {
+        title: 'Viaje a la Luna',
+        desc: 'Sale de una órbita baja terrestre, apunta a la Luna con dos Target y frena para quedar en órbita lunar. ' +
+          'Al terminar, abre 3D y elige Centro = Luna.',
+        params: { date: 'Fecha de salida (UTC)', rp: 'Radio de la órbita lunar (km desde el centro)', days: 'Días en órbita lunar', inc: 'Inclinación de la órbita de salida (°)' },
+      },
+      leo: {
+        title: 'Órbita LEO',
+        desc: 'Satélite en órbita baja con arrastre atmosférico y gravedad 4×4. La gráfica muestra cómo cambia la altitud.',
+        params: { alt: 'Altitud (km)', inc: 'Inclinación (°)', days: 'Días a propagar' },
+      },
+      hohmann: {
+        title: 'Transferencia Hohmann a GEO',
+        desc: 'Dos impulsos calculados por un Target llevan el satélite de una órbita baja a la geoestacionaria.',
+        params: { alt: 'Altitud de la órbita inicial (km)' },
+      },
+      track: {
+        title: 'Traza en tierra de un satélite',
+        desc: 'Por dónde pasa el satélite sobre la Tierra. Al terminar, abre Resultados y elige la traza en tierra.',
+        params: { alt: 'Altitud (km)', inc: 'Inclinación (°)', days: 'Días a propagar' },
+      },
+    } as Record<string, { title: string; desc: string; params: Record<string, string> }>,
+  },
+  palette: {
+    title: 'Paleta de comandos',
+    filter: 'Escribe una acción o un recurso…',
+    none: 'Nada coincide.',
+    goTab: (tab: string) => `Ir a ${tab}`,
+    goResource: (name: string, type: string) => `Abrir recurso ${name} (${type})`,
+    template: (title: string) => `Plantilla: ${title}`,
+    hint: '↑ ↓ para moverse · Enter para ejecutar · Esc para cerrar',
+  },
+  tour: {
+    title: 'Recorrido',
+    next: 'Siguiente', prev: 'Anterior', done: 'Terminar', skip: 'Saltar',
+    step: (i: number, n: number) => `${i} de ${n}`,
+    steps: [
+      { sel: 'templates', title: 'Empieza con una plantilla', text: 'Plantillas crea una misión completa (por ejemplo, Viaje a la Luna) con solo unos datos. Ejemplos abre los scripts que trae GMAT.' },
+      { sel: 'left', title: 'Recursos y Misión', text: 'Recursos son los objetos: naves, propagadores, maniobras, solvers. Misión es la secuencia de pasos, en orden. Clic en uno abre su formulario.' },
+      { sel: 'center', title: 'Editor y formularios', text: 'El Editor muestra el script de GMAT. Los formularios y el script son lo mismo: cambiar uno actualiza el otro. Deshacer (Ctrl+Z) revierte ambos.' },
+      { sel: 'run', title: 'Correr', text: 'Correr (F5) manda el script al motor real de GMAT. Mientras escribes, el motor valida el script y los errores aparecen junto al campo.' },
+      { sel: 'console', title: 'Consola', text: 'Aquí sale el log de GMAT en vivo. Un error subrayado lleva a su línea en el Editor.' },
+      { sel: 'center', title: 'Resultados, 3D y Solver', text: 'Al terminar: Resultados (gráficas, tablas, traza en tierra), 3D (trayectoria, con la Luna) y Solver (cómo convergió cada Target). Ctrl+K abre la paleta de comandos.' },
+    ],
+  },
   samples: {
     title: 'Ejemplos de GMAT',
     filter: 'Buscar ejemplo…',
@@ -77,6 +156,9 @@ export const es = {
     noFollow: 'Ninguna',
     inertial: 'Cámara inercial (EarthMJ2000Eq)',
     hint: 'Posiciones de GMAT en EarthMJ2000Eq centradas en la Tierra; ▶ reproduce la corrida.',
+    hintMoon: 'Posiciones de GMAT respecto a la Luna (ejes MJ2000Eq), encuadradas en el tramo cercano a ella; ▶ reproduce la corrida.',
+    center: 'Centro',
+    bodies: { Earth: 'Tierra', Luna: 'Luna' },
   },
   validate: {
     starting: 'Validando el script con el motor…',
@@ -117,6 +199,9 @@ export const es = {
     help: (type: string, def: unknown, unit?: string) =>
       `Tipo GMAT: ${type}${unit ? ` · Unidades: ${unit}` : ''}${def !== null && def !== '' ? ` · Por defecto: ${def}` : ''}`,
     invalid: 'Valor inválido',
+    notNumber: 'Debe ser un número (ej. 7000 o 1.5e-3).',
+    notInteger: 'Debe ser un número entero.',
+    issues: 'El motor encontró errores en este recurso:',
   },
   mission: {
     cats: {

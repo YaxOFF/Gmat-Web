@@ -1,0 +1,128 @@
+%  Mision propia 7: plantilla "Viaje a la Luna" de la web (frontend/src/templates.ts) con sus valores
+%  por defecto. Si la plantilla cambia, regenerar este archivo y reference.json.
+%  Viaje a la Luna: de una orbita baja terrestre (185 km) a una orbita lunar.
+%  1) Apuntado grueso: una sonda de prueba busca como girar la orbita de salida (RAAN, AOP)
+%     para que su apogeo mire a la Luna.
+%  2) Apuntado fino: la nave ajusta RAAN, AOP y el impulso TLI para pasar a 5000 km del centro de la Luna.
+%  3) Insercion (LOI): frena en el periselenio para quedar en orbita lunar casi circular.
+%  Al terminar: pestana Solver (convergencia), Resultados (distancias) y 3D con Centro = Luna.
+
+Create Spacecraft Nave;
+Nave.DateFormat       = UTCGregorian;
+Nave.Epoch            = '20 Mar 2026 00:00:00.000';
+Nave.CoordinateSystem = EarthMJ2000Eq;
+Nave.DisplayStateType = Keplerian;
+Nave.SMA              = 6563;
+Nave.ECC              = 0.001;
+Nave.INC              = 28.7;
+Nave.RAAN             = 0;
+Nave.AOP              = 0;
+Nave.TA               = 0;
+Nave.DryMass          = 850;
+
+%  Sonda de prueba: copia de la nave que hace el apuntado grueso; la nave real no se mueve hasta el fino.
+Create Spacecraft Sonda;
+
+Create ForceModel FuerzasTierra;
+FuerzasTierra.CentralBody = Earth;
+FuerzasTierra.PointMasses = {Earth, Sun, Luna};
+FuerzasTierra.Drag        = None;
+FuerzasTierra.SRP         = Off;
+
+Create ForceModel FuerzasLuna;
+FuerzasLuna.CentralBody = Luna;
+FuerzasLuna.PointMasses = {Luna, Earth, Sun};
+FuerzasLuna.Drag        = None;
+FuerzasLuna.SRP         = Off;
+
+%  Solo la Tierra: para el apuntado grueso, sin riesgo de chocar con la Luna.
+Create ForceModel SoloTierra;
+SoloTierra.CentralBody = Earth;
+SoloTierra.PointMasses = {Earth};
+SoloTierra.Drag        = None;
+SoloTierra.SRP         = Off;
+
+Create Propagator PropTierra;
+PropTierra.FM       = FuerzasTierra;
+PropTierra.Type     = RungeKutta89;
+PropTierra.Accuracy = 1e-11;
+PropTierra.MaxStep  = 86400;
+
+Create Propagator PropLuna;
+PropLuna.FM       = FuerzasLuna;
+PropLuna.Type     = RungeKutta89;
+PropLuna.Accuracy = 1e-11;
+PropLuna.MaxStep  = 3600;
+
+Create Propagator PropSimple;
+PropSimple.FM       = SoloTierra;
+PropSimple.Type     = RungeKutta89;
+PropSimple.Accuracy = 1e-11;
+PropSimple.MaxStep  = 2700;
+
+%  TLI: impulso de inyeccion translunar. LOI: frenado de insercion en orbita lunar.
+Create ImpulsiveBurn TLI;
+TLI.CoordinateSystem = Local;
+TLI.Origin           = Earth;
+TLI.Axes             = VNB;
+TLI.Element1         = 3.14;
+
+Create ImpulsiveBurn LOI;
+LOI.CoordinateSystem = Local;
+LOI.Origin           = Luna;
+LOI.Axes             = VNB;
+LOI.Element1         = -0.5;
+
+%  Marco que gira con la Luna: el eje X apunta de la Tierra a la Luna.
+Create CoordinateSystem TierraLunaRot;
+TierraLunaRot.Origin    = Earth;
+TierraLunaRot.Axes      = ObjectReferenced;
+TierraLunaRot.XAxis     = R;
+TierraLunaRot.ZAxis     = N;
+TierraLunaRot.Primary   = Earth;
+TierraLunaRot.Secondary = Luna;
+
+Create CoordinateSystem LunaInercial;
+LunaInercial.Origin = Luna;
+LunaInercial.Axes   = BodyInertial;
+
+Create DifferentialCorrector DC;
+DC.MaximumIterations = 150;
+
+Create Variable RAAN AOP;
+
+Create XYPlot Distancias;
+Distancias.XVariable  = Nave.ElapsedDays;
+Distancias.YVariables = {Nave.Earth.RMAG, Nave.Luna.RMAG};
+
+Create ReportFile Resumen;
+Resumen.Filename  = 'm7_viaje_luna.txt';
+Resumen.WriteHeaders = false;
+Resumen.Precision    = 16;
+
+BeginMissionSequence;
+'Copiar la nave a la sonda' Sonda = Nave;
+Target 'Apuntado grueso' DC {SolveMode = Solve, ExitMode = SaveAndContinue};
+   Vary 'Variar RAAN' DC(Sonda.RAAN = 45, {Perturbation = 0.00001, MaxStep = 5});
+   Vary 'Variar AOP' DC(Sonda.AOP = 2.5, {Perturbation = 0.00001, MaxStep = 5});
+   Maneuver 'Aplicar TLI' TLI(Sonda);
+   'Guardar RAAN' RAAN = Sonda.RAAN;
+   'Guardar AOP' AOP = Sonda.AOP;
+   Propagate 'Hasta el apogeo' PropSimple(Sonda) {Sonda.Earth.Apoapsis, Sonda.ElapsedDays = 4.5};
+   Achieve 'Apogeo hacia la Luna (RA)' DC(Sonda.TierraLunaRot.RA = 0, {Tolerance = 1});
+   Achieve 'Apogeo hacia la Luna (DEC)' DC(Sonda.TierraLunaRot.DEC = 0, {Tolerance = 1});
+EndTarget;
+Target 'Apuntado fino e insercion' DC {SolveMode = Solve, ExitMode = DiscardAndContinue};
+   Vary 'Variar RAAN' DC(Nave.RAAN = RAAN, {Perturbation = 0.000001, MaxStep = 2});
+   Vary 'Variar AOP' DC(Nave.AOP = AOP, {Perturbation = 0.000001, MaxStep = 2});
+   Vary 'Variar TLI' DC(TLI.Element1 = TLI.Element1, {Perturbation = 0.0000001, MaxStep = 0.01});
+   Maneuver 'Aplicar TLI' TLI(Nave);
+   Propagate 'Viaje a la Luna' PropTierra(Nave) {Nave.Luna.Periapsis, Nave.ElapsedDays = 6, Nave.Luna.RMAG = 1000};
+   Achieve 'Radio de periselenio' DC(Nave.Luna.RMAG = 5000, {Tolerance = 0.1});
+   Achieve 'Angulo del vector B' DC(Nave.LunaInercial.BVectorAngle = 75, {Tolerance = 0.1});
+   Vary 'Variar LOI' DC(LOI.Element1 = -0.6, {Perturbation = 0.00001, MaxStep = 0.3});
+   Maneuver 'Aplicar LOI' LOI(Nave);
+   Achieve 'Orbita lunar casi circular' DC(Nave.Luna.ECC = 0.01, {Tolerance = 0.001});
+EndTarget;
+Propagate 'En orbita lunar' PropLuna(Nave) {Nave.ElapsedDays = 3};
+Report Resumen Nave.ElapsedDays Nave.Luna.SMA Nave.Luna.ECC Nave.Luna.RMAG TLI.Element1 LOI.Element1;

@@ -58,7 +58,11 @@ export function XYChart({ plot, log }: { plot: XYPlotResult; log?: boolean }) {
       width: box.clientWidth, height: 380,
       scales: { x: { time: false }, ...(log && { y: { distr: 3 } }) },
       cursor: { drag: { x: true, y: true } },
-      axes: [{ stroke: color, grid }, { stroke: color, grid }],
+      // eje log: uPlot redondea a 3 decimales y rotula "0" lo menor de 0,001; se escribe en notación científica
+      axes: [{ stroke: color, grid }, {
+        stroke: color, grid,
+        ...(log && { size: 60, values: (_u: uPlot, splits: (number | null)[]) => splits.map((v) => (v == null ? '' : v >= 0.001 && v < 1e5 ? String(v) : v.toExponential(0))) }),
+      }],
       series: [{ label: plot.x.name }, ...plot.series.map((y, i) => ({ label: y.name, stroke: COLORS[i % COLORS.length] }))],
     }, [num(plot.x.data), ...plot.series.map((y) => num(y.data))] as uPlot.AlignedData, box)
     chart.current = u

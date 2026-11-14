@@ -1,4 +1,4 @@
-<!-- fuente: backend/app/engine, backend/app/script, backend/app/main.py, frontend/src/store.ts, frontend/src/model/refs.ts, frontend/src/resources, dev.ps1 | rev: 4d753f5 -->
+<!-- fuente: backend/app/engine, backend/app/script, backend/app/main.py, frontend/src/store.ts, frontend/src/model/refs.ts, frontend/src/resources, dev.ps1 | rev: 893d974 -->
 # Trampas
 
 Leídas del código y comprobadas con el motor real donde dice "(verificado)".
@@ -27,7 +27,9 @@ Leídas del código y comprobadas con el motor real donde dice "(verificado)".
 - **Naves, XYPlot y ReportFile salen del texto** (`Create` y `X.Campo = ...`; las líneas con `...` se unen solo para leer, el texto no cambia). El ReportFile del usuario sin `Filename` se busca como `<nombre>.txt`.
 - **`SolverIterations = Current`** en los ocultos: con `None` GMAT omite también la pasada final de un Target; con `Current` escribe solo la pasada final, sin iteraciones (verificado en Hohmann, Mars B-Plane, TargetFiniteBurn). No se recorta nada por tiempo: los tramos `BackProp` quedan tal cual.
 - **Sin épocas de maniobra:** GMAT no publica el estado justo tras un `Maneuver` (no hay dos filas con la misma época).
-- **XYPlot oculto no sigue `Toggle`** ni el `SolverIterations` del XYPlot. Lat/lon siempre respecto a la Tierra (ignora `CentralBody` del GroundTrackPlot).
+- **XYPlot oculto no sigue `Toggle`** ni el `SolverIterations` del XYPlot. Lat/lon siempre respecto a la Tierra (ignora `CentralBody` del GroundTrackPlot). Por eso la plantilla lunar hace el apuntado grueso con otra nave (`Sonda`): si usara la misma y la reiniciara (`Nave = NaveInicial`, como `Ex_GivenEpochGoToTheMoon`), la gráfica y el 3D mezclarían el pase de prueba con el viaje real.
+- **Columnas de la Luna.** `inject` crea `gmatweb_LunaEq` (origen Luna, ejes MJ2000Eq) y cada reporte de nave lleva `<nave>.gmatweb_LunaEq.X/Y/Z`, que `read` publica como `LunaMJ2000Eq.X/Y/Z`. La posición de la Luna no se pide a GMAT aparte: el 3D la saca restando las dos posiciones de la nave (`View3D.track`). Son 3 líneas inyectadas más por script (cuenta en `manifest["shift"]`).
+- **Nave que nunca se propaga** (todas sus filas con la misma época, p. ej. una copia de respaldo): `read` no la devuelve.
 - **ReportFile del usuario** (ancho fijo) se parte por 2+ espacios: una celda que llena su ancho exacto se pega a la vecina. Filas de `Report` con otras columnas salen con otro largo. Con `WriteHeaders = false` las cabeceras son los nombres del `Add` si cuadran con las columnas, si no `1..n`.
 
 ## Solvers (`engine/solver.py`)
@@ -68,11 +70,16 @@ Leídas del código y comprobadas con el motor real donde dice "(verificado)".
 ## Sincronía script ↔ modelo (`store.ts`)
 - **Contador `seq`:** gana el último cambio, venga del texto o del modelo. `editText` ignora el eco del editor comparando el texto.
 - **`setMission` es optimista.** Cambia el modelo y luego pide el texto. Si `serialize` falla, el modelo queda adelantado al texto y la siguiente edición del texto lo pisa.
-- **Reescribir el texto sube `doc.rev`** y `ScriptEditor` hace `setValue`: se pierde el undo de Monaco y el cursor.
+- **Reescribir el texto sube `doc.rev`.** Si además cambió `doc.load` (Nuevo, Abrir, Ejemplo, Plantilla), `ScriptEditor` hace `setValue` y el historial de deshacer empieza de cero. Si no (formulario o árbol), el texto entra con `executeEdits` entre dos `pushUndoStop`: es un paso más del historial de Monaco, que es el único deshacer de la app. La edición reemplaza el documento entero, así que el cursor salta.
+- **Deshacer/Rehacer** (`gmat.history`): botones y Ctrl+Z/Ctrl+Y fuera de campos llaman a Monaco aunque la pestaña Editor esté oculta (sigue montado). Dentro de un campo de formulario Ctrl+Z es el del navegador. No deshace la selección ni el nombre del documento.
+- **Validación en vivo (`checkLater`).** 1,2 s después del último cambio lanza un `POST /api/script/validate` (un proceso con motor por vez, ~0,7 s). Documento vacío = sin validar (`checked: null`). Las respuestas viejas se descartan con `cseq`. Con una corrida en curso también valida. Si el backend no responde, el indicador se queda con el último estado.
+- **`issues` solo ubica líneas de la zona de recursos** (`Obj.Campo = ...` o `Create`). Un error en la secuencia sale en el indicador y en Monaco, no en el árbol de Misión. La traducción es por patrones (`es.issues.known`); lo demás se muestra en inglés, tal cual lo escribe GMAT.
+- **Borrador (`gmatweb.draft` en localStorage).** Se guarda 0,5 s tras cada cambio y se restaura al cargar la página, con aviso en la consola. Nuevo (texto vacío) lo borra. Es uno por navegador: dos pestañas se pisan. Sin localStorage no hay borrador ni error.
+- **Atajos globales** (`App.tsx`) en fase de captura: Ctrl+S, F5, Ctrl+K. Sin captura, Monaco se queda con Ctrl+K (acorde) y el navegador con Ctrl+S y F5. F5 ya no recarga la página (Ctrl+R sí).
 - **Correr y validar usan `doc.text`,** no el modelo; ambos vacían la consola (máximo 5000 líneas).
 - **`parseError` casi nunca aparece:** el parser no rechaza scripts; solo 413 o fallo de red. Con error queda el último modelo bueno.
 - **El modelo va ~400 ms detrás del texto** (debounce). Excepción: `loadText('')` (Nuevo) vacía el modelo al instante.
-- **Marcadores de Monaco** salen de `store.logs` con `line` (validar o correr) y se borran al reemplazar el texto (`doc.rev`). Tras editar a mano pueden quedar en una línea corrida hasta la siguiente validación.
+- **Marcadores de Monaco** salen de `store.logs` con `line` (correr) y de `store.issues` (validación; gana sobre el log en la misma línea). Se borran con cada edición y vuelven cuando termina la validación en vivo.
 - **Sin reintentos.** `schemas[tipo] = 'error'` dura hasta recargar la página. Si falla `fetchTypes`, todo el árbol cae en "other" y solo se puede crear `Spacecraft`.
 - **WebSocket cerrado sin `done`/`error`** = mensaje de conexión perdida. `stop` solo manda el `DELETE`; el fin llega por el WebSocket.
 
@@ -112,3 +119,11 @@ Leídas del código y comprobadas con el motor real donde dice "(verificado)".
 - **Stop por `Tank.FuelMass` con `MaxStep` grande:** el paso cruza el cero, el tanque queda con masa negativa y la corrida da `Hardware Exception` (`RunScript` falla, código 3). Usar `MaxStep` chico o parar antes de 0 (`tests/missions/m4_finite_burn.script`).
 - **`Sat.Luna.Periapsis` no se puede reportar** (no es parámetro con dependencia de cuerpo): usar `Sat.Luna.RadPer`.
 - **Windows:** Git avisa `LF` → `CRLF` al commitear. `dev.sh` solo se verificó con `sh -n`.
+
+## Plantillas, recorrido y vistas (`templates.ts`, `Dialogs.tsx`, `View3D.tsx`)
+- **Las plantillas solo arman texto.** `build(valores)` devuelve un script ASCII; el único cálculo es `altitud + 6378.1363` para el semieje mayor. Los límites de cada dato (`min`/`max`) son los probados contra el motor: Luna con inclinación menor de 28,7° no converge (la órbita no alcanza la declinación lunar) y LEO por debajo de 300 km reentra en días y GMAT corta la corrida (`Jacchia-Roberts ... below 100 km`).
+- **Plantilla lunar = `backend/tests/missions/m7_viaje_luna.script`** con los valores por defecto (más `WriteHeaders = false` y `Precision = 16`). Si cambia la plantilla hay que regenerar ese archivo y `reference.json`; nada lo comprueba solo.
+- **Vista lunar del 3D (`Centro = Luna`).** Sin globo; la escena no gira (marco `FIXED` de Cesium usado como inercial lunar) y solo encuadra los puntos a menos de 30 000 km de la Luna. Cambiar de centro reconstruye el visor (`key`). La Tierra y la Luna auxiliares son esferas lisas, sin textura.
+- **Recorrido:** sale solo la primera vez (`gmatweb.tour` en localStorage) y con el botón `?`. Cada paso busca su zona por `data-tour`; si la zona está oculta (móvil) el paso sale sin marco.
+- **Móvil (≤ 640 px) es solo visor:** sin panel izquierdo ni pestañas Recurso/Comando. Tablet (≤ 900 px): panel de 220 px y barra en dos filas.
+- **Lighthouse no se corrió** (el entorno no permitió descargarlo). La accesibilidad se midió con un script en la página: nombres de botones, etiquetas de campos y contraste ≥ 4,5:1 en claro y oscuro (`docs/QA.md`, Fase 8).
