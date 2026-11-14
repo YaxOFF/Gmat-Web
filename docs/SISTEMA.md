@@ -8,7 +8,7 @@
 | Motor GMAT | `GMAT_HOME` (fuera del repo) | `gmatpy` R2026a, solo dentro de procesos worker | `docs/GOTCHAS.md` |
 | Esquema del modelo | `shared/mission.schema.json` | JSON Schema, espejo en `frontend/src/model/mission.ts` | `PLAN.md` |
 
-No hay base de datos ni cuentas (v1). Despliegue Docker: fase 9 del plan, [TODO: aún no existe; al hacerla crear `docs/DEPLOY.md`].
+No hay base de datos ni cuentas (v1). Despliegue Docker: `docker-compose.yml` con `api` (Python 3.12 + GMAT Ubuntu) y `web` (nginx con proxy `/api`), ver `docs/DEPLOY.md`.
 
 ## Contrato frontend y backend
 - URL base: rutas relativas `/api/...`. Vite hace proxy de `/api` a `127.0.0.1:8000` con `ws: true` (`frontend/vite.config.ts`). La entrada `/ws` del proxy no se usa: el backend no tiene rutas bajo `/ws` y el frontend abre `/api/ws/...`.
