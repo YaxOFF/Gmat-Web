@@ -13,7 +13,7 @@ from app.main import app
 from app.script import parse, serialize
 
 SAMPLE_IDS = [s["id"] for s in samples.list_samples()] if config.GMAT_HOME else []
-# Ver docs/EXCEPCIONES_ROUNDTRIP.md
+# Ver docs/ROUNDTRIP_EXCEPTIONS.md
 XFAIL = {
     "Navigation/Simulate_DSN_Range_then_Estimate_CartesianState_and_Cr.script":
         "copia de objeto 'A = B' entre asignaciones de recursos: el modelo agrupa campos por "

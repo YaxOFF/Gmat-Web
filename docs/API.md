@@ -1,56 +1,56 @@
 <!-- fuente: backend/app/main.py, backend/app/engine/runner.py, backend/app/engine/schema.py, frontend/src/model/schema.ts | rev: 4d753f5 -->
-# API (prefijo `/api`)
+# API (prefix `/api`)
 
-| Método y ruta | Cuerpo | Respuesta |
+| Method and path | Body | Response |
 |---|---|---|
-| `GET /health` | | `{status:"ok", version, build_date}` o `{status:"error", detail}` (siempre 200) |
-| `GET /samples` | | lista `{id,name,folder,description}` |
+| `GET /health` | | `{status:"ok", version, build_date}` or `{status:"error", detail}` (always 200) |
+| `GET /samples` | | list `{id,name,folder,description}` |
 | `GET /samples/{id}` | | `{id, text}`; 404 |
-| `POST /runs` | `{script}` | `{runId}`; 400 `{detail, line}` si sanitize rechaza (`line` puede ser `null`); 429 si hay `MAX_RUNS` |
+| `POST /runs` | `{script}` | `{runId}`; 400 `{detail, line}` if sanitize rejects (`line` can be `null`); 429 if there are `MAX_RUNS` |
 | `DELETE /runs/{id}` | | `{ok:true}`; 404 |
-| `WS /ws/runs/{id}` | | eventos (abajo) |
-| `POST /script/parse` | `{script}` | modelo `{resources, sequence, raw}`; 413 si excede `MAX_SCRIPT_BYTES` |
-| `POST /script/serialize` | modelo | `{script}`; 422 |
-| `POST /script/validate` | `{script}` | `{ok, errors:[{type?, level, text, line?}]}` (siempre 200) |
+| `WS /ws/runs/{id}` | | events (below) |
+| `POST /script/parse` | `{script}` | model `{resources, sequence, raw}`; 413 if it exceeds `MAX_SCRIPT_BYTES` |
+| `POST /script/serialize` | model | `{script}`; 422 |
+| `POST /script/validate` | `{script}` | `{ok, errors:[{type?, level, text, line?}]}` (always 200) |
 | `POST /convert/state` | `{fromType,toType,elements}` | `{type, elements}`; 422 |
-| `POST /convert/epoch` | `{fromFormat,toFormat,epoch}` (formatos `A1/TAI/UTC/TT/TDB` + `ModJulian/Gregorian`) | `{format, epoch}`; 422 |
-| `GET /schema` | | lista `{type, category, objectType}` |
-| `GET /schema/{type}` | | `{type, fields}`; 404 si el tipo no es creable |
-| `GET /parameters` | | lista `{name, dep, depDefault, unit}` (parámetros calculados del motor, caché como esquemas); 503 si el motor se cae |
+| `POST /convert/epoch` | `{fromFormat,toFormat,epoch}` (formats `A1/TAI/UTC/TT/TDB` + `ModJulian/Gregorian`) | `{format, epoch}`; 422 |
+| `GET /schema` | | list `{type, category, objectType}` |
+| `GET /schema/{type}` | | `{type, fields}`; 404 if the type is not creatable |
+| `GET /parameters` | | list `{name, dep, depDefault, unit}` (engine calculated parameters, cached like schemas); 503 if the engine crashes |
 
-| `GET /runs/{id}/results` | | `{ships:[{name, columns:{A1ModJulian, UTCGregorian, EarthMJ2000Eq.X…VZ, Earth.Latitude, Earth.Longitude}}], reports:[{name, file, headers, rows}], xyplots:[{name, x:{name,data}, series:[{name,data}]}]}`; 404; 409 si no terminó. Máx. 200 000 filas por archivo |
-| `GET /runs/{id}/files/{name}` | | el archivo (descarga); 404 si no es un nombre simple del primer nivel de la carpeta, es interno (`gmat.log`, `mission.script`, `startup.txt`, `GmatLog.txt`) o no existe; 409 si no terminó |
-Límites y variables: `README.md`. Forma del modelo: `shared/mission.schema.json`.
+| `GET /runs/{id}/results` | | `{ships:[{name, columns:{A1ModJulian, UTCGregorian, EarthMJ2000Eq.X…VZ, Earth.Latitude, Earth.Longitude}}], reports:[{name, file, headers, rows}], xyplots:[{name, x:{name,data}, series:[{name,data}]}]}`; 404; 409 if it has not finished. Max. 200 000 rows per file |
+| `GET /runs/{id}/files/{name}` | | the file (download); 404 if it is not a simple name at the top level of the folder, is internal (`gmat.log`, `mission.script`, `startup.txt`, `GmatLog.txt`) or does not exist; 409 if it has not finished |
+Limits and variables: `README.md`. Model shape: `shared/mission.schema.json`.
 
-## Eventos del WebSocket
-Un JSON por mensaje. Al conectar se reenvían todos los eventos desde el inicio de la corrida. El servidor cierra tras `done` o `error`.
+## WebSocket events
+One JSON per message. On connect, all events since the start of the run are replayed. The server closes after `done` or `error`.
 
-| `type` | Campos | Cuándo |
+| `type` | Fields | When |
 |---|---|---|
-| `log` | `level` (`info`, `warning`, `error`), `text`, `line?` (línea del script que cita GMAT) | cada línea no vacía de `gmat.log` |
-| `progress` | `elapsed` (segundos, 1 decimal) | una vez por segundo mientras corre |
-| `solver` | `event`: `start` (`run`, `solver`, `kind` Target/Optimize, `algorithm`), `iteration` (`run`, `solver`, `iteration`, `evaluation?`, `variables[{name,value}]`, `goals[{name,desired,achieved,variance,tolerance,met?}]`, `constraints[{name,kind eq/ineq,value}]`, `cost?`, `state?`), `end` (`run`, `solver`, `kind`, `status` converged/failed/initial, `converged`, `iterations`, `message`), `silent` (`solver`, al inicio: tiene `ShowProgress = false` y no habrá iteraciones) | leído del progreso que GMAT escribe en `gmat.log` (`engine/solver.py`); la fila de una iteración sale al empezar la siguiente o al cerrar el solver |
-| `done` | `results: {elapsed, files, available}` (`files` = archivos de salida sin los ocultos `gmatweb_*`; `available` = hay naves, ReportFile o XYPlot para `/results`) | el motor terminó con código 0 |
-| `error` | `message` | corrida inexistente, cancelada, timeout o motor con código distinto de 0 |
+| `log` | `level` (`info`, `warning`, `error`), `text`, `line?` (script line that GMAT cites) | each non-empty line of `gmat.log` |
+| `progress` | `elapsed` (seconds, 1 decimal) | once per second while running |
+| `solver` | `event`: `start` (`run`, `solver`, `kind` Target/Optimize, `algorithm`), `iteration` (`run`, `solver`, `iteration`, `evaluation?`, `variables[{name,value}]`, `goals[{name,desired,achieved,variance,tolerance,met?}]`, `constraints[{name,kind eq/ineq,value}]`, `cost?`, `state?`), `end` (`run`, `solver`, `kind`, `status` converged/failed/initial, `converged`, `iterations`, `message`), `silent` (`solver`, at the start: it has `ShowProgress = false` and there will be no iterations) | read from the progress GMAT writes to `gmat.log` (`engine/solver.py`); an iteration's row is emitted when the next one starts or when the solver closes |
+| `done` | `results: {elapsed, files, available}` (`files` = output files without the hidden `gmatweb_*` ones; `available` = there are ships, ReportFile or XYPlot for `/results`) | the engine finished with code 0 |
+| `error` | `message` | nonexistent run, cancelled, timeout or engine with a code other than 0 |
 
-Una corrida inexistente no da 404: el socket se acepta, llega un `error` y se cierra.
+A nonexistent run does not give 404: the socket is accepted, an `error` arrives and it closes.
 
-## Esquemas
-`GET /schema`: `category` es la categoría del motor (`SPACECRAFT`, `FORMATION`, `HARDWARE`, `BURN`, `ODE_MODEL`, `PROP_SETUP`, `CALCULATED_POINT`, `COORDINATE_SYSTEM`, `SOLVER`, `SUBSCRIBER`, `EVENT_LOCATOR`, `FIELD_OF_VIEW`, `PARAMETER`); `objectType` es el `Gmat::ObjectType` numérico (Spacecraft = 101).
+## Schemas
+`GET /schema`: `category` is the engine category (`SPACECRAFT`, `FORMATION`, `HARDWARE`, `BURN`, `ODE_MODEL`, `PROP_SETUP`, `CALCULATED_POINT`, `COORDINATE_SYSTEM`, `SOLVER`, `SUBSCRIBER`, `EVENT_LOCATOR`, `FIELD_OF_VIEW`, `PARAMETER`); `objectType` is the numeric `Gmat::ObjectType` (Spacecraft = 101).
 
-`GET /schema/{type}`: `fields` es una lista (o `null` si el tipo tumba el motor) de:
+`GET /schema/{type}`: `fields` is a list (or `null` if the type brings the engine down) of:
 
-| Campo | Tipo | Nota |
+| Field | Type | Note |
 |---|---|---|
-| `name` | string | nombre exacto de GMAT |
-| `type` | string | tipo de parámetro de GMAT: `Real`, `Integer`, `Boolean`, `String`, `Enumeration`, `Object`, `ObjectArray`, `StringArray`, `Rmatrix`, `Filename`, `Color`... |
+| `name` | string | exact GMAT name |
+| `type` | string | GMAT parameter type: `Real`, `Integer`, `Boolean`, `String`, `Enumeration`, `Object`, `ObjectArray`, `StringArray`, `Rmatrix`, `Filename`, `Color`... |
 | `readOnly` | bool | |
-| `default` | number, bool, string o `null` | valor de un objeto recién creado; `null` si es de solo lectura |
-| `enum?` | string[] | valores válidos |
+| `default` | number, bool, string or `null` | value of a newly created object; `null` if it is read-only |
+| `enum?` | string[] | valid values |
 | `unit?` | string | |
-| `refType?` | number | `Gmat::ObjectType` del objeto referido; solo `Object`/`ObjectArray` |
-| `stateType?` | string | solo elementos de estado de `Spacecraft`: representación a la que pertenece |
+| `refType?` | number | `Gmat::ObjectType` of the referenced object; only `Object`/`ObjectArray` |
+| `stateType?` | string | only `Spacecraft` state elements: representation it belongs to |
 
-`GET /parameters`: `dep` es `""` (`Sat.ElapsedDays`), `"Origin"` (`Sat.Earth.Altitude`) o `"CoordinateSystem"` (`Sat.EarthMJ2000Eq.X`); `depDefault` es el que pone el motor (`Earth`, `EarthMJ2000Eq`, `EarthFixed`). El motor no dice el dueño (nave, tanque…): el selector ofrece todos los recursos.
+`GET /parameters`: `dep` is `""` (`Sat.ElapsedDays`), `"Origin"` (`Sat.Earth.Altitude`) or `"CoordinateSystem"` (`Sat.EarthMJ2000Eq.X`); `depDefault` is the one the engine sets (`Earth`, `EarthMJ2000Eq`, `EarthFixed`). The engine does not say the owner (ship, tank…): the picker offers all resources.
 
-Espejo en TypeScript: `frontend/src/model/schema.ts`.
+TypeScript mirror: `frontend/src/model/schema.ts`.

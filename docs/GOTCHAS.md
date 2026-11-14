@@ -1,111 +1,111 @@
 <!-- fuente: backend/app/engine, backend/app/script, backend/app/main.py, frontend/src/store.ts, frontend/src/model/refs.ts, frontend/src/resources, dev.ps1 | rev: 4d753f5 -->
-# Trampas
+# Gotchas
 
-Leídas del código y comprobadas con el motor real donde dice "(verificado)".
+Read from the code and checked with the real engine where it says "(verified)".
 
-## Motor y workers (`engine/worker.py`)
-- **`gmatpy` solo en workers.** Singleton global por proceso. `tests/test_health.py` comprueba que no está en `sys.modules` del proceso API.
-- **Un worker muerto rompe el pool para siempre.** `worker.submit` no recrea el pool: tras un `BrokenProcessPool`, `/api/health` responde `status: "error"` hasta reiniciar el backend. Por eso lo que puede tumbar el motor va por `schema._isolated`, no por `submit`.
-- **El timeout de `submit` no mata la tarea.** Solo deja de esperarla; el worker sigue ocupado. `timeout=0` cuenta como "sin valor" y usa `TASK_TIMEOUT_S`.
-- **Scripts sueltos que usan `TestClient` necesitan `if __name__ == "__main__":`.** Los workers son `spawn` y reimportan el script principal; sin la guarda el pool se rompe (verificado).
-- **`api_startup_file.txt`.** Si falta en `GMAT_HOME/bin` se genera en `GMAT_WEB_CACHE` reemplazando todo `..` del `gmat_startup_file.txt` por `GMAT_HOME`. Escritura atómica; en Windows `os.replace` puede dar `PermissionError` y se ignora. Quedan temporales `api_startup_file.txt.<pid>` huérfanos en la caché [TODO: causa no confirmada].
-- **Cada corrida escribe su propio `startup.txt`** en la carpeta de la corrida con `OUTPUT_PATH` apuntando ahí. `_isolated` y el pool usan el startup común: su `OUTPUT_PATH` es el de GMAT.
-- **`cwd = GMAT_HOME/bin`** en corridas, validación, esquemas y `snapshot`: las rutas de entrada `../data/...` son relativas a `bin`.
+## Engine and workers (`engine/worker.py`)
+- **`gmatpy` only in workers.** Global singleton per process. `tests/test_health.py` checks that it is not in `sys.modules` of the API process.
+- **A dead worker breaks the pool forever.** `worker.submit` does not recreate the pool: after a `BrokenProcessPool`, `/api/health` responds `status: "error"` until the backend is restarted. That is why anything that can bring the engine down goes through `schema._isolated`, not through `submit`.
+- **The `submit` timeout does not kill the task.** It only stops waiting for it; the worker stays busy. `timeout=0` counts as "no value" and uses `TASK_TIMEOUT_S`.
+- **Standalone scripts that use `TestClient` need `if __name__ == "__main__":`.** Workers are `spawn` and reimport the main script; without the guard the pool breaks (verified).
+- **`api_startup_file.txt`.** If it is missing from `GMAT_HOME/bin` it is generated in `GMAT_WEB_CACHE` by replacing every `..` in `gmat_startup_file.txt` with `GMAT_HOME`. Atomic write; on Windows `os.replace` can give `PermissionError` and it is ignored. Orphan `api_startup_file.txt.<pid>` temporaries remain in the cache [TODO: cause not confirmed].
+- **Each run writes its own `startup.txt`** in the run folder with `OUTPUT_PATH` pointing there. `_isolated` and the pool use the common startup: its `OUTPUT_PATH` is GMAT's.
+- **`cwd = GMAT_HOME/bin`** in runs, validation, schemas and `snapshot`: the `../data/...` input paths are relative to `bin`.
 
-## Corridas (`engine/runner.py`)
-- **Limpieza por edad (`runner.prune`).** Al arrancar y en cada `create`: corridas terminadas hace más de `GMAT_WEB_RUN_KEEP` (3600 s) salen de `runs` y se borra su carpeta; carpetas `run-*`/`desk-*`/`val-*` de `GMAT_WEB_RUNS` que no están en `runs` se borran si su mtime pasó ese límite. Una corrida sin terminar nunca se borra. `run_desktop` borra su `desk-*` al acabar. `/files/{name}` de una corrida podada da 404.
-- **Cancelar es una bandera.** `DELETE /runs/{id}` marca `cancelled`; `_supervise` lo ve en su siguiente vuelta (0.2 s), hace `terminate` y emite `error` "Corrida detenida". Si el proceso acaba antes, la corrida termina con `done`. `DELETE` sobre una corrida terminada responde `{ok:true}` sin efecto.
-- **El timeout incluye cargar `gmatpy`.** `RUN_TIMEOUT_S` se mide desde que arranca el supervisor.
-- **Códigos de salida:** 0 = `done`; 2 = `LoadScript` falló; 3 = `RunScript` falló; otro = caída del motor ("El motor terminó con código N").
-- **`MAX_RUNS` cuenta corridas sin terminar.** Validar no cuenta y lanza un proceso propio por petición.
-- **Nivel de log por texto (`classify`).** `**** ERROR ****` o `Exception` en cualquier parte = error; `warning` sin distinguir mayúsculas = warning; una línea citada (`"  57: ..."`) = error con `line`. Los textos de error traen la ruta temporal del script.
-- **`done.results.files`** lista solo archivos del primer nivel de la carpeta, sin `HIDDEN` (`gmat.log`, `mission.script`, `startup.txt`, `GmatLog.txt`) ni `gmatweb_*`. `/files/{name}` sirve cualquier otro del primer nivel (incluye los `gmatweb_*`).
+## Runs (`engine/runner.py`)
+- **Cleanup by age (`runner.prune`).** At startup and on every `create`: runs finished more than `GMAT_WEB_RUN_KEEP` (3600 s) ago leave `runs` and their folder is deleted; `run-*`/`desk-*`/`val-*` folders in `GMAT_WEB_RUNS` that are not in `runs` are deleted if their mtime is past that limit. An unfinished run is never deleted. `run_desktop` deletes its `desk-*` when done. `/files/{name}` of a pruned run gives 404.
+- **Cancelling is a flag.** `DELETE /runs/{id}` marks `cancelled`; `_supervise` sees it on its next loop (0.2 s), does `terminate` and emits `error` "Corrida detenida". If the process finishes first, the run ends with `done`. `DELETE` on a finished run responds `{ok:true}` with no effect.
+- **The timeout includes loading `gmatpy`.** `RUN_TIMEOUT_S` is measured from when the supervisor starts.
+- **Exit codes:** 0 = `done`; 2 = `LoadScript` failed; 3 = `RunScript` failed; other = engine crash ("El motor terminó con código N").
+- **`MAX_RUNS` counts unfinished runs.** Validating does not count and launches its own process per request.
+- **Log level by text (`classify`).** `**** ERROR ****` or `Exception` anywhere = error; `warning` case-insensitive = warning; a quoted line (`"  57: ..."`) = error with `line`. Error texts carry the script's temporary path.
+- **`done.results.files`** lists only files at the top level of the folder, without `HIDDEN` (`gmat.log`, `mission.script`, `startup.txt`, `GmatLog.txt`) or `gmatweb_*`. `/files/{name}` serves any other top-level file (including the `gmatweb_*` ones).
 
-## Resultados (`engine/results.py`)
-- **Los reportes ocultos se inyectan como texto**, no con la API: `Construct('ReportFile')` + `SetField('Add')` no crea los parámetros ni los wrappers y `ScriptInterpreter.ValidateSubscriber` hace `RunScript` caer con access violation (verificado). Van justo antes de la primera línea `BeginMissionSequence`; sin ella no hay resultados.
-- **Líneas corridas:** el script que corre tiene N líneas más; `_supervise` resta N a toda `line` desde `manifest["at"]`. Un error dentro de las líneas inyectadas apunta a una línea cercana del usuario.
-- **Naves, XYPlot y ReportFile salen del texto** (`Create` y `X.Campo = ...`; las líneas con `...` se unen solo para leer, el texto no cambia). El ReportFile del usuario sin `Filename` se busca como `<nombre>.txt`.
-- **`SolverIterations = Current`** en los ocultos: con `None` GMAT omite también la pasada final de un Target; con `Current` escribe solo la pasada final, sin iteraciones (verificado en Hohmann, Mars B-Plane, TargetFiniteBurn). No se recorta nada por tiempo: los tramos `BackProp` quedan tal cual.
-- **Sin épocas de maniobra:** GMAT no publica el estado justo tras un `Maneuver` (no hay dos filas con la misma época).
-- **XYPlot oculto no sigue `Toggle`** ni el `SolverIterations` del XYPlot. Lat/lon siempre respecto a la Tierra (ignora `CentralBody` del GroundTrackPlot).
-- **ReportFile del usuario** (ancho fijo) se parte por 2+ espacios: una celda que llena su ancho exacto se pega a la vecina. Filas de `Report` con otras columnas salen con otro largo. Con `WriteHeaders = false` las cabeceras son los nombres del `Add` si cuadran con las columnas, si no `1..n`.
+## Results (`engine/results.py`)
+- **Hidden reports are injected as text**, not through the API: `Construct('ReportFile')` + `SetField('Add')` does not create the parameters or the wrappers, and `ScriptInterpreter.ValidateSubscriber` makes `RunScript` crash with an access violation (verified). They go right before the first `BeginMissionSequence` line; without it there are no results.
+- **Shifted lines:** the script that runs has N more lines; `_supervise` subtracts N from every `line` from `manifest["at"]` on. An error inside the injected lines points to a nearby user line.
+- **Ships, XYPlot and ReportFile come from the text** (`Create` and `X.Field = ...`; lines with `...` are joined only for reading, the text does not change). A user ReportFile without `Filename` is looked up as `<name>.txt`.
+- **`SolverIterations = Current`** in the hidden ones: with `None` GMAT also omits the final pass of a Target; with `Current` it writes only the final pass, without iterations (verified on Hohmann, Mars B-Plane, TargetFiniteBurn). Nothing is trimmed by time: `BackProp` segments stay as they are.
+- **No maneuver epochs:** GMAT does not publish the state right after a `Maneuver` (there are no two rows with the same epoch).
+- **The hidden XYPlot does not follow `Toggle`** nor the XYPlot's `SolverIterations`. Lat/lon always relative to Earth (ignores the GroundTrackPlot's `CentralBody`).
+- **User ReportFile** (fixed width) is split on 2+ spaces: a cell that fills its exact width sticks to its neighbor. `Report` rows with other columns come out with a different length. With `WriteHeaders = false` the headers are the `Add` names if they match the columns, otherwise `1..n`.
 
 ## Solvers (`engine/solver.py`)
-- **Se leen del texto de progreso de GMAT en `gmat.log`** (formato de `DifferentialCorrector::GetProgressString` y `Yukonad::GetProgressString`); si una versión de GMAT cambia esos textos, no salen eventos `solver` (el log sigue igual). Con `ShowProgress = false` no hay iteraciones: `SolverLog.silent` lista esos solvers (campo del script) y `_supervise` emite un evento `solver` `silent` al inicio; el frontend lo muestra como aviso en la consola. fmincon imprime `Control Sequence Pass N; Fmincon Pass` y restricciones `Cn  Achieved: v` (sin Desired), a veces dos secciones en una línea (formato del código, no probado: fmincon no está instalado).
-- **La tolerancia no sale en el log:** viene del `Achieve` del script (`{Tolerance = x}`, default 0.1); si es una expresión va como texto y no hay `met`. `met` = `|Variance| <= Tolerance`, el mismo criterio del DC.
-- **El cierre (`converged`/`did not converge`/`Completed in N`) no nombra al solver:** se asigna al último que empezó del mismo tipo (el más interno si hay anidados; una cabecera repetida sin cierre lo pasa al final). VF13ad y otros de base `Optimizer` no imprimen costo ni restricciones: solo variables.
-- **Un Target en un bucle** da una corrida de solver por pasada; el frontend guarda las últimas 200.
+- **They are read from GMAT's progress text in `gmat.log`** (format of `DifferentialCorrector::GetProgressString` and `Yukonad::GetProgressString`); if a GMAT version changes those texts, no `solver` events come out (the log stays the same). With `ShowProgress = false` there are no iterations: `SolverLog.silent` lists those solvers (script field) and `_supervise` emits a `silent` `solver` event at the start; the frontend shows it as a warning in the console. fmincon prints `Control Sequence Pass N; Fmincon Pass` and constraints `Cn  Achieved: v` (without Desired), sometimes two sections on one line (format from the code, not tested: fmincon is not installed).
+- **The tolerance is not in the log:** it comes from the script's `Achieve` (`{Tolerance = x}`, default 0.1); if it is an expression it goes as text and there is no `met`. `met` = `|Variance| <= Tolerance`, the same criterion as the DC.
+- **The close (`converged`/`did not converge`/`Completed in N`) does not name the solver:** it is assigned to the last one of the same type that started (the innermost if nested; a repeated header without a close moves it to the end). VF13ad and others based on `Optimizer` do not print cost or constraints: only variables.
+- **A Target in a loop** gives one solver run per pass; the frontend keeps the last 200.
 
-## Saneo (`engine/sanitize.py`)
-- **Trabaja línea por línea y no une `...`.** Un visor GUI con continuación queda a medias y el script no carga: `OV.Add = {Sat, ...` se comenta y la línea `Earth};` no (verificado). Un `Create` con continuación no se registra.
-- **`FORBIDDEN` es por token, sensible a mayúsculas.** Rechaza `CallPythonFunction`, `CallMatlabFunction`, `CallGmatFunction`, `SystemCommand`, `System`, `PythonFunction`, `MatlabFunction`, `GmatFunction`, `Save`, `SaveMission`, `Python.x`, `#Include`. Ignora strings y comentarios. Falso positivo: un recurso o variable llamado `System` o `Save` (verificado). No mira tokens precedidos de `.` (`Obj.Save` pasa).
-- **Solo se reescriben 4 campos de salida** (`Filename`, `OutputFile`, `ReportFile`, `MatlabFile`, sin distinguir mayúsculas), en cualquier objeto y también dentro de la secuencia. Se conserva solo el nombre del archivo: dos salidas con el mismo nombre en carpetas distintas chocan. Valor vacío = `output.txt`. [TODO: inventariar campos de salida del motor fuera de esta lista].
-- **Rutas de entrada (`_in_path`).** Todo campo que no es de salida (y `Filename` de `INPUT_TYPES`: `ThrustHistoryFile`, `FileInterface`, y `TrackingFileSet` si el script no tiene `Simulator`) con una ruta relativa que contiene `/` o `\` y existe desde `GMAT_HOME/samples` pasa a absoluta; si no existe se deja igual. No se validan: un script puede leer archivos fuera de la corrida (nunca escribir). `TrackingFileSet.FileName` con `Simulator` en el script es salida (el Simulator escribe el `.gmd`).
-- **Visores GUI** (`OpenFramesInterface`, `OpenFramesView`, `OrbitView`, `GroundTrackPlot`): se comenta toda línea que nombre uno, así que `Toggle OV RF On` pierde también `RF`.
-- **Conserva el número de líneas**; convierte CRLF a LF.
-- **El límite de tamaño vive aquí.** `/runs` responde 400 y `/script/validate` 200 con `ok:false`; solo `/script/parse` da 413. `/script/serialize` no tiene límite.
+## Sanitizing (`engine/sanitize.py`)
+- **It works line by line and does not join `...`.** A GUI viewer with a continuation is left half done and the script does not load: `OV.Add = {Sat, ...` is commented out and the line `Earth};` is not (verified). A `Create` with a continuation is not registered.
+- **`FORBIDDEN` is per token, case-sensitive.** It rejects `CallPythonFunction`, `CallMatlabFunction`, `CallGmatFunction`, `SystemCommand`, `System`, `PythonFunction`, `MatlabFunction`, `GmatFunction`, `Save`, `SaveMission`, `Python.x`, `#Include`. It ignores strings and comments. False positive: a resource or variable named `System` or `Save` (verified). It does not look at tokens preceded by `.` (`Obj.Save` passes).
+- **Only 4 output fields are rewritten** (`Filename`, `OutputFile`, `ReportFile`, `MatlabFile`, case-insensitive), in any object and also inside the sequence. Only the file name is kept: two outputs with the same name in different folders collide. Empty value = `output.txt`. [TODO: inventory engine output fields outside this list].
+- **Input paths (`_in_path`).** Every field that is not an output (and `Filename` of `INPUT_TYPES`: `ThrustHistoryFile`, `FileInterface`, and `TrackingFileSet` if the script has no `Simulator`) with a relative path that contains `/` or `\` and exists from `GMAT_HOME/samples` becomes absolute; if it does not exist it is left as is. They are not validated: a script can read files outside the run (never write). `TrackingFileSet.FileName` with a `Simulator` in the script is an output (the Simulator writes the `.gmd`).
+- **GUI viewers** (`OpenFramesInterface`, `OpenFramesView`, `OrbitView`, `GroundTrackPlot`): every line that names one is commented out, so `Toggle OV RF On` also loses `RF`.
+- **It preserves the number of lines**; converts CRLF to LF.
+- **The size limit lives here.** `/runs` responds 400 and `/script/validate` 200 with `ok:false`; only `/script/parse` gives 413. `/script/serialize` has no limit.
 
-## Esquemas (`engine/schema.py`)
-- **Algunos tipos tumban el motor** al leer sus campos (ej. `NuclearPowerSystem`). `_isolated` lanza un `Process` spawn por llamada con un `Pipe`; si el hijo muere da `None`, si pasa `TASK_TIMEOUT_S` lo mata y lanza `TimeoutError` (sin capturar en las rutas: 500). Una excepción del motor llega como `RuntimeError` con el texto.
-- **Un tipo que tumba el motor queda en caché como `null`** en disco. `GET /schema/{type}` responde 200 con `fields: null` y el frontend muestra error. Para reintentar hay que borrar el archivo de caché.
-- **Caché:** `GMAT_WEB_CACHE/schema/<versión>.v3.json`, reescrito completo con cada tipo nuevo. Si cambia la forma de lo guardado, subir el sufijo `.v3`. La versión y la caché en memoria duran lo que el proceso (`schema.reset()` es para pruebas). `_lock` global: las consultas de esquema van en serie.
-- **Nombres de tipo.** `PropSetup` se publica como `Propagator`. Del factory de PARAMETER solo salen `Variable`, `String`, `Array`. FminconOptimizer, VF13ad y GroundStation no salen (el motor no los lista). Hoy son 47 tipos.
-- **`ENUM_CANDIDATES` cubre `Spacecraft.DisplayStateType` y `Spacecraft.DateFormat`** (el motor da enum vacío) y se filtra probando `SetField`. `main.STATE_TYPES` usa la lista sin filtrar.
-- **`stateType` es la primera representación que usa el elemento.** `INC`, `RAAN`, `AOP`, `TA` y `SMA` salen como `Keplerian`; `RMAG`, `RA`, `DEC`, `VMAG` como `SphericalAZFPA` (verificado). `Editors.tsx` filtra por igualdad, así que en `ModifiedKeplerian` solo muestra `RadPer` y `RadApo`. Los cartesianos (`X`…`VZ`) no llevan `stateType`: el editor los trata como `Cartesian` a mano (`CART`).
-- **`default` es `null` en campos de solo lectura** (leerlos puede tumbar el motor).
+## Schemas (`engine/schema.py`)
+- **Some types bring the engine down** when reading their fields (e.g. `NuclearPowerSystem`). `_isolated` launches a spawn `Process` per call with a `Pipe`; if the child dies it gives `None`, if it exceeds `TASK_TIMEOUT_S` it kills it and raises `TimeoutError` (not caught in the routes: 500). An engine exception arrives as `RuntimeError` with the text.
+- **A type that brings the engine down stays cached as `null`** on disk. `GET /schema/{type}` responds 200 with `fields: null` and the frontend shows an error. To retry you have to delete the cache file.
+- **Cache:** `GMAT_WEB_CACHE/schema/<version>.v3.json`, fully rewritten with each new type. If the shape of what is stored changes, bump the `.v3` suffix. The version and the in-memory cache last as long as the process (`schema.reset()` is for tests). Global `_lock`: schema queries run serially.
+- **Type names.** `PropSetup` is published as `Propagator`. From the PARAMETER factory only `Variable`, `String`, `Array` come out. FminconOptimizer, VF13ad and GroundStation do not come out (the engine does not list them). Today there are 47 types.
+- **`ENUM_CANDIDATES` covers `Spacecraft.DisplayStateType` and `Spacecraft.DateFormat`** (the engine gives an empty enum) and is filtered by trying `SetField`. `main.STATE_TYPES` uses the unfiltered list.
+- **`stateType` is the first representation that uses the element.** `INC`, `RAAN`, `AOP`, `TA` and `SMA` come out as `Keplerian`; `RMAG`, `RA`, `DEC`, `VMAG` as `SphericalAZFPA` (verified). `Editors.tsx` filters by equality, so in `ModifiedKeplerian` it only shows `RadPer` and `RadApo`. The Cartesian ones (`X`…`VZ`) have no `stateType`: the editor treats them as `Cartesian` by hand (`CART`).
+- **`default` is `null` in read-only fields** (reading them can bring the engine down).
 
-## Parser y serializer (`script/`)
-- **Nunca descarta líneas:** lo no entendido va a `raw`. Qué va a `raw` y qué cambia de lugar: `docs/EXCEPCIONES_ROUNDTRIP.md` (Límites conocidos).
-- **`raw` se escribe después de todos los recursos y antes de `BeginMissionSequence`.** También caen ahí los comentarios del final del script (verificado), un `Create` repetido y las asignaciones de un recurso cuyo `Create` no se entendió.
-- **Sin `BeginMissionSequence` todo es zona de recursos:** los comandos van a `raw` y el serializer agrega la línea siempre.
-- **Formato estable, no idéntico al original.** Asignaciones sin prefijo `GMAT` (recursos y comandos `GMAT` sin etiqueta; con etiqueta se conserva), sangría de 3 espacios, línea en blanco tras cada recurso, comentarios del recurso juntos antes del `Create`. Los números salen con `repr`: `7100.` pasa a `7100.0`, `1.0e3` a `1000.0`; los enteros siguen enteros.
-- **Campos en orden de script.** Un campo anidado `Sat.Tank.X` tiene clave `Tank.X`.
-- **Valores:** identificador suelto que no es recurso = string (enum); cualquier otro token sin comillas (recurso, `Sat.X`, ruta) = `{ref}`. Valor con espacios fuera de `{}`/`[]` = no se entiende, va a `raw`.
-- **Comandos:** `text` es el resto tal cual y es lo único que escribe el serializer. `args` es una vista derivada de `text` (`_args`) para Propagate, Maneuver, Begin/EndFiniteBurn, Report, Toggle, `GMAT`, Target/Optimize (`{solver, opts}`), Vary/Achieve/Minimize/NonlinearConstraint (`{solver, lhs, op?, rhs?, opts?}`), If/While (`conds` con `join` `&`/`|`) y For (`step` vacío = forma `inicio:fin`); valores de `opts` van como texto (pueden ser expresiones); sintaxis rara (`Prop(Sat, {stop})`, `'Covariance'`) da `{}` y el formulario cae al editor de línea. Los formularios reescriben `text` y `args` juntos (`commands.toText`). Bloques: `Target`, `Optimize`, `If`, `While`, `For`, `BeginScript`. `Else` es un hijo más. Un bloque sin cerrar se serializa con su `End...`; un `End...` sin pareja queda como comando suelto.
-- **Comandos comentados:** en la secuencia, una línea `% Cmd ...;` con `Cmd` en `COMMENTABLE` es un comando con `disabled: true` (70 en los samples); se reescribe como `% Cmd ...;`. Bloques, `Else` y cierres no se pueden comentar (cambiaría la estructura): siguen siendo comentarios. Comentarios sin `;` final (`% Propagate to apoapsis`) siguen siendo comentarios.
-- **`'` como transpuesta:** una comilla pegada a identificador, `)`, `]`, `.` o `'` no abre string.
+## Parser and serializer (`script/`)
+- **It never discards lines:** what is not understood goes to `raw`. What goes to `raw` and what changes place: `docs/ROUNDTRIP_EXCEPTIONS.md` (Known limits).
+- **`raw` is written after all resources and before `BeginMissionSequence`.** Comments at the end of the script also land there (verified), as do a repeated `Create` and the assignments of a resource whose `Create` was not understood.
+- **Without `BeginMissionSequence` everything is the resource zone:** commands go to `raw` and the serializer always adds the line.
+- **Stable format, not identical to the original.** Assignments without the `GMAT` prefix (resources and `GMAT` commands without a label; with a label it is kept), 3-space indentation, blank line after each resource, the resource's comments together before the `Create`. Numbers come out with `repr`: `7100.` becomes `7100.0`, `1.0e3` becomes `1000.0`; integers stay integers.
+- **Fields in script order.** A nested field `Sat.Tank.X` has key `Tank.X`.
+- **Values:** a bare identifier that is not a resource = string (enum); any other unquoted token (resource, `Sat.X`, path) = `{ref}`. A value with spaces outside `{}`/`[]` = not understood, goes to `raw`.
+- **Commands:** `text` is the rest as is and is the only thing the serializer writes. `args` is a view derived from `text` (`_args`) for Propagate, Maneuver, Begin/EndFiniteBurn, Report, Toggle, `GMAT`, Target/Optimize (`{solver, opts}`), Vary/Achieve/Minimize/NonlinearConstraint (`{solver, lhs, op?, rhs?, opts?}`), If/While (`conds` with `join` `&`/`|`) and For (empty `step` = `start:end` form); `opts` values go as text (they can be expressions); odd syntax (`Prop(Sat, {stop})`, `'Covariance'`) gives `{}` and the form falls back to the line editor. Forms rewrite `text` and `args` together (`commands.toText`). Blocks: `Target`, `Optimize`, `If`, `While`, `For`, `BeginScript`. `Else` is just another child. An unclosed block is serialized with its `End...`; an unpaired `End...` stays as a standalone command.
+- **Commented-out commands:** in the sequence, a `% Cmd ...;` line with `Cmd` in `COMMENTABLE` is a command with `disabled: true` (70 in the samples); it is rewritten as `% Cmd ...;`. Blocks, `Else` and closers cannot be commented out (it would change the structure): they remain comments. Comments without a trailing `;` (`% Propagate to apoapsis`) remain comments.
+- **`'` as transpose:** a quote attached to an identifier, `)`, `]`, `.` or `'` does not open a string.
 
-## Sincronía script ↔ modelo (`store.ts`)
-- **Contador `seq`:** gana el último cambio, venga del texto o del modelo. `editText` ignora el eco del editor comparando el texto.
-- **`setMission` es optimista.** Cambia el modelo y luego pide el texto. Si `serialize` falla, el modelo queda adelantado al texto y la siguiente edición del texto lo pisa.
-- **Reescribir el texto sube `doc.rev`** y `ScriptEditor` hace `setValue`: se pierde el undo de Monaco y el cursor.
-- **Correr y validar usan `doc.text`,** no el modelo; ambos vacían la consola (máximo 5000 líneas).
-- **`parseError` casi nunca aparece:** el parser no rechaza scripts; solo 413 o fallo de red. Con error queda el último modelo bueno.
-- **El modelo va ~400 ms detrás del texto** (debounce). Excepción: `loadText('')` (Nuevo) vacía el modelo al instante.
-- **Marcadores de Monaco** salen de `store.logs` con `line` (validar o correr) y se borran al reemplazar el texto (`doc.rev`). Tras editar a mano pueden quedar en una línea corrida hasta la siguiente validación.
-- **Sin reintentos.** `schemas[tipo] = 'error'` dura hasta recargar la página. Si falla `fetchTypes`, todo el árbol cae en "other" y solo se puede crear `Spacecraft`.
-- **WebSocket cerrado sin `done`/`error`** = mensaje de conexión perdida. `stop` solo manda el `DELETE`; el fin llega por el WebSocket.
+## Script ↔ model sync (`store.ts`)
+- **`seq` counter:** the last change wins, whether it comes from the text or the model. `editText` ignores the editor's echo by comparing the text.
+- **`setMission` is optimistic.** It changes the model and then requests the text. If `serialize` fails, the model stays ahead of the text and the next text edit overwrites it.
+- **Rewriting the text bumps `doc.rev`** and `ScriptEditor` does `setValue`: Monaco's undo and the cursor are lost.
+- **Running and validating use `doc.text`,** not the model; both clear the console (maximum 5000 lines).
+- **`parseError` almost never appears:** the parser does not reject scripts; only 413 or a network failure. On error the last good model remains.
+- **The model lags ~400 ms behind the text** (debounce). Exception: `loadText('')` (Nuevo) clears the model instantly.
+- **Monaco markers** come from `store.logs` with `line` (validate or run) and are cleared when the text is replaced (`doc.rev`). After editing by hand they can stay on a shifted line until the next validation.
+- **No retries.** `schemas[type] = 'error'` lasts until the page is reloaded. If `fetchTypes` fails, the whole tree falls into "other" and only `Spacecraft` can be created.
+- **WebSocket closed without `done`/`error`** = connection lost message. `stop` only sends the `DELETE`; the end arrives through the WebSocket.
 
-## Árbol y formulario (`resources/`, `model/refs.ts`)
-- **Crear `Array` desde el árbol da `Create Array Array1;` sin dimensiones y GMAT no lo carga** (verificado).
-- **Nombres:** el árbol exige `^[A-Za-z]\w*$`; el parser también acepta `_` inicial.
-- **Renombrar** reemplaza el nombre como token suelto en valores `{ref}`, texto de comandos (incluye strings entre comillas dentro del comando), `endText` y líneas `raw`. No toca etiquetas, comentarios ni valores string.
-- **Borrar no limpia referencias:** solo las lista en el diálogo. Clonar pierde los comentarios. Renombrar/borrar usan un `<dialog>` propio (`AskDialog` en `ResourceTree.tsx`); renombrar valida en el campo.
-- **Quitar un cuerpo de `PrimaryBodies`** quita sus `GravityField.<cuerpo>.*` (`tidy` de `Field`, en `ForceModelEditor`). Editar el texto a mano no lo hace.
-- **Grupos del árbol:** `EVENT_LOCATOR`, `FIELD_OF_VIEW` y los tipos que el motor no lista caen en "other".
-- **Controles del formulario:** `Boolean` = casilla; campo con `enum` = lista; resto = texto, con sugerencias si trae `refType`. No se muestran los de solo lectura. Texto vacío o ↺ quita el campo del script (vuelve al default).
-- **Listas y matrices:** todo tipo con `Array`, `Rvector`, `Rmatrix` o `Unsigned` se parte por espacios y comas en una lista plana. Una `Rmatrix` pierde sus filas.
-- **Campos que el motor no lista** (`GravityField.<cuerpo>.Degree/Order/PotentialFile`, `Drag.AtmosphereModel`, pasos del integrador del Propagator: `InitialStepSize`, `Accuracy`, `MinStep`, `MaxStep`, `MaxStepAttempts`, `StopIfAccuracyIsViolated`) los define `Editors.tsx` a mano (`syn`) con los defaults de GMAT; listas de cuerpos, atmósferas, integradores y formatos de época también son fijas. El esquema de `Propagator` solo trae `FM` y `Type`; el de ForceModel no trae `GravityField.*` (verificado).
-- **Arrastre:** GMAT escribe `FM.Drag = None` sin arrastre y `FM.Drag.AtmosphereModel = X` con él; el editor quita `Drag` y todo `Drag.*` al cambiar de modelo. Igual con `SRP`: GMAT rechaza `SRP.Flux`/`SRP.SRPModel`/`SRP.Nominal_Sun` con `SRP = Off` (verificado), así que cambiar SRP quita todo `SRP.*` (`tests/test_leo.py`).
-- **Select con `enum` cuyo valor es un recurso** guarda `{ref}` (si fuera string el serializer lo pondría entre comillas). El Propagator usa eso para `FM` (lista de ForceModel del modelo).
-- **`patch` de `Editors.tsx` borra y reescribe la clave:** lo cambiado pasa al final del recurso, así `DisplayStateType` queda antes de los elementos y `DateFormat` antes de `Epoch`.
-- **Cambiar `DisplayStateType`** convierte con el motor los elementos de la representación actual (o sus defaults), quita esos y escribe los nuevos; elementos de otras representaciones quedan donde estaban.
-- **Campo `Object` con un nombre que no es recurso** (ej. `Earth`) se guarda como string; si no es identificador (`Sat.X`) sale entre comillas.
+## Tree and form (`resources/`, `model/refs.ts`)
+- **Creating an `Array` from the tree gives `Create Array Array1;` without dimensions and GMAT does not load it** (verified).
+- **Names:** the tree requires `^[A-Za-z]\w*$`; the parser also accepts a leading `_`.
+- **Renaming** replaces the name as a standalone token in `{ref}` values, command text (including quoted strings inside the command), `endText` and `raw` lines. It does not touch labels, comments or string values.
+- **Deleting does not clean up references:** it only lists them in the dialog. Cloning loses the comments. Rename/delete use their own `<dialog>` (`AskDialog` in `ResourceTree.tsx`); rename validates in the field.
+- **Removing a body from `PrimaryBodies`** removes its `GravityField.<body>.*` (`tidy` of `Field`, in `ForceModelEditor`). Editing the text by hand does not do it.
+- **Tree groups:** `EVENT_LOCATOR`, `FIELD_OF_VIEW` and the types the engine does not list fall into "other".
+- **Form controls:** `Boolean` = checkbox; field with `enum` = list; the rest = text, with suggestions if it has `refType`. Read-only ones are not shown. Empty text or ↺ removes the field from the script (back to the default).
+- **Lists and matrices:** every type with `Array`, `Rvector`, `Rmatrix` or `Unsigned` is split on spaces and commas into a flat list. An `Rmatrix` loses its rows.
+- **Fields the engine does not list** (`GravityField.<body>.Degree/Order/PotentialFile`, `Drag.AtmosphereModel`, Propagator integrator steps: `InitialStepSize`, `Accuracy`, `MinStep`, `MaxStep`, `MaxStepAttempts`, `StopIfAccuracyIsViolated`) are defined by hand in `Editors.tsx` (`syn`) with GMAT's defaults; lists of bodies, atmospheres, integrators and epoch formats are also fixed. The `Propagator` schema only has `FM` and `Type`; the ForceModel one has no `GravityField.*` (verified).
+- **Drag:** GMAT writes `FM.Drag = None` without drag and `FM.Drag.AtmosphereModel = X` with it; the editor removes `Drag` and every `Drag.*` when the model changes. Same with `SRP`: GMAT rejects `SRP.Flux`/`SRP.SRPModel`/`SRP.Nominal_Sun` with `SRP = Off` (verified), so changing SRP removes every `SRP.*` (`tests/test_leo.py`).
+- **A select with `enum` whose value is a resource** stores `{ref}` (if it were a string the serializer would put it in quotes). The Propagator uses that for `FM` (list of the model's ForceModels).
+- **`patch` in `Editors.tsx` deletes and rewrites the key:** what changed moves to the end of the resource, so `DisplayStateType` stays before the elements and `DateFormat` before `Epoch`.
+- **Changing `DisplayStateType`** converts with the engine the elements of the current representation (or their defaults), removes those and writes the new ones; elements of other representations stay where they were.
+- **An `Object` field with a name that is not a resource** (e.g. `Earth`) is stored as a string; if it is not an identifier (`Sat.X`) it comes out in quotes.
 
-## Secuencia (`mission/`)
-- **El comando seleccionado es una ruta de índices** (`selectedCmd`). Si el script cambia desde el editor, la ruta puede apuntar a otro comando; mover/agregar/borrar la actualiza.
-- **Agregar** inserta dentro del bloque seleccionado (al final) o después del comando seleccionado. Soltar sobre un bloque: tercio superior = antes, resto = primer hijo; sobre la fila `End…` = último hijo; sobre el hueco final = al final de la raíz.
-- **Editor de línea:** analiza `BeginMissionSequence;
-<línea>;` con `/api/script/parse` y rechaza si no sale un solo comando o si pasa de bloque a no bloque.
-- **Comandos nuevos** usan el primer recurso del tipo (o nombres por defecto de GMAT como `DefaultSC`, `DC`): pueden no cargar hasta crear esos recursos.
-- **`/api/parameters`** va por `_isolated` porque `Construct` deja objetos en la configuración del worker. Si el motor se cae no se guarda en caché (reintenta en la próxima llamada); en el frontend `'error'` dura hasta recargar.
+## Sequence (`mission/`)
+- **The selected command is a path of indices** (`selectedCmd`). If the script changes from the editor, the path can point to another command; move/add/delete updates it.
+- **Adding** inserts inside the selected block (at the end) or after the selected command. Dropping on a block: top third = before, the rest = first child; on the `End…` row = last child; on the final gap = at the end of the root.
+- **Line editor:** parses `BeginMissionSequence;
+<line>;` with `/api/script/parse` and rejects if it does not come out as a single command or if it goes from block to non-block.
+- **New commands** use the first resource of the type (or GMAT default names like `DefaultSC`, `DC`): they may not load until those resources are created.
+- **`/api/parameters`** goes through `_isolated` because `Construct` leaves objects in the worker's configuration. If the engine crashes it is not cached (it retries on the next call); in the frontend `'error'` lasts until reload.
 
-## Conversión de estado
-`/api/convert/state` solo usa `EarthMJ2000Eq`, sin CS ni época propios (el editor de Spacecraft no manda su `CoordinateSystem`). `/api/convert/epoch` cambia `DateFormat` en un Spacecraft del motor, que reescribe `Epoch` (verificado); la época va entre comillas al script: solo `[\w :.-]`, máx. 40. Los elementos se interpolan en un script: solo identificadores y números finitos (validado en `main.py`).
+## State conversion
+`/api/convert/state` only uses `EarthMJ2000Eq`, without its own CS or epoch (the Spacecraft editor does not send its `CoordinateSystem`). `/api/convert/epoch` changes `DateFormat` on an engine Spacecraft, which rewrites `Epoch` (verified); the epoch goes in quotes into the script: only `[\w :.-]`, max. 40. The elements are interpolated into a script: only identifiers and finite numbers (validated in `main.py`).
 
-## Entorno de desarrollo
-- **`dev.ps1` no avisa si los puertos están ocupados** (verificado). Con un backend viejo en `:8000`, uvicorn falla con `[Errno 10048]`, Vite sube a `:5174` y el proxy habla con el backend viejo: `/api/health` da `ok` y las rutas nuevas dan 404. Revisar con `netstat -ano | findstr ":8000 :5173"`.
-- **Avisos esperados:** pytest muestra `StarletteDeprecationWarning` (httpx); `npm run build` avisa de un chunk mayor a 500 kB (Monaco).
-- **Samples:** 77 de 88 samples raíz corren (tabla en `docs/COMPATIBILIDAD.md`, `python -m app.batch`); 8 rechazados por sanitize y 3 usan plugins comentados en el startup file (MarsGRAM, ExternalForceModel). El lote solo marca `plugin` lo que el startup activo deja comentado. No es bug del port.
-- **Rutas de entrada relativas se buscan en la carpeta del script** (`GmatFileUtil::FindFile`), que en la web es la corrida: por eso sanitize pasa a absolutas las que existen desde `GMAT_HOME/samples` (verificado: `Ex_Propagate_ThrustHistoryFile`, `Ex_Contact_Location_Station_Mask`, `Tut_Orbit_Estimation_using_DSN_Range_and_Doppler_Data` corren).
-- **Windows:** Git avisa `LF` → `CRLF` al commitear. `dev.sh` solo se verificó con `sh -n`.
+## Development environment
+- **`dev.ps1` does not warn if the ports are taken** (verified). With an old backend on `:8000`, uvicorn fails with `[Errno 10048]`, Vite moves up to `:5174` and the proxy talks to the old backend: `/api/health` gives `ok` and the new routes give 404. Check with `netstat -ano | findstr ":8000 :5173"`.
+- **Expected warnings:** pytest shows `StarletteDeprecationWarning` (httpx); `npm run build` warns about a chunk larger than 500 kB (Monaco).
+- **Samples:** 77 of 88 root samples run (table in `docs/COMPATIBILITY.md`, `python -m app.batch`); 8 rejected by sanitize and 3 use plugins commented out in the startup file (MarsGRAM, ExternalForceModel). The batch only marks as `plugin` what the active startup leaves commented out. It is not a bug in the port.
+- **Relative input paths are looked up in the script's folder** (`GmatFileUtil::FindFile`), which on the web is the run: that is why sanitize makes absolute the ones that exist from `GMAT_HOME/samples` (verified: `Ex_Propagate_ThrustHistoryFile`, `Ex_Contact_Location_Station_Mask`, `Tut_Orbit_Estimation_using_DSN_Range_and_Doppler_Data` run).
+- **Windows:** Git warns `LF` → `CRLF` when committing. `dev.sh` was only verified with `sh -n`.
