@@ -30,6 +30,12 @@ Leídas del código y comprobadas con el motor real donde dice "(verificado)".
 - **XYPlot oculto no sigue `Toggle`** ni el `SolverIterations` del XYPlot. Lat/lon siempre respecto a la Tierra (ignora `CentralBody` del GroundTrackPlot).
 - **ReportFile del usuario** (ancho fijo) se parte por 2+ espacios: una celda que llena su ancho exacto se pega a la vecina. Filas de `Report` con otras columnas salen con otro largo. Con `WriteHeaders = false` las cabeceras son los nombres del `Add` (de una sola línea) si cuadran con las columnas, si no `1..n`.
 
+## Solvers (`engine/solver.py`)
+- **Se leen del texto de progreso de GMAT en `gmat.log`** (formato de `DifferentialCorrector::GetProgressString` y `Yukonad::GetProgressString`); si una versión de GMAT cambia esos textos, no salen eventos `solver` (el log sigue igual). Con `ShowProgress = false` no hay eventos (verificado en el código, no probado).
+- **La tolerancia no sale en el log:** viene del `Achieve` del script (`{Tolerance = x}`, default 0.1); si es una expresión va como texto y no hay `met`. `met` = `|Variance| <= Tolerance`, el mismo criterio del DC.
+- **El cierre (`converged`/`did not converge`) no nombra al solver:** se asigna al último activo del mismo tipo. Optimizadores que no son Yukon (base `Optimizer`) no imprimen costo ni restricciones: solo variables.
+- **Un Target en un bucle** da una corrida de solver por pasada; el frontend guarda las últimas 200.
+
 ## Saneo (`engine/sanitize.py`)
 - **Trabaja línea por línea y no une `...`.** Un visor GUI con continuación queda a medias y el script no carga: `OV.Add = {Sat, ...` se comenta y la línea `Earth};` no (verificado). Un `Create` con continuación no se registra.
 - **`FORBIDDEN` es por token, sensible a mayúsculas.** Rechaza `CallPythonFunction`, `CallMatlabFunction`, `CallGmatFunction`, `SystemCommand`, `System`, `PythonFunction`, `MatlabFunction`, `GmatFunction`, `Save`, `SaveMission`, `Python.x`, `#Include`. Ignora strings y comentarios. Falso positivo: un recurso o variable llamado `System` o `Save` (verificado). No mira tokens precedidos de `.` (`Obj.Save` pasa).

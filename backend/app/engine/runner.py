@@ -13,6 +13,7 @@ from pathlib import Path
 from app import config
 from app.engine import results, worker
 from app.engine.sanitize import sanitize
+from app.engine.solver import SolverLog
 
 LOG = "gmat.log"
 SCRIPT = "mission.script"
@@ -101,6 +102,7 @@ def create(text: str) -> Run:
 async def _supervise(run: Run) -> None:
     start, pos, buf, last_tick = time.monotonic(), 0, "", 0
     log = run.dir / LOG
+    solver = SolverLog((run.dir / SCRIPT).read_text(encoding="utf-8"))
 
     async def drain(final: bool = False):
         nonlocal pos, buf
@@ -118,6 +120,8 @@ async def _supervise(run: Run) -> None:
                 if "line" in ev:  # el script corrido lleva líneas inyectadas antes de BeginMissionSequence
                     ev["line"] = results.original_line(ev["line"], run.manifest)
                 await run.emit(ev)
+                for sev in solver.feed(line.rstrip("\r")):
+                    await run.emit(sev)
 
     while run.proc.is_alive():
         await asyncio.sleep(0.2)

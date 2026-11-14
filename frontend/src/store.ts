@@ -1,11 +1,11 @@
 import { create } from 'zustand'
 import { es } from './i18n/es'
 import type { Command, Mission } from './model/mission'
-import type { Results } from './model/results'
+import type { Results, SolverEvent, SolverRun } from './model/results'
 import type { FieldSchema, ParamInfo, TypeInfo } from './model/schema'
 
 export type LeftTab = 'resources' | 'mission'
-export type CenterTab = 'editor' | 'resource' | 'command' | 'view3d' | 'results'
+export type CenterTab = 'editor' | 'resource' | 'command' | 'view3d' | 'results' | 'solver'
 type Engine = { state: 'checking' | 'ready' | 'error'; version?: string; detail?: string }
 export type LogLevel = 'info' | 'warning' | 'error' | 'system'
 export type LogEntry = { level: LogLevel; text: string; line?: number }
@@ -17,9 +17,12 @@ type RunEvent =
   | { type: 'progress'; elapsed: number }
   | { type: 'done'; results: { elapsed: number; files: string[]; available?: boolean } }
   | { type: 'error'; message: string }
+  | ({ type: 'solver' } & SolverEvent)
 
 // shortcut: la consola guarda solo las últimas líneas; subir o virtualizar si hace falta el log completo.
 const MAX_LOG = 5000
+// shortcut: solo las últimas corridas de solver (un Target en un bucle puede dar cientos); subir si hace falta.
+const MAX_SOLVERS = 200
 
 type AppState = {
   leftTab: LeftTab
@@ -41,6 +44,8 @@ type AppState = {
   parameters: ParamInfo[] | 'error' | null
   /** Resultados de la última corrida terminada con datos (se vacía al correr de nuevo). */
   results: Results | null
+  /** Corridas de solvers (Target/Optimize) de la corrida actual, en vivo. */
+  solvers: SolverRun[]
   setLeftTab: (t: LeftTab) => void
   setCenterTab: (t: CenterTab) => void
   checkEngine: () => Promise<void>
@@ -91,6 +96,22 @@ export const useApp = create<AppState>((set, get) => {
     }, PARSE_DELAY_MS)
   }
 
+  const onSolver = (ev: SolverEvent) => {
+    if (ev.event === 'start') {
+      const { event: _, ...rest } = ev
+      return set((st) => ({ solvers: [...st.solvers, { ...rest, rows: [], status: 'running' as const }].slice(-MAX_SOLVERS) }))
+    }
+    if (ev.event === 'end' && ev.status === 'failed') log({ level: 'warning', text: es.solver.failedLog(ev.solver, ev.iterations) })
+    set((st) => ({
+      solvers: st.solvers.map((r) => {
+        if (r.run !== ev.run) return r
+        if (ev.event === 'end') return { ...r, status: ev.status, iterations: ev.iterations, message: ev.message }
+        const { event: _, run: _r, solver: _s, ...row } = ev
+        return { ...r, rows: [...r.rows, row] }
+      }),
+    }))
+  }
+
   return {
     leftTab: 'resources',
     centerTab: 'editor',
@@ -108,6 +129,7 @@ export const useApp = create<AppState>((set, get) => {
     selectedCmd: null,
     parameters: null,
     results: null,
+    solvers: [],
     setLeftTab: (leftTab) => set({ leftTab }),
     setCenterTab: (centerTab) => set({ centerTab }),
     checkEngine: async () => {
@@ -124,7 +146,7 @@ export const useApp = create<AppState>((set, get) => {
       }
     },
     loadText: (text, name) => {
-      set((st) => ({ doc: { text, name, rev: st.doc.rev + 1 }, centerTab: 'editor', selected: null, selectedCmd: null, results: null }))
+      set((st) => ({ doc: { text, name, rev: st.doc.rev + 1 }, centerTab: 'editor', selected: null, selectedCmd: null, results: null, solvers: [] }))
       parseLater()
     },
     editText: (text) => {
@@ -147,7 +169,7 @@ export const useApp = create<AppState>((set, get) => {
     },
     run: async () => {
       if (get().runId) return
-      set({ logs: [{ level: 'system', text: es.run.starting(get().doc.name) }], elapsed: 0, results: null })
+      set({ logs: [{ level: 'system', text: es.run.starting(get().doc.name) }], elapsed: 0, results: null, solvers: [] })
       let body
       try {
         const r = await fetch('/api/runs', {
@@ -170,6 +192,7 @@ export const useApp = create<AppState>((set, get) => {
         const ev: RunEvent = JSON.parse(m.data)
         if (ev.type === 'log') log({ level: ev.level, text: ev.text, line: ev.line })
         else if (ev.type === 'progress') set({ elapsed: ev.elapsed })
+        else if (ev.type === 'solver') onSolver(ev)
         else if (ev.type === 'done') {
           log({ level: 'system', text: es.run.done(ev.results.elapsed, ev.results.files) })
           finish()

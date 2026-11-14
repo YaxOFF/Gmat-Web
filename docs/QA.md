@@ -93,3 +93,9 @@ await window.__dnd(__find('Prop 1 Day'),__find('Prop to Perigee'),0.2)
 - `requestAnimationFrame` en la ventana de Chrome MCP va a ~1 fps (incluso sin WebGL): no sirve para medir fps. Un `javascript_tool` >45 s da timeout de CDP: partir en pasos.
 - Pestañas Editor/3D/Resultados x6: 1 `.cesium-viewer` constante, heap en diente de sierra (sin fuga).
 - La pestaña 3D arranca en pausa: clic en ▶ (333,608 en 1568 px). Los clics 'scroll' de `computer` hacen zoom de Cesium.
+
+### Fase 7a (Solvers en vivo)
+- API: ayudante WS (python `websockets`, `additional_headers={'Origin':'http://localhost:5175'}`, URL `/api/ws/runs/{id}`): imprimir eventos `type:'solver'`. Hohmann: 12 iteraciones, ultima TOI 2.24028397735 / GOI 1.432966302, `end` converged. Con `DC.MaximumIterations = 3;` antes de `BeginMissionSequence`: `end` failed, 3 iteraciones. `Ex_Yukon_AlgebraicOptimization`: kind Optimize, converged.
+- UI: pestana Solver; aviso verde/rojo (`role=status|alert`); linea de consola amarilla (color rgb(210,153,34)) "Aviso: el solver DC no convergio". Sin Target/Optimize: mensaje vacio.
+- Movil sin resize: en la pagina, `document.body.innerHTML=''` + `<iframe src="/" width=390>` mismo origen; cargar script y clics via `iframe.contentDocument`; capturar con `computer`. Ojo: el scrollWidth de 717 a 390 px ya existe en todas las pestanas (app no responsiva).
+- Medir solapamiento grafica/tabla: `getBoundingClientRect` de `[class*=_chart_]` vs su padre `[class*=_view_]`.

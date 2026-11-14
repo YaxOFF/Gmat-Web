@@ -11,7 +11,9 @@
 .btn:hover { border-color: var(--accent); }
 .muted { color: var(--text-muted); font-size: .9em; }
 .chart { color: var(--text); background: var(--surface); }
-.tableWrap { overflow: auto; flex: 1; min-height: 0; border: 1px solid var(--border); }
+/* la vista con gráfica toma su alto natural (380 px + barra): no se encoge bajo la tabla; .root hace scroll */
+.view:has(> .chart) { flex: none; }
+.tableWrap { overflow: auto; flex: 1; min-height: 200px; border: 1px solid var(--border); }
 .table { border-collapse: collapse; font-family: var(--mono); font-size: 12px; white-space: nowrap; }
 .table th { position: sticky; top: 0; background: var(--surface-2); text-align: left; }
 .table th, .table td { padding: 2px 8px; border-bottom: 1px solid var(--border); }
@@ -24,3 +26,7 @@
 .end { fill: var(--error); }
 .globe { flex: 1; min-height: 300px; position: relative; }
 .bar select { padding: 2px 6px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); color: var(--text); }
+.banner { padding: 6px 10px; border: 1px solid var(--border); border-left: 4px solid var(--text-muted); border-radius: var(--radius); }
+.banner[data-status='converged'] { border-left-color: var(--ok); }
+.banner[data-status='failed'] { border-left-color: var(--error); color: var(--error); font-weight: 600; }
+.banner[data-status='running'] { border-left-color: var(--warn); }

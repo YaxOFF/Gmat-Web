@@ -25,7 +25,7 @@ function downloadCsv(name: string, headers: string[], rows: Cell[][]) {
   URL.revokeObjectURL(url)
 }
 
-function Table({ name, headers, rows, file }: { name: string; headers: string[]; rows: Cell[][]; file?: string }) {
+export function Table({ name, headers, rows, file }: { name: string; headers: string[]; rows: Cell[][]; file?: string }) {
   const runId = useApp((st) => st.results?.runId)
   const shown = rows.slice(0, MAX_TABLE_ROWS)
   return (
@@ -45,7 +45,7 @@ function Table({ name, headers, rows, file }: { name: string; headers: string[];
   )
 }
 
-function XYChart({ plot }: { plot: XYPlotResult }) {
+export function XYChart({ plot, log }: { plot: XYPlotResult; log?: boolean }) {
   const el = useRef<HTMLDivElement>(null)
   const chart = useRef<uPlot | null>(null)
   useEffect(() => {
@@ -56,7 +56,7 @@ function XYChart({ plot }: { plot: XYPlotResult }) {
     // shortcut: uPlot asume x creciente (tiempo); una gráfica X contra Y se dibuja en orden de filas.
     const u = new uPlot({
       width: box.clientWidth, height: 380,
-      scales: { x: { time: false } },
+      scales: { x: { time: false }, ...(log && { y: { distr: 3 } }) },
       cursor: { drag: { x: true, y: true } },
       axes: [{ stroke: color, grid }, { stroke: color, grid }],
       series: [{ label: plot.x.name }, ...plot.series.map((y, i) => ({ label: y.name, stroke: COLORS[i % COLORS.length] }))],
@@ -65,7 +65,7 @@ function XYChart({ plot }: { plot: XYPlotResult }) {
     const ro = new ResizeObserver(() => u.setSize({ width: box.clientWidth, height: 380 }))
     ro.observe(box)
     return () => { ro.disconnect(); u.destroy(); chart.current = null }
-  }, [plot])
+  }, [plot, log])
 
   const png = () => {
     const src = chart.current?.ctx.canvas
