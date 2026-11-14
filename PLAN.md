@@ -130,6 +130,7 @@ Detalle original:
 Meta: cerrar los fallos que QA dejó anotados en Bitácora y ver el comportamiento con muchas más misiones antes de pulir la UX. Si no cabe, partir en **7c1** (arreglos) y **7c2** (más misiones).
 - **Arreglos de backend:**
   - Rutas de entrada relativas: fijar el directorio de trabajo del motor (`GmatWorkingDirectory` o equivalente) para que `../samples/SupportFiles/...` resuelva como en escritorio. Casos: Ex_Propagate_ThrustHistoryFile y Ex_Contact_Location_Station_Mask.
+  - `sanitize` reescribe `TrackingFileSet.FileName` aunque sea una entrada (`.gmd` que lee el estimador), y por eso falla Tut_Orbit_Estimation_using_DSN_Range_and_Doppler_Data. Hay que distinguir entrada de salida sin dejar escribir fuera de la carpeta de la corrida. Una opción: si el archivo ya existe en samples, se trata como entrada de solo lectura.
   - Limpiar las carpetas `run-*`/`desk-*` y el dict `runs` (Fase 2).
   - El corte por timeout no debe depender de `pool._processes` (Fase 3b).
   - Enum de `DateFormat` vacío (Fase 3b).
