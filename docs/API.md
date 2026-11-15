@@ -1,6 +1,7 @@
 <!-- fuente: backend/app/main.py, backend/app/engine/runner.py, backend/app/engine/schema.py, frontend/src/model/schema.ts | rev: 1a95f8e -->
 # API (prefix `/api`)
-nWith `GMAT_WEB_STATIC` set (Docker), every non-`/api` path serves the frontend build (`StaticFiles(html=True)` mounted last in `main.py`).
+
+With `GMAT_WEB_STATIC` set (Docker), every non-`/api` path serves the frontend build (`StaticFiles(html=True)` mounted last in `main.py`).
 
 | Method and path | Body | Response |
 |---|---|---|
