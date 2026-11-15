@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { Crater } from '../data/types'
 import { clamp, mulberry32, type Rng } from '../engine/rng'
 import { buildLander } from './spacecraft'
@@ -24,7 +23,6 @@ export const DEFAULT_ROVER: RoverStart = { batteryPct: 100, sciMul: 1, integrity
 const SIZE = 240, HALF = SIZE / 2, RIM = 92, SEG = 200
 const DRILL_T = 5 // s por perforación: el brazo se despliega (0.9), baja (0.5) y perfora el resto
 const DRILL_BUSY = DRILL_T - 1.4 - 0.2 // s con la broca adentro (el margen evita que el corte termine antes)
-const CLIMB = 0.5 // m: una roca que sobresale hasta aquí se pasa por encima (el rocker-bogie la trepa); más alta, es obstáculo
 // Suelo: un mosaico de la textura del mundo (world.ground) cada TILE unidades; world.gain compensa difusas oscuras.
 const TILE = 12
 
@@ -290,67 +288,17 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     if (world.shadow) scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(edge), new THREE.LineDashedMaterial({ color: 0xffb020, dashSize: 1.2, gapSize: 0.8 })).computeLineDistances())
 
     // Rocas: las bajas se trepan; las altas chocan y frenan al rover.
-    // Cada roca guarda lo que de verdad se ve: los vértices que asoman sobre el suelo (pts, XYZ de mundo), el radio
-    // de esa huella (r) y cuánto sobresale (h). Así el choque usa la forma dibujada, no la escala base.
-    type Rock = { x: number; z: number; r: number; h: number; pts: Float32Array }
-    const rockN = ROCKS[crater.terrain], rocks: Rock[] = []
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), v0 = new THREE.Vector3(), tint = new THREE.Color()
-    // Roca irregular: icosaedro subdividido deformado con el mismo ruido; tono medio del regolito (sin gain).
-    const rockGeo = mergeVertices(new THREE.IcosahedronGeometry(1, 2).deleteAttribute('normal').deleteAttribute('uv'))
-    const rp = rockGeo.attributes.position
-    for (let i = 0; i < rp.count; i++) {
-      v0.fromBufferAttribute(rp, i).multiplyScalar(0.7 + n(v0.x * 2.3 + v0.z * 1.1 + 40, v0.y * 2.3 - v0.z * 1.7 + 40) * 0.3)
-      rp.setXYZ(i, v0.x, v0.y, v0.z)
-    }
-    rockGeo.computeVertexNormals()
-    const rockMat = new THREE.MeshStandardMaterial({ color: world.rock, roughness: 1 })
-    if (world.shadow) permanentShadow(rockMat, 'rover-rock')
-    const rockMesh = new THREE.InstancedMesh(rockGeo, rockMat, rockN)
-    for (let i = 0; i < rockN; i++) {
-      const a = rng() * Math.PI * 2, r = 8 + rng() * (RIM - 12), x = Math.cos(a) * r, z = Math.sin(a) * r
-      if (Math.hypot(x, z + 76) < 8) continue // despeja la zona de aterrizaje
-      const s = 0.3 + Math.pow(rng(), 3) * 2.6
-      q.setFromEuler(new THREE.Euler((rng() - 0.5) * 0.6, rng() * 6.3, (rng() - 0.5) * 0.6)) // apoyada: poco ladeo
-      const sy = s * (0.5 + rng() * 0.4), bury = 0.25 + rng() * 0.15 // semienterrada
-      m4.compose(v.set(x, height(x, z) - sy * bury, z), q, new THREE.Vector3(s * (0.8 + rng() * 0.4), sy, s * (0.8 + rng() * 0.4)))
-      const pts: number[] = []; let rr = 0, hh = 0
-      for (let k = 0; k < rp.count; k++) {
-        v0.fromBufferAttribute(rp, k).applyMatrix4(m4)
-        const above = v0.y - floor(v0.x, v0.z)
-        if (above <= 0.1) continue // enterrado o al ras: no se ve, no choca
-        pts.push(v0.x, v0.y, v0.z); rr = Math.max(rr, Math.hypot(v0.x - x, v0.z - z)); hh = Math.max(hh, above)
-      }
-      const tone = 0.85 + rng() * 0.25
-      if (!pts.length) continue // quedó toda bajo el suelo
-      const idx = rocks.length
-      rocks.push({ x, z, r: rr, h: hh, pts: Float32Array.from(pts) })
-      rockMesh.setMatrixAt(idx, m4); rockMesh.setColorAt(idx, tint.setScalar(tone))
-    }
-    rockMesh.count = rocks.length // sin instancias vacías (antes quedaban rocas fantasma en el origen)
-    // Lo que pisan las ruedas: el suelo más el lomo de las rocas chicas, redondeado con el ancho de la rueda.
-    const pebbles = rocks.filter((r) => r.h <= CLIMB), blocks = rocks.filter((r) => r.h > CLIMB)
-    const surface: HeightFn = (px, pz) => {
-      let bump = 0
-      for (const r of pebbles) {
-        const reach = r.r + 0.3, dx = px - r.x, dz = pz - r.z, d2 = dx * dx + dz * dz
-        if (d2 < reach * reach) bump = Math.max(bump, r.h * 0.5 * (1 + Math.cos((Math.PI * Math.sqrt(d2)) / reach)))
-      }
-      return floor(px, pz) + bump
-    }
-    // Donde apoya la broca: el suelo o, si hay una roca debajo, la cara de arriba de esa roca (vértices visibles a
-    // menos de DRILL_R en planta). Así el brazo baja menos sobre una piedra alta.
+    // Campo de rocas del mundo (RockField en rocks.ts: ubicación, choque y apoyo comunes; aspecto por mundo).
+    const field = new world.rocks({
+      rng, noise: n, height, floor, count: ROCKS[crater.terrain], rim: RIM, clear: { x: 0, z: -76, r: 8 },
+    })
+    if (world.shadow) permanentShadow(field.mesh.material as THREE.Material, 'rover-rock')
+    scene.add(field.mesh)
+    // Lo que pisan las ruedas: el suelo más el lomo de las rocas chicas.
+    const surface: HeightFn = (px, pz) => floor(px, pz) + field.bump(px, pz)
+    // Donde apoya la broca: el suelo o, si hay una roca debajo, la cara de arriba de esa roca.
     const DRILL_R = 0.3
-    const drillGround: HeightFn = (px, pz) => {
-      let top = surface(px, pz)
-      for (const r of rocks) {
-        if (Math.hypot(r.x - px, r.z - pz) > r.r + DRILL_R) continue
-        for (let i = 0; i < r.pts.length; i += 3) {
-          if (Math.hypot(r.pts[i] - px, r.pts[i + 2] - pz) < DRILL_R) top = Math.max(top, r.pts[i + 1])
-        }
-      }
-      return top
-    }
-    rockMesh.castShadow = true; rockMesh.receiveShadow = true; scene.add(rockMesh)
+    const drillGround: HeightFn = (px, pz) => Math.max(surface(px, pz), field.top(px, pz, DRILL_R))
 
     // Texturas en mosaico (RepeatWrapping): el suelo se ve continuo; las rocas usan una sola copia.
     const reg = `${import.meta.env.BASE_URL}${world.ground}`, loader = new THREE.TextureLoader(), aniso = renderer.capabilities.getMaxAnisotropy()
@@ -498,19 +446,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
 
     // Puntos visibles de rocas altas que caen dentro de la huella de las ruedas con el rover en (px, pz, ry).
     const PROXY_FOOT = { minX: -1.1, maxX: 1.1, minZ: -1.25, maxZ: 1.25 } // la caja provisional
-    const hits = (px: number, pz: number, ry: number) => {
-      const f = rig?.foot ?? PROXY_FOOT, c = Math.cos(ry), s = Math.sin(ry)
-      const span = Math.hypot(Math.max(-f.minX, f.maxX), Math.max(-f.minZ, f.maxZ))
-      let k = 0
-      for (const r of blocks) {
-        if (Math.hypot(r.x - px, r.z - pz) > r.r + span) continue
-        for (let i = 0; i < r.pts.length; i += 3) {
-          const dx = r.pts[i] - px, dz = r.pts[i + 2] - pz, lx = dx * c - dz * s, lz = dx * s + dz * c
-          if (lx > f.minX && lx < f.maxX && lz > f.minZ && lz < f.maxZ) k++
-        }
-      }
-      return k
-    }
+    const hits = (px: number, pz: number, ry: number) => field.hits(px, pz, ry, rig?.foot ?? PROXY_FOOT)
 
     const tick = (dt: number) => {
       const e = 0.6
