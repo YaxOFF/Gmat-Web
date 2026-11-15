@@ -155,7 +155,7 @@ E3b = etapas 2 a 4 y cámaras.
 Verificar: lint y build; `?screen=edl` recorre las 4 etapas sin errores de consola; `?screen=mars` →
 "Drive" sigue igual que antes (el cambio de `dem.ts` no rompió nada).
 
-### Fase E4 — Descenso propulsado, sky crane, contacto y escape
+### Fase E4 — Descenso propulsado, sky crane, contacto y escape ✅
 
 Meta: etapas 5 a 8; la secuencia completa de principio a fin.
 
@@ -233,7 +233,7 @@ Verificar: lint y build; `sh docs/docs.sh stale` sin pendientes.
 - [x] Fase E1 — Exportar los modelos
 - [x] Fase E2 — Módulo de carga y vista de prueba
 - [x] Fase E3 — Escena y línea de tiempo: de la entrada a la carcasa trasera
-- [ ] Fase E4 — Descenso propulsado, sky crane, contacto y escape
+- [x] Fase E4 — Descenso propulsado, sky crane, contacto y escape
 - [ ] Fase E5 — Efectos
 - [ ] Fase E6 — Integración en "Try Mars"
 - [ ] Fase E7 — Pulido, rendimiento y documentación
@@ -260,3 +260,9 @@ Verificar: lint y build; `sh docs/docs.sh stale` sin pendientes.
   más rala arriba (con la de `Rover3D` el suelo no se veía). Textos en inglés dentro del componente, como `Descent3D`.
   `?screen=edl` corre la secuencia en bucle (`&site=<id>`); `&static=1` abre la vista de E2. Para verificar se volvieron
   a apartar los cambios ajenos con `git stash -u` por ruta. Revisado en Chrome: 4 etapas, `?screen=mars` → Drive igual.
+- **2026-11-15 · Fase E4** — Etapas 5 a 8 en `Edl3D.tsx` (64.5 s en total). Las etapas 1-4 bajan corridas 40 m en +X y el
+  desvío propulsado trae la pila sobre `LAND`; la carcasa se suelta a la escena y deriva. El rover va en su propio grupo:
+  colgado, `rig.update` lo apoya sobre un llano imaginario que en los últimos 0.4 m se vuelve el relieve real (`meshHeight`
+  de la misma malla que `Rover3D`), así las ruedas tocan sin salto. Cables con un `LineSegments`; los propulsores giran
+  desde su pivote para compensar la inclinación. Escape: se inclina ~45°, vuela hacia -X y se oculta al tocar el suelo
+  (el polvo queda para E5). La cámara termina donde arranca la de `Rover3D`. Revisado en Chrome, sin errores de consola.
