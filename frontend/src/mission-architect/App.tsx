@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { CRATER, defaultDesign, starterFor, MAX_ITERATIONS, MODE_MULT, ORBIT } from './data/catalog'
 import { judge, ROLES, soloTeam, type Team } from './engine/roles'
 import { Launch3D } from './three/Launch3D'
+import { MoonJourney3D } from './three/MoonJourney3D'
 import { MissionPatch } from './ui/Patch'
 import { Setup } from './ui/Setup'
 import { gmatScript } from './gmat'
@@ -169,7 +170,9 @@ export default function MissionArchitect({ onInspect, onExit }: {
           onForce={() => startLaunch(true)}
         />
       )}
-      {phase === 'launch' && launch && <Launch3D launch={launch} seed={seed} onDone={afterLaunch} />}
+      {phase === 'launch' && launch && (launch.status === 'launch_failure'
+        ? <Launch3D launch={launch} seed={seed} onDone={afterLaunch} />
+        : <MoonJourney3D launch={launch} orbitId={design.orbitId} onDone={afterLaunch} />)}
       {phase === 'mapping' && mission && (
         <Mapping ctx={ctx} mission={mission} setMission={setMission} rng={rng.current} onFinish={() => setPhase('site')} />
       )}

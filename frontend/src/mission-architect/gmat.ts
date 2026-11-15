@@ -1,4 +1,7 @@
 // Puente juego → GMAT: un script real por órbita. La física la calcula GMAT, aquí solo se escribe el script.
+import type { ShipResult } from '../model/results'
+import { TEMPLATES } from '../templates'
+import { pickShip, track, type Track } from './three/journeyScene'
 
 export const MOON_R_KM = 1737.4
 
@@ -58,4 +61,45 @@ BeginMissionSequence;
 Propagate MoonProp(Selene) {Selene.ElapsedDays = ${days}};
 `
   return { name: `selene_${orbitId}.script`, text }
+}
+
+// --- Viaje Tierra → Luna del lanzamiento: la plantilla "Trip to the Moon" corrida en vivo ---
+
+/** Radio del periselenio (km desde el centro) por órbita del juego.
+ *  shortcut: la plantilla llega a una órbita casi circular de este radio y no polar; es demo. Para la órbita real
+ *  del catálogo (50–100 km, polar) habría que cambiar los Achieve del Target y comprobar que converge. */
+const TRANSFER_RP: Record<string, number> = { polar_low: 2000, polar_high: 2500, polar_ellip: 4000 }
+
+export function transferScript(orbitId: string): string {
+  const luna = TEMPLATES.find((t) => t.id === 'luna')!
+  return luna.build({ date: '2027-07-01', rp: TRANSFER_RP[orbitId] ?? 2500, days: 1, inc: 28.7 })
+}
+
+/** Corre la transferencia en el backend y devuelve la trayectoria de la nave, o null si falla o tarda más de `ms`. */
+export async function liveTransfer(orbitId: string, ms = 30000): Promise<Track | null> {
+  const end = Date.now() + ms
+  try {
+    const r = await fetch('/api/runs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ script: transferScript(orbitId) }) })
+    if (!r.ok) return null
+    const { runId } = await r.json()
+    while (Date.now() < end) {
+      const res = await fetch(`/api/runs/${runId}/results`)
+      if (res.ok) {
+        const { ships } = await res.json() as { ships: ShipResult[] }
+        const ship = ships.find((s) => s.name === pickShip(ships))
+        return ship ? track(ship) : null
+      }
+      if (res.status !== 409) return null // 409: todavía corre
+      await new Promise((ok) => setTimeout(ok, 800))
+    }
+  } catch (err) { console.error(err) }
+  return null
+}
+
+/** Trayectoria guardada de una corrida de GMAT (public/trajectories), para cuando el motor no está. */
+export async function cachedTransfer(): Promise<Track | null> {
+  try {
+    const r = await fetch(`${import.meta.env.BASE_URL}trajectories/moon_transfer.json`)
+    return r.ok ? track(await r.json()) : null
+  } catch { return null }
 }
