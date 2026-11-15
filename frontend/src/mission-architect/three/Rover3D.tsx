@@ -369,6 +369,9 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     rover.traverse((o) => { o.castShadow = true })
     scene.add(rover)
     let rig: CuriosityRig | null = null, gone = false
+    // Paneles solares (Luna): sol = 0 plegados (en la sombra) .. 1 desplegados (a la luz).
+    const panels: { hinge: THREE.Group; open: number; fold: number }[] = []
+    let sol = 1
     loadCuriosity().then((r) => {
       if (gone) return
       rig = r; rover.remove(proxy); rover.add(r.model)
@@ -376,12 +379,15 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       // Luna: paneles solares verticales a los costados y atrás, para el Sol rasante del polo (como VIPER).
       const cell = new THREE.MeshStandardMaterial({ color: 0x16296b, metalness: 0.6, roughness: 0.3, emissive: 0x060d2a })
       const frame = new THREE.MeshStandardMaterial({ color: 0xc9ccd4, metalness: 0.4, roughness: 0.5 })
-      for (const [px, pz, ry] of [[0.6, -0.35, 0], [-0.6, -0.35, 0], [0, -1.02, Math.PI / 2]] as const) {
-        const panel = new THREE.Group()
-        panel.add(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.62, 1.15), cell), new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.68, 1.21), frame))
-        panel.position.set(px, 1.5, pz); panel.rotation.set(0, ry, px ? -Math.sign(px) * 0.14 : 0)
-        panel.traverse((o) => { o.castShadow = true })
-        r.model.add(panel)
+      // Cada panel cuelga de una bisagra en su borde inferior: abierto queda vertical (algo inclinado hacia afuera);
+      // plegado gira 90° hacia adentro y queda acostado sobre la cubierta.
+      for (const [px, pz, ry, hy] of [[0.6, -0.35, 0, 1.19], [-0.6, -0.35, 0, 1.21], [0, -1.02, Math.PI / 2, 1.23]] as const) {
+        const hinge = new THREE.Group(), inward = px < 0 ? -1 : 1
+        hinge.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.62, 1.15), cell), 0, 0.34, 0), at(new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.68, 1.21), frame), 0, 0.34, 0))
+        hinge.position.set(px, hy, pz); hinge.rotation.y = ry
+        hinge.traverse((o) => { o.castShadow = true })
+        r.model.add(hinge)
+        panels.push({ hinge, open: -inward * 0.14, fold: inward * 1.52 })
       }
     }).catch((err) => console.error(err))
 
@@ -722,13 +728,14 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         if (dark && !stuck && Math.abs(speed) > 1.5 && rng() < dt * (crater.terrain === 'soft' ? 0.012 : 0.006)) {
           stuck = true; speed = 0; say(`Stuck in soft regolith! Press R to break free (${start.mesh ? '85' : '50'}% per try).`, 5)
         }
-        if (dark && !entered) { entered = true; say('Entering permanent shadow. No sunlight, no charging. Watch the red return marker.', 5) }
+        if (dark && !entered) { entered = true; say('Entering permanent shadow. Solar panels folded: no sunlight, no charging. Watch the red return marker.', 5) }
 
         // Energía y temperatura.
         bat -= dt * (drain() + Math.abs(speed) * 0.07) * kB
         // Carga solar. En la Luna el Sol es rasante: los paneles laterales rinden más con el rover de costado al Sol
         // (2 %/s) que de frente o de espaldas (0.8 %/s).
         chg = dark ? 0 : world.shadow ? 0.8 + 1.2 * Math.abs(Math.cos(yaw) * SUN_X - Math.sin(yaw) * SUN_Z) : 1.4
+        chg *= sol // plegados o a medio abrir no cargan del todo
         if (!dark) bat = Math.min(100, bat + dt * chg * kB)
         st.minTemp = Math.min(st.minTemp, temp)
         temp += dt * (!dark ? (20 - temp) * 0.3 : heaters ? (20 - temp) * 0.05 : -1.2)
@@ -930,6 +937,10 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       }
       ;(earth.userData.spin as (d: number) => void)(dt)
       if (beacon) (beacon.material as THREE.MeshBasicMaterial).opacity = 0.18 + Math.sin(performance.now() / 300) * 0.08
+      // Paneles: se despliegan a la luz y se pliegan al entrar a la sombra permanente (ahí no sirven y estorban).
+      sol = clamp(sol + (world.shadow && z > LIGHT_Z ? -1 : 1) * dt / 1.6, 0, 1)
+      const open = sol * sol * (3 - 2 * sol)
+      for (const p of panels) p.hinge.rotation.z = p.fold + (p.open - p.fold) * open
       if (paused) { drilling = false; laserT = 0; scanT = 0 }
       // Onda del escaneo: un anillo que se abre sobre el suelo hasta SCAN_R.
       wave.visible = scanT > 0
