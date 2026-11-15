@@ -173,7 +173,7 @@ cp .env.example .env   # optional
 docker compose up -d --build
 ```
 
-Open `http://localhost:8080`. GMAT does not need to be installed: the build downloads the Ubuntu version (400 MB) and checks its sha256. Details in `docs/DEPLOY.md`.
+Open `http://localhost:8080` (`WEB_PORT`). One container: FastAPI serves the API and the game. GMAT does not need to be installed: the build downloads the Ubuntu version (400 MB) and checks its sha256. Details in `docs/DEPLOY.md`.
 
 ---
 
@@ -234,6 +234,7 @@ Current status: 118 of the 162 GMAT sample scripts run (77 of the 88 at the root
 | `GMAT_WEB_RUN_TIMEOUT` | 300 | Maximum time per run (s); past it, the run is stopped |
 | `GMAT_WEB_MAX_SCRIPT_BYTES` | 524288 | Maximum script size (bytes, UTF-8) |
 | `GMAT_WEB_RUNS` | `<temp>/gmat-web-runs` | Runs folder (sanitized script, log and outputs) |
+| `GMAT_WEB_STATIC` | empty | Frontend build folder that FastAPI serves at `/` (Docker: `/srv/web`). Empty in dev |
 | `GMAT_WEB_RUN_KEEP` | 3600 | Seconds a finished run and its folder are kept; then they are deleted (at startup and on each new run) |
 
 ---

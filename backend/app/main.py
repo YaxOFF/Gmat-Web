@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app import config, samples, script
@@ -222,3 +223,8 @@ async def run_events(ws: WebSocket, run_id: str):
         await ws.close()
     except WebSocketDisconnect:
         pass
+
+
+# Al final: las rutas /api ganan. Sin router de cliente, html=True basta para la SPA.
+if config.STATIC_DIR:
+    app.mount("/", StaticFiles(directory=config.STATIC_DIR, html=True), name="web")

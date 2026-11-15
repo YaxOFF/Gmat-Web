@@ -1,4 +1,4 @@
-<!-- fuente: backend/app/main.py, frontend/vite.config.ts, backend/app/config.py | rev: 7b35a0e -->
+<!-- fuente: backend/app/main.py, frontend/vite.config.ts, backend/app/config.py | rev: 1a95f8e -->
 # System
 
 | Piece | Where it lives | Stack | Docs |
@@ -8,7 +8,7 @@
 | GMAT engine | `GMAT_HOME` (outside the repo) | `gmatpy` R2026a, only inside worker processes | `docs/GOTCHAS.md` |
 | Model schema | `shared/mission.schema.json` | JSON Schema, mirrored in `frontend/src/model/mission.ts` | `PLAN.md` |
 
-There is no database and no accounts (v1). Docker deployment: `docker-compose.yml` with `api` (Python 3.12 + GMAT Ubuntu) and `web` (nginx with `/api` proxy), see `docs/DEPLOY.md`.
+There is no database and no accounts (v1). Docker deployment: one container `app` (root `Dockerfile`: Vite build + Python 3.12 + GMAT Ubuntu; FastAPI serves `/api` and the static build), see `docs/DEPLOY.md`.
 
 ## Frontend and backend contract
 - Base URL: relative paths `/api/...`. Vite proxies `/api` to `127.0.0.1:8000` with `ws: true` (`frontend/vite.config.ts`). The proxy's `/ws` entry is not used: the backend has no routes under `/ws` and the frontend opens `/api/ws/...`.
