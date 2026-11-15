@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { es } from '../i18n/es'
+import { en as es } from '../i18n/en'
 import { useApp } from '../store'
 import Editor from './Editors'
 import s from './Resources.module.css'

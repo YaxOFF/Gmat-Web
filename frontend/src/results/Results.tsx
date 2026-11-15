@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
-import { es } from '../i18n/es'
+import { en as es } from '../i18n/en'
 import type { Cell, ShipResult, XYPlotResult } from '../model/results'
 import { useApp } from '../store'
 import s from './Results.module.css'

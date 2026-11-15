@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { es } from '../i18n/es'
+import { en as es } from '../i18n/en'
 import type { Resource, Value } from '../model/mission'
 import type { FieldSchema } from '../model/schema'
 import { useApp } from '../store'

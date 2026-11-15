@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { es } from './i18n/es'
+import { en as es } from './i18n/en'
 import { useApp, type CenterTab, type LeftTab, type Sample } from './store'
 import s from './App.module.css'
 
@@ -12,6 +12,7 @@ const CommandForm = lazy(() => import('./mission/CommandForm'))
 const Results = lazy(() => import('./results/Results'))
 const SolverPanel = lazy(() => import('./results/SolverPanel'))
 const View3D = lazy(() => import('./results/View3D')) // Cesium pesa varios MB: solo al abrir la pestaña 3D
+const Game = lazy(() => import('./game/App')) // juego Mission Architect: three.js solo al abrirlo
 const goto = (line: number) => import('./editor/gmat').then((m) => m.revealLine(line))
 
 function Tabs<T extends string>({ items, value, onChange }: {
@@ -104,6 +105,7 @@ function Console() {
 export default function App() {
   const { leftTab, centerTab, setLeftTab, setCenterTab, checkEngine, doc, loadText, runId, run, stop, validate } = useApp()
   const [gallery, setGallery] = useState(false)
+  const [game, setGame] = useState<'off' | 'on' | 'hidden'>(() => /[?&](game|rover)\b/.test(location.search) ? 'on' : 'off') // 'hidden' conserva la partida
   const file = useRef<HTMLInputElement>(null)
   useEffect(() => { void checkEngine() }, [checkEngine])
 
@@ -125,6 +127,7 @@ export default function App() {
         <input ref={file} type="file" accept=".script,.txt" hidden
           onChange={(e) => { void open(e.target.files?.[0]); e.target.value = '' }} />
         <button className={s.btn} onClick={() => setGallery(true)}>{es.toolbar.samples}</button>
+        <button className={s.btnRun} onClick={() => setGame('on')}>{es.toolbar.game}</button>
         <button className={s.btn} onClick={save}>{es.toolbar.save}</button>
         <button className={s.btn} onClick={() => void validate()} disabled={!doc.text.trim()}>{es.toolbar.validate}</button>
         {runId
@@ -153,6 +156,14 @@ export default function App() {
       </main>
       <Console />
       {gallery && <SampleGallery onClose={() => setGallery(false)} />}
+      {game !== 'off' && (
+        <div hidden={game === 'hidden'}>
+          <Suspense fallback={null}>
+            <Game onExit={() => setGame('hidden')}
+              onInspect={({ text, name }) => { loadText(text, name); setGame('hidden'); void run() }} />
+          </Suspense>
+        </div>
+      )}
     </div>
   )
 }

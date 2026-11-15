@@ -1,5 +1,5 @@
 import { useState, type DragEvent } from 'react'
-import { es } from '../i18n/es'
+import { en as es } from '../i18n/en'
 import type { Command } from '../model/mission'
 import r from '../resources/Resources.module.css'
 import { useApp } from '../store'

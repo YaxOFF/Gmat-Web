@@ -2,7 +2,7 @@ export const es = {
   appName: 'GMAT Web',
   toolbar: {
     new: 'Nuevo', open: 'Abrir', samples: 'Ejemplos', save: 'Guardar', validate: 'Validar', run: 'Correr',
-    stop: 'Detener',
+    stop: 'Detener', game: 'Mission Architect',
   },
   left: { resources: 'Recursos', mission: 'Misión' },
   center: { editor: 'Editor', resource: 'Recurso', command: 'Comando', view3d: '3D', results: 'Resultados', solver: 'Solver' },

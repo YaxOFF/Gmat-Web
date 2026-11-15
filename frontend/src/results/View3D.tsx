@@ -7,7 +7,7 @@ import {
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { useEffect, useRef, useState } from 'react'
-import { es } from '../i18n/es'
+import { en as es } from '../i18n/en'
 import type { ShipResult } from '../model/results'
 import { useApp } from '../store'
 import s from './Results.module.css'

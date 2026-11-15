@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { es } from './i18n/es'
+import { en as es } from './i18n/en'
 import type { Command, Mission } from './model/mission'
 import type { Results, SolverEvent, SolverRun } from './model/results'
 import type { FieldSchema, ParamInfo, TypeInfo } from './model/schema'

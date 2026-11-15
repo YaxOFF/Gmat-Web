@@ -1,7 +1,7 @@
 // Editores dedicados (Spacecraft, ForceModel, Propagator): agrupan los campos del motor y agregan los que
 // el motor no lista (GravityField.*, Drag.*, pasos del integrador). Las conversiones las hace el motor.
 import { useState, type ReactNode } from 'react'
-import { es } from '../i18n/es'
+import { en as es } from '../i18n/en'
 import type { Resource, Value } from '../model/mission'
 import type { FieldSchema } from '../model/schema'
 import { useApp } from '../store'

@@ -123,7 +123,7 @@ def validate_script(script_path: str, log_path: str) -> bool:
 def start() -> None:
     global _pool
     if not config.GMAT_HOME or not Path(config.GMAT_HOME, "bin", "gmatpy").is_dir():
-        raise RuntimeError(f"GMAT_HOME inválido: {config.GMAT_HOME!r}")
+        raise RuntimeError(f"Invalid GMAT_HOME: {config.GMAT_HOME!r}")
     _pool = ProcessPoolExecutor(
         max_workers=config.WORKERS,
         mp_context=mp.get_context("spawn"),
@@ -141,6 +141,6 @@ def stop() -> None:
 
 async def submit(fn, *args, timeout: float | None = None):
     if _pool is None:
-        raise RuntimeError("Motor GMAT no iniciado")
+        raise RuntimeError("GMAT engine not started")
     fut = asyncio.get_running_loop().run_in_executor(_pool, fn, *args)
     return await asyncio.wait_for(fut, timeout or config.TASK_TIMEOUT_S)

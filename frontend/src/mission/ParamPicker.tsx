@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { es } from '../i18n/es'
+import { en as es } from '../i18n/en'
 import { BODIES } from '../resources/value'
 import r from '../resources/Resources.module.css'
 import { TextField } from '../resources/Field'

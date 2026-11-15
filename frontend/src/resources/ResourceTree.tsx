@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { es } from '../i18n/es'
+import { en as es } from '../i18n/en'
 import type { Resource } from '../model/mission'
 import { findRefs, IDENT, renameResource, uniqueName } from '../model/refs'
 import { useApp } from '../store'
