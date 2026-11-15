@@ -46,6 +46,16 @@ export function MoonJourney3D({ launch, orbitId, onDone }: { launch: LaunchOutco
     return off
   }, [orbitId])
 
+  // Lanzamiento bueno: al terminar el viaje pasa solo al Act 1 (deja ver "ORBIT ACHIEVED" un momento).
+  const ok = launch.status === 'ok'
+  const done = useRef(onDone)
+  useEffect(() => { done.current = onDone })
+  useEffect(() => {
+    if (!ok || !hud.done) return
+    const id = setTimeout(() => done.current(), 2500)
+    return () => clearTimeout(id)
+  }, [ok, hud.done])
+
   const c = ctl.current
   const reached = (p: Phase) => ORDER.indexOf(hud.phase) >= ORDER.indexOf(p)
   // Las tarjetas de Mission Control aparecen cuando la escena llega a su momento.
@@ -93,8 +103,8 @@ export function MoonJourney3D({ launch, orbitId, onDone }: { launch: LaunchOutco
               </>}
         </div>
       </div>
-      {(hud.done || (!hud.cine && hud.phase === 'orbit')) && (
-        <div className="rv-end"><button className="btn big" onClick={onDone}>{launch.status === 'ok' ? 'Begin mapping →' : 'Mission report →'}</button></div>
+      {launch.status === 'lost' && hud.done && (
+        <div className="rv-end"><button className="btn big" onClick={onDone}>Mission report →</button></div>
       )}
     </div>
   )
