@@ -1,4 +1,4 @@
-<!-- fuente: backend/app/engine, backend/app/script, backend/app/main.py, frontend/src/store.ts, frontend/src/model/refs.ts, frontend/src/resources, dev.ps1 | rev: 4d753f5 -->
+<!-- fuente: backend/app/engine, backend/app/script, backend/app/main.py, frontend/src/store.ts, frontend/src/model/refs.ts, frontend/src/resources, dev.ps1 | rev: 1ee8d23 -->
 # Gotchas
 
 Read from the code and checked with the real engine where it says "(verified)".
@@ -14,9 +14,9 @@ Read from the code and checked with the real engine where it says "(verified)".
 
 ## Runs (`engine/runner.py`)
 - **Cleanup by age (`runner.prune`).** At startup and on every `create`: runs finished more than `GMAT_WEB_RUN_KEEP` (3600 s) ago leave `runs` and their folder is deleted; `run-*`/`desk-*`/`val-*` folders in `GMAT_WEB_RUNS` that are not in `runs` are deleted if their mtime is past that limit. An unfinished run is never deleted. `run_desktop` deletes its `desk-*` when done. `/files/{name}` of a pruned run gives 404.
-- **Cancelling is a flag.** `DELETE /runs/{id}` marks `cancelled`; `_supervise` sees it on its next loop (0.2 s), does `terminate` and emits `error` "Corrida detenida". If the process finishes first, the run ends with `done`. `DELETE` on a finished run responds `{ok:true}` with no effect.
+- **Cancelling is a flag.** `DELETE /runs/{id}` marks `cancelled`; `_supervise` sees it on its next loop (0.2 s), does `terminate` and emits `error` "Run stopped". If the process finishes first, the run ends with `done`. `DELETE` on a finished run responds `{ok:true}` with no effect.
 - **The timeout includes loading `gmatpy`.** `RUN_TIMEOUT_S` is measured from when the supervisor starts.
-- **Exit codes:** 0 = `done`; 2 = `LoadScript` failed; 3 = `RunScript` failed; other = engine crash ("El motor terminó con código N").
+- **Exit codes:** 0 = `done`; 2 = `LoadScript` failed; 3 = `RunScript` failed; other = engine crash ("The engine exited with code N").
 - **`MAX_RUNS` counts unfinished runs.** Validating does not count and launches its own process per request.
 - **Log level by text (`classify`).** `**** ERROR ****` or `Exception` anywhere = error; `warning` case-insensitive = warning; a quoted line (`"  57: ..."`) = error with `line`. Error texts carry the script's temporary path.
 - **`done.results.files`** lists only files at the top level of the folder, without `HIDDEN` (`gmat.log`, `mission.script`, `startup.txt`, `GmatLog.txt`) or `gmatweb_*`. `/files/{name}` serves any other top-level file (including the `gmatweb_*` ones).
@@ -27,7 +27,9 @@ Read from the code and checked with the real engine where it says "(verified)".
 - **Ships, XYPlot and ReportFile come from the text** (`Create` and `X.Field = ...`; lines with `...` are joined only for reading, the text does not change). A user ReportFile without `Filename` is looked up as `<name>.txt`.
 - **`SolverIterations = Current`** in the hidden ones: with `None` GMAT also omits the final pass of a Target; with `Current` it writes only the final pass, without iterations (verified on Hohmann, Mars B-Plane, TargetFiniteBurn). Nothing is trimmed by time: `BackProp` segments stay as they are.
 - **No maneuver epochs:** GMAT does not publish the state right after a `Maneuver` (there are no two rows with the same epoch).
-- **The hidden XYPlot does not follow `Toggle`** nor the XYPlot's `SolverIterations`. Lat/lon always relative to Earth (ignores the GroundTrackPlot's `CentralBody`).
+- **The hidden XYPlot does not follow `Toggle`** nor the XYPlot's `SolverIterations`. Lat/lon always relative to Earth (ignores the GroundTrackPlot's `CentralBody`). That is why the lunar template does the coarse aiming with another ship (`Sonda`): if it used the same one and reset it (`Nave = NaveInicial`, like `Ex_GivenEpochGoToTheMoon`), the chart and the 3D would mix the test pass with the real trip.
+- **Moon columns.** `inject` creates `gmatweb_LunaEq` (Moon origin, MJ2000Eq axes) and each ship report carries `<ship>.gmatweb_LunaEq.X/Y/Z`, which `read` publishes as `LunaMJ2000Eq.X/Y/Z`. The Moon's position is not requested from GMAT separately: the 3D gets it by subtracting the ship's two positions (`View3D.track`). That is 3 more injected lines per script (counted in `manifest["shift"]`).
+- **A ship that is never propagated** (all its rows with the same epoch, e.g. a backup copy): `read` does not return it.
 - **User ReportFile** (fixed width) is split on 2+ spaces: a cell that fills its exact width sticks to its neighbor. `Report` rows with other columns come out with a different length. With `WriteHeaders = false` the headers are the `Add` names if they match the columns, otherwise `1..n`.
 
 ## Solvers (`engine/solver.py`)
@@ -68,11 +70,16 @@ Read from the code and checked with the real engine where it says "(verified)".
 ## Script ↔ model sync (`store.ts`)
 - **`seq` counter:** the last change wins, whether it comes from the text or the model. `editText` ignores the editor's echo by comparing the text.
 - **`setMission` is optimistic.** It changes the model and then requests the text. If `serialize` fails, the model stays ahead of the text and the next text edit overwrites it.
-- **Rewriting the text bumps `doc.rev`** and `ScriptEditor` does `setValue`: Monaco's undo and the cursor are lost.
+- **Rewriting the text bumps `doc.rev`.** If `doc.load` also changed (New, Open, Sample, Template), `ScriptEditor` does `setValue` and the undo history starts from scratch. If not (form or tree), the text enters with `executeEdits` between two `pushUndoStop`s: it is one more step in Monaco's history, which is the app's only undo. The edit replaces the whole document, so the cursor jumps.
+- **Undo/Redo** (`gmat.history`): buttons and Ctrl+Z/Ctrl+Y outside fields call Monaco even if the Editor tab is hidden (it stays mounted). Inside a form field Ctrl+Z is the browser's. It does not undo the selection or the document name.
+- **Live validation (`checkLater`).** 1.2 s after the last change it launches a `POST /api/script/validate` (one engine process at a time, ~0.7 s). Empty document = not validated (`checked: null`). Old responses are discarded with `cseq`. It also validates while a run is in progress. If the backend does not respond, the indicator keeps the last state.
+- **`issues` only locates lines in the resource zone** (`Obj.Field = ...` or `Create`). An error in the sequence shows up in the indicator and in Monaco, not in the Mission tree. Translation is by patterns (`es.issues.known`); the rest is shown in English, just as GMAT writes it.
+- **Draft (`gmatweb.draft` in localStorage).** It is saved 0.5 s after each change and restored when the page loads, with a notice in the console. New (empty text) deletes it. There is one per browser: two tabs overwrite each other. Without localStorage there is no draft and no error.
+- **Global shortcuts** (`App.tsx`) in the capture phase: Ctrl+S, F5, Ctrl+K. Without capture, Monaco keeps Ctrl+K (chord) and the browser keeps Ctrl+S and F5. F5 no longer reloads the page (Ctrl+R does).
 - **Running and validating use `doc.text`,** not the model; both clear the console (maximum 5000 lines).
 - **`parseError` almost never appears:** the parser does not reject scripts; only 413 or a network failure. On error the last good model remains.
 - **The model lags ~400 ms behind the text** (debounce). Exception: `loadText('')` (Nuevo) clears the model instantly.
-- **Monaco markers** come from `store.logs` with `line` (validate or run) and are cleared when the text is replaced (`doc.rev`). After editing by hand they can stay on a shifted line until the next validation.
+- **Monaco markers** come from `store.logs` with `line` (run) and from `store.issues` (validation; it wins over the log on the same line). They are cleared with every edit and come back when the live validation finishes.
 - **No retries.** `schemas[type] = 'error'` lasts until the page is reloaded. If `fetchTypes` fails, the whole tree falls into "other" and only `Spacecraft` can be created.
 - **WebSocket closed without `done`/`error`** = connection lost message. `stop` only sends the `DELETE`; the end arrives through the WebSocket.
 
@@ -106,6 +113,17 @@ Read from the code and checked with the real engine where it says "(verified)".
 ## Development environment
 - **`dev.ps1` does not warn if the ports are taken** (verified). With an old backend on `:8000`, uvicorn fails with `[Errno 10048]`, Vite moves up to `:5174` and the proxy talks to the old backend: `/api/health` gives `ok` and the new routes give 404. Check with `netstat -ano | findstr ":8000 :5173"`.
 - **Expected warnings:** pytest shows `StarletteDeprecationWarning` (httpx); `npm run build` warns about a chunk larger than 500 kB (Monaco).
-- **Samples:** 77 of 88 root samples run (table in `docs/COMPATIBILITY.md`, `python -m app.batch`); 8 rejected by sanitize and 3 use plugins commented out in the startup file (MarsGRAM, ExternalForceModel). The batch only marks as `plugin` what the active startup leaves commented out. It is not a bug in the port.
+- **Samples:** 77 of 88 root samples and 118 of 162 in total (with subfolders) run (table in `docs/COMPATIBILITY.md`, `python -m app.batch`). Root: 8 rejected by sanitize and 3 commented-out plugins (MarsGRAM, ExternalForceModel). Subfolders: 25 commented-out plugins (VF13ad, SNOPT, CSALT), 4 rejected (`#Include`, `MatlabFunction`, `GmatFunction`) and 4 `missing file` because of paths relative to the subfolder (sanitize resolves from `GMAT_HOME/samples`). The batch only marks as `plugin` what the active startup leaves commented out. It is not a bug in the port.
 - **Relative input paths are looked up in the script's folder** (`GmatFileUtil::FindFile`), which on the web is the run: that is why sanitize makes absolute the ones that exist from `GMAT_HOME/samples` (verified: `Ex_Propagate_ThrustHistoryFile`, `Ex_Contact_Location_Station_Mask`, `Tut_Orbit_Estimation_using_DSN_Range_and_Doppler_Data` run).
+- **Non-ASCII characters:** GMAT rejects the whole script with any non-ASCII character, even inside a comment (`Non-ASCII character`, `LoadScript` fails, code 2 in `run_desktop`). The missions in `tests/missions/` have no accents.
+- **Stop on `Tank.FuelMass` with a large `MaxStep`:** the step crosses zero, the tank ends up with negative mass and the run gives `Hardware Exception` (`RunScript` fails, code 3). Use a small `MaxStep` or stop before 0 (`tests/missions/m4_finite_burn.script`).
+- **`Sat.Luna.Periapsis` cannot be reported** (it is not a parameter with a body dependency): use `Sat.Luna.RadPer`.
 - **Windows:** Git warns `LF` → `CRLF` when committing. `dev.sh` was only verified with `sh -n`.
+
+## Templates, tour and views (`templates.ts`, `Dialogs.tsx`, `View3D.tsx`)
+- **Templates only build text.** `build(values)` returns an ASCII script; the only calculation is `altitude + 6378.1363` for the semi-major axis. The limits of each input (`min`/`max`) are the ones tested against the engine: Moon with an inclination below 28.7° does not converge (the orbit does not reach the lunar declination) and LEO below 300 km reenters in days and GMAT cuts the run (`Jacchia-Roberts ... below 100 km`).
+- **Lunar template = `backend/tests/missions/m7_viaje_luna.script`** with the default values (plus `WriteHeaders = false` and `Precision = 16`). If the template changes, that file and `reference.json` have to be regenerated; nothing checks it automatically.
+- **Lunar view of the 3D (`Center = Moon`).** No globe; the scene does not rotate (Cesium's `FIXED` frame used as lunar inertial) and it only frames the points less than 30 000 km from the Moon. Changing the center rebuilds the viewer (`key`). The auxiliary Earth and Moon are smooth spheres, without texture.
+- **Tour:** it only shows up the first time (`gmatweb.tour` in localStorage) and with the `?` button. Each step finds its zone by `data-tour`; if the zone is hidden (mobile) the step shows up without a frame.
+- **Mobile (≤ 640 px) is viewer only:** no left panel and no Resource/Command tabs. Tablet (≤ 900 px): 220 px panel and bar in two rows.
+- **Lighthouse was not run** (the environment did not allow downloading it). Accessibility was measured with a script on the page: button names, field labels and contrast ≥ 4.5:1 in light and dark (`docs/QA.md`, Phase 8).

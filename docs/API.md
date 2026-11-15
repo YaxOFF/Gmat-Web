@@ -1,4 +1,4 @@
-<!-- fuente: backend/app/main.py, backend/app/engine/runner.py, backend/app/engine/schema.py, frontend/src/model/schema.ts | rev: 4d753f5 -->
+<!-- fuente: backend/app/main.py, backend/app/engine/runner.py, backend/app/engine/schema.py, frontend/src/model/schema.ts | rev: 1ee8d23 -->
 # API (prefix `/api`)
 
 | Method and path | Body | Response |
@@ -18,7 +18,7 @@
 | `GET /schema/{type}` | | `{type, fields}`; 404 if the type is not creatable |
 | `GET /parameters` | | list `{name, dep, depDefault, unit}` (engine calculated parameters, cached like schemas); 503 if the engine crashes |
 
-| `GET /runs/{id}/results` | | `{ships:[{name, columns:{A1ModJulian, UTCGregorian, EarthMJ2000Eq.X…VZ, Earth.Latitude, Earth.Longitude}}], reports:[{name, file, headers, rows}], xyplots:[{name, x:{name,data}, series:[{name,data}]}]}`; 404; 409 if it has not finished. Max. 200 000 rows per file |
+| `GET /runs/{id}/results` | | `{ships:[{name, columns:{A1ModJulian, UTCGregorian, EarthMJ2000Eq.X…VZ, Earth.Latitude, Earth.Longitude, LunaMJ2000Eq.X/Y/Z (position relative to the Moon)}}] (without the ships that are never propagated), reports:[{name, file, headers, rows}], xyplots:[{name, x:{name,data}, series:[{name,data}]}]}`; 404; 409 if it has not finished. Max. 200 000 rows per file |
 | `GET /runs/{id}/files/{name}` | | the file (download); 404 if it is not a simple name at the top level of the folder, is internal (`gmat.log`, `mission.script`, `startup.txt`, `GmatLog.txt`) or does not exist; 409 if it has not finished |
 Limits and variables: `README.md`. Model shape: `shared/mission.schema.json`.
 

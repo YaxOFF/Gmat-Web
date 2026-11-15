@@ -1,5 +1,5 @@
 import { useState, type DragEvent } from 'react'
-import { es } from '../i18n/es'
+import { en as es } from '../i18n/en'
 import type { Command } from '../model/mission'
 import r from '../resources/Resources.module.css'
 import { useApp } from '../store'
@@ -88,7 +88,7 @@ export default function MissionTree() {
         {isBlock(c) && (
           <>
             {c.children?.map((x, i) => node(x, [...path, i]))}
-            <div className={s.end} style={{ paddingLeft: 8 + (path.length - 1) * 16 }}
+            <div className={s.end} role="none" style={{ paddingLeft: 8 + (path.length - 1) * 16 }}
               data-over={over?.key === `${key}/end` ? 'before' : undefined}
               onDragOver={(e) => dragOver(e, `${key}/end`, 'before')}
               onDrop={(e) => drop(e, [...path, c.children?.length ?? 0])}>
@@ -124,10 +124,10 @@ export default function MissionTree() {
         </button>
       </div>
       {parseError && <p className={r.warn} role="alert" title={parseError}>{es.resources.parseError}</p>}
+      {seq.length === 0 && <p className={r.muted}>{es.mission.none}</p>}
       <div className={r.list} role="tree" aria-label={es.left.mission}>
-        {seq.length === 0 && <p className={r.muted}>{es.mission.none}</p>}
         {seq.map((c, i) => node(c, [i]))}
-        <div className={s.tail} title={drag ? es.mission.dropEnd : undefined} data-over={over?.key === 'tail' || undefined}
+        <div className={s.tail} role="none" title={drag ? es.mission.dropEnd : undefined} data-over={over?.key === 'tail' || undefined}
           onDragOver={(e) => dragOver(e, 'tail', 'before')} onDrop={(e) => drop(e, [seq.length])} />
       </div>
     </div>

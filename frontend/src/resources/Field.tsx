@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { es } from '../i18n/es'
+import { en as es } from '../i18n/en'
 import type { Resource, Value } from '../model/mission'
 import type { FieldSchema } from '../model/schema'
 import { useApp } from '../store'
@@ -26,20 +26,24 @@ function parse(text: string, f: FieldSchema, names: Set<string>): Value | null |
   return t
 }
 
-export function TextField({ value, placeholder, list, onCommit, label, help }: {
+/** `check` valida mientras se escribe (mensaje o null); `onError` recibe el mensaje para mostrarlo junto al campo. */
+export function TextField({ value, placeholder, list, onCommit, label, help, check, onError }: {
   value: string
   placeholder: string
   list?: string
   label: string
   help: string
   onCommit: (text: string) => boolean
+  check?: (text: string) => string | null
+  onError?: (msg: string | null) => void
 }) {
   const [text, setText] = useState(value)
   const [bad, setBad] = useState(false)
-  const commit = () => { if (text !== value) setBad(!onCommit(text)) }
+  const flag = (msg: string | null) => { setBad(msg !== null); onError?.(msg) }
+  const commit = () => { if (text !== value) flag(onCommit(text) ? null : check?.(text) ?? es.form.invalid) }
   return (
     <input className={s.input} value={text} placeholder={placeholder} list={list} aria-label={label} title={help}
-      aria-invalid={bad} onChange={(e) => setText(e.target.value)} onBlur={commit}
+      aria-invalid={bad} onChange={(e) => { setText(e.target.value); if (check) flag(check(e.target.value)) }} onBlur={commit}
       onKeyDown={(e) => { if (e.key === 'Enter') commit() }} />
   )
 }
@@ -47,6 +51,8 @@ export function TextField({ value, placeholder, list, onCommit, label, help }: {
 /** `tidy` ajusta los demás campos del recurso en el mismo cambio (p. ej. quitar los que dependen de este). */
 export function Field({ f, r, tidy }: { f: FieldSchema; r: Resource; tidy?: (fields: Resource['fields']) => void }) {
   const { mission, types, setMission } = useApp()
+  const issue = useApp((st) => st.issues.find((i) => i.resource === r.name && i.field === f.name))
+  const [err, setErr] = useState<string | null>(null)
   const names = new Set(mission.resources.map((x) => x.name))
   const set = r.fields[f.name] !== undefined
   const help = es.form.help(f.type, f.default, f.unit)
@@ -91,7 +97,10 @@ export function Field({ f, r, tidy }: { f: FieldSchema; r: Resource; tidy?: (fie
         {input}
         {/* key: si el valor cambia desde el script, el campo se reinicia */}
         <TextField key={show(r.fields[f.name])} value={set ? show(r.fields[f.name]) : ''} placeholder={show(f.default)} list={list}
-          label={f.name} help={help} onCommit={(text) => {
+          label={f.name} help={help} onError={setErr}
+          check={(text) => (parse(text, f, names) !== undefined ? null
+            : !NUMERIC.has(f.type) ? es.form.invalid : f.type === 'Real' ? es.form.notNumber : es.form.notInteger)}
+          onCommit={(text) => {
             const v = parse(text, f, names)
             if (v !== undefined) update(v)
             return v !== undefined
@@ -105,7 +114,8 @@ export function Field({ f, r, tidy }: { f: FieldSchema; r: Resource; tidy?: (fie
       <label className={s.label} title={help}>{f.name}{f.unit && <small> ({f.unit})</small>}</label>
       {input}
       <button className={s.reset} disabled={!set} title={es.form.reset} aria-label={`${es.form.reset}: ${f.name}`}
-        onClick={() => update(null)}>↺</button>
+        onClick={() => { setErr(null); update(null) }}>↺</button>
+      {(err ?? issue) && <small className={s.fieldErr} role="alert">{err ?? issue!.text}</small>}
     </div>
   )
 }

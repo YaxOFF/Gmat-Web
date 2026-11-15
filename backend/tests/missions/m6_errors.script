@@ -1,0 +1,13 @@
+%  Mision propia 6: errores a proposito. GMAT no debe cargarla: campo inexistente en la
+%  linea 8 (SMAA) y nave sin crear (Sat2) en el Propagate.
+
+Create Spacecraft Sat;
+Sat.DisplayStateType = Keplerian;
+Sat.SMA              = 7000;
+Sat.ECC              = 0.01;
+Sat.SMAA             = 7100;
+
+Create Propagator Prop;
+
+BeginMissionSequence;
+Propagate Prop(Sat2) {Sat2.ElapsedDays = 1};

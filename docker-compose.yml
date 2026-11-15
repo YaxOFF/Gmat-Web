@@ -1,0 +1,58 @@
+# GMAT Web: `docker compose up -d --build` y abrir http://localhost:${WEB_PORT:-8080}
+# Variables en .env (ver .env.example).
+name: gmat-web
+
+services:
+  api:
+    build:
+      context: ./backend
+      args:
+        GMAT_URL: ${GMAT_URL:-https://downloads.sourceforge.net/project/gmat/GMAT/GMAT-R2026a/gmat-ubuntu-x64-R2026a.tar.gz}
+    image: gmat-web-api:latest
+    restart: unless-stopped
+    environment:
+      GMAT_WEB_WORKERS: ${GMAT_WEB_WORKERS:-2}
+      GMAT_WEB_TASK_TIMEOUT: ${GMAT_WEB_TASK_TIMEOUT:-60}
+      GMAT_WEB_MAX_RUNS: ${GMAT_WEB_MAX_RUNS:-2}
+      GMAT_WEB_RUN_TIMEOUT: ${GMAT_WEB_RUN_TIMEOUT:-300}
+      GMAT_WEB_MAX_SCRIPT_BYTES: ${GMAT_WEB_MAX_SCRIPT_BYTES:-524288}
+      GMAT_WEB_RUN_KEEP: ${GMAT_WEB_RUN_KEEP:-3600}
+    volumes:
+      # Caché de esquemas del motor (lenta de generar la primera vez) y startup file.
+      - api-cache:/var/lib/gmat-web/cache
+    tmpfs:
+      # Corridas: script saneado, log y salidas. Se borran solas pasado GMAT_WEB_RUN_KEEP.
+      - /var/lib/gmat-web/runs:uid=10001,gid=10001,mode=0700,size=${GMAT_WEB_RUNS_SIZE:-1g}
+      - /tmp:size=256m
+      # OUTPUT_PATH por defecto de GMAT (bin/../output): GmatLog.txt de los workers del pool.
+      - /opt/gmat/output:uid=10001,gid=10001,mode=0700,size=64m
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    mem_limit: ${API_MEM_LIMIT:-4g}
+    pids_limit: 512
+    # Sin puertos publicados: solo `web` habla con la API.
+
+  web:
+    build:
+      context: ./frontend
+    image: gmat-web-web:latest
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8080}:8080"
+    read_only: true
+    tmpfs:
+      # nginx-unprivileged corre como uid 101: escribe ahí el pid, temporales y el default.conf de la plantilla.
+      - /tmp:uid=101,gid=101,mode=0700
+      - /etc/nginx/conf.d:uid=101,gid=101,mode=0755
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    mem_limit: 256m
+
+volumes:
+  api-cache:

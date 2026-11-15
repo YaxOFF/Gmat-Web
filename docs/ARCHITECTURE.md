@@ -1,4 +1,4 @@
-<!-- fuente: backend/app, frontend/src/store.ts | rev: 4d753f5 -->
+<!-- fuente: backend/app, frontend/src/store.ts | rev: 1ee8d23 -->
 # Architecture
 
 ## Decisions
@@ -20,6 +20,12 @@
 
 ## Flow: validating without running
 `store.validate` → `POST /api/script/validate` → `sanitize` into a `val-*` folder → `_isolated(worker.validate_script)` (only `LoadScript`) → the log is read and the error/warning level lines are returned.
+
+## Flow: live validation
+Every text change (`editText`, `loadText`, `setMission`) arms `checkLater` in `store.ts`: after 1.2 s without changes it requests `POST /api/script/validate` and stores `issues` (`model/issues.ts`: joins the GMAT message with the cited line, locates it in resource and field, and translates it if it is in `es.issues.known`). `issues` feeds the bar indicator, the Monaco markers, the notice next to the field (`Field.tsx`) and the mark in the resource tree.
+
+## Flow: undo
+The history is Monaco's. A change made from forms or trees enters the editor with `executeEdits` (`ScriptEditor.tsx`), so Undo reverts it just like typed text; loading another document (`doc.load`) uses `setValue` and resets the history.
 
 ## Flow: editing resources
 Form/tree → `setMission` (changes the model immediately) → `POST /api/script/serialize` → text to the editor. Editing text → `editText` (400 ms debounce) → `POST /api/script/parse` → model. Parse and serialize are pure Python: they do not use the engine.

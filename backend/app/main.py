@@ -46,7 +46,7 @@ def list_samples():
 def get_sample(sample_id: str):
     text = samples.read(sample_id)
     if text is None:
-        raise HTTPException(404, "Ejemplo no encontrado")
+        raise HTTPException(404, "Sample not found")
     return {"id": sample_id, "text": text}
 
 
@@ -57,7 +57,7 @@ class RunRequest(BaseModel):
 @app.post("/api/runs")
 async def create_run(req: RunRequest):
     if runner.active() >= config.MAX_RUNS:
-        raise HTTPException(429, f"Máximo {config.MAX_RUNS} corridas simultáneas")
+        raise HTTPException(429, f"At most {config.MAX_RUNS} simultaneous runs")
     try:
         run = runner.create(req.script)
     except ScriptRejected as e:
@@ -68,7 +68,7 @@ async def create_run(req: RunRequest):
 @app.post("/api/script/parse")
 def parse_script(req: RunRequest):
     if len(req.script.encode("utf-8")) > config.MAX_SCRIPT_BYTES:
-        raise HTTPException(413, f"Script demasiado grande (máx. {config.MAX_SCRIPT_BYTES} bytes)")
+        raise HTTPException(413, f"Script too large (max {config.MAX_SCRIPT_BYTES} bytes)")
     return script.parse(req.script)
 
 
@@ -77,7 +77,7 @@ def serialize_script(model: dict):
     try:
         return {"script": script.serialize(model)}
     except (KeyError, TypeError, AttributeError) as e:
-        raise HTTPException(422, f"Modelo inválido: {type(e).__name__}: {e}")
+        raise HTTPException(422, f"Invalid model: {type(e).__name__}: {e}")
 
 
 @app.post("/api/script/validate")
@@ -111,14 +111,14 @@ class ConvertRequest(BaseModel):
 @app.post("/api/convert/state")
 async def convert_state(req: ConvertRequest):
     if not {req.fromType, req.toType} <= STATE_TYPES:
-        raise HTTPException(422, "Representación de estado desconocida")
+        raise HTTPException(422, "Unknown state representation")
     # van al script como `Sat.Campo = valor`: solo identificadores y números finitos
     if not req.elements or not all(re.fullmatch(r"[A-Za-z]\w*", k) and math.isfinite(v)
                                    for k, v in req.elements.items()):
-        raise HTTPException(422, "Elemento de estado inválido")
+        raise HTTPException(422, "Invalid state element")
     out = await worker.submit(worker.convert_state, req.fromType, req.toType, req.elements)
     if out is None:
-        raise HTTPException(422, "El motor no aceptó el estado")
+        raise HTTPException(422, "The engine rejected the state")
     return {"type": req.toType, "elements": out}
 
 
@@ -135,13 +135,13 @@ class EpochRequest(BaseModel):
 @app.post("/api/convert/epoch")
 async def convert_epoch(req: EpochRequest):
     if not {req.fromFormat, req.toFormat} <= DATE_FORMATS:
-        raise HTTPException(422, "Formato de época desconocido")
+        raise HTTPException(422, "Unknown epoch format")
     # va al script entre comillas: solo dígitos, letras, espacios, ':' '.' '-'
     if not re.fullmatch(r"[\w :.\-]{1,40}", req.epoch):
-        raise HTTPException(422, "Época inválida")
+        raise HTTPException(422, "Invalid epoch")
     out = await worker.submit(worker.convert_epoch, req.fromFormat, req.toFormat, req.epoch)
     if out is None:
-        raise HTTPException(422, "El motor no aceptó la época")
+        raise HTTPException(422, "The engine rejected the epoch")
     return {"format": req.toFormat, "epoch": out}
 
 
@@ -154,7 +154,7 @@ async def list_schema_types():
 async def list_parameters():
     out = await schema.parameters()
     if out is None:
-        raise HTTPException(503, "El motor no dio la lista de parámetros")
+        raise HTTPException(503, "The engine did not return the parameter list")
     return out
 
 
@@ -162,7 +162,7 @@ async def list_parameters():
 async def get_schema(type_name: str):
     fields = await schema.fields(type_name)
     if fields is None:
-        raise HTTPException(404, f"Tipo no creable: {type_name}")
+        raise HTTPException(404, f"Type cannot be created: {type_name}")
     return {"type": type_name, "fields": fields}
 
 
@@ -170,7 +170,7 @@ async def get_schema(type_name: str):
 def cancel_run(run_id: str):
     run = runner.runs.get(run_id)
     if run is None:
-        raise HTTPException(404, "Corrida no encontrada")
+        raise HTTPException(404, "Run not found")
     runner.cancel(run)
     return {"ok": True}
 
@@ -178,9 +178,9 @@ def cancel_run(run_id: str):
 def _finished_run(run_id: str) -> runner.Run:
     run = runner.runs.get(run_id)
     if run is None:
-        raise HTTPException(404, "Corrida no encontrada")
+        raise HTTPException(404, "Run not found")
     if not run.finished:
-        raise HTTPException(409, "La corrida no ha terminado")
+        raise HTTPException(409, "The run has not finished")
     return run
 
 
@@ -196,7 +196,7 @@ def run_file(run_id: str, name: str):
     # Solo nombres simples del primer nivel de la carpeta de la corrida.
     path = run.dir / name
     if Path(name).name != name or name in ("", ".", "..", *runner.HIDDEN) or path.resolve().parent != run.dir.resolve()             or not path.is_file():
-        raise HTTPException(404, "Archivo no encontrado")
+        raise HTTPException(404, "File not found")
     return FileResponse(path, filename=name)
 
 
@@ -205,7 +205,7 @@ async def run_events(ws: WebSocket, run_id: str):
     await ws.accept()
     run = runner.runs.get(run_id)
     if run is None:
-        await ws.send_json({"type": "error", "message": "Corrida no encontrada"})
+        await ws.send_json({"type": "error", "message": "Run not found"})
         await ws.close()
         return
     sent = 0

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { es } from '../i18n/es'
+import { en as es } from '../i18n/en'
 import type { Resource } from '../model/mission'
 import { findRefs, IDENT, renameResource, uniqueName } from '../model/refs'
 import { useApp } from '../store'
@@ -55,7 +55,8 @@ function AskDialog({ ask, onClose }: { ask: Ask; onClose: () => void }) {
 }
 
 export default function ResourceTree() {
-  const { mission, types, selected, parseError, fetchTypes, select, setMission } = useApp()
+  const { mission, types, selected, parseError, fetchTypes, select, setMission, issues } = useApp()
+  const bad = (name: string) => issues.filter((i) => i.resource === name).length
   const [newType, setNewType] = useState('Spacecraft')
   const [ask, setAsk] = useState<Ask | null>(null)
   useEffect(() => { void fetchTypes() }, [fetchTypes])
@@ -105,16 +106,17 @@ export default function ResourceTree() {
         <button className={s.btn} disabled={!current} onClick={() => current && remove(current)}>{es.resources.remove}</button>
       </div>
       {parseError && <p className={s.warn} role="alert" title={parseError}>{es.resources.parseError}</p>}
+      {mission.resources.length === 0 && <p className={s.muted}>{es.resources.none}</p>}
       <div className={s.list} role="tree" aria-label={es.left.resources}>
-        {mission.resources.length === 0 && <p className={s.muted}>{es.resources.none}</p>}
         {ORDER.filter((g) => groups.has(g)).map((g) => (
           <div key={g} role="group" aria-label={es.resources.groups[g]}>
-            <h3 className={s.group}>{es.resources.groups[g]}</h3>
+            <div className={s.group} aria-hidden>{es.resources.groups[g]}</div>
             {groups.get(g)!.map((r) => (
               <button key={r.name} role="treeitem" aria-selected={r.name === selected}
                 className={r.name === selected ? s.itemActive : s.item} onClick={() => select(r.name)}
                 onDoubleClick={() => rename(r)}>
-                {r.name}<small>{r.type}</small>
+                <span>{r.name}{bad(r.name) > 0 && <span className={s.flag} title={es.issues.marker(bad(r.name))}> ⚠<span className={s.sr}>{es.issues.marker(bad(r.name))}</span></span>}</span>
+                <small>{r.type}</small>
               </button>
             ))}
           </div>

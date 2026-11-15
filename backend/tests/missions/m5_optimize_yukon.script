@@ -1,0 +1,70 @@
+%  Mision propia 5: Optimize con Yukon (nucleo, sin fmincon). Transferencia de 6700 km a GEO
+%  con dos maniobras: minimiza DV total con NonlinearConstraint en el radio de apoapsis y en
+%  el SMA final (normalizados).
+
+Create Spacecraft Sat;
+Sat.DateFormat       = UTCGregorian;
+Sat.Epoch            = '01 Jan 2025 00:00:00.000';
+Sat.CoordinateSystem = EarthMJ2000Eq;
+Sat.DisplayStateType = Keplerian;
+Sat.SMA              = 6700;
+Sat.ECC              = 0;
+Sat.INC              = 0;
+Sat.RAAN             = 0;
+Sat.AOP              = 0;
+Sat.TA               = 0;
+
+Create ForceModel FM;
+FM.CentralBody = Earth;
+FM.PointMasses = {Earth};
+FM.Drag        = None;
+FM.SRP         = Off;
+
+Create Propagator Prop;
+Prop.FM              = FM;
+Prop.Type            = RungeKutta89;
+Prop.InitialStepSize = 60;
+Prop.Accuracy        = 1e-11;
+Prop.MinStep         = 0.001;
+Prop.MaxStep         = 2700;
+
+Create ImpulsiveBurn TOI;
+TOI.CoordinateSystem = Local;
+TOI.Origin           = Earth;
+TOI.Axes             = VNB;
+
+Create ImpulsiveBurn GOI;
+GOI.CoordinateSystem = Local;
+GOI.Origin           = Earth;
+GOI.Axes             = VNB;
+
+Create Yukon Opt;
+Opt.ShowProgress         = true;
+Opt.ReportStyle          = Normal;
+Opt.MaximumIterations    = 200;
+Opt.FeasibilityTolerance = 1e-8;
+Opt.OptimalityTolerance  = 1e-6;
+Opt.FunctionTolerance    = 1e-6;
+
+Create Variable Cost Rapo Sfin;
+
+Create ReportFile R;
+R.Filename     = 'm5_optimize_yukon.txt';
+R.WriteHeaders = false;
+R.Precision    = 16;
+
+BeginMissionSequence;
+Optimize Opt {SolveMode = Solve, ExitMode = SaveAndContinue};
+   Vary Opt(TOI.Element1 = 2.0, {Perturbation = 1e-6, Lower = 0, Upper = 5, MaxStep = 0.5});
+   Vary Opt(GOI.Element1 = 1.0, {Perturbation = 1e-6, Lower = 0, Upper = 5, MaxStep = 0.5});
+   Maneuver TOI(Sat);
+   Propagate Prop(Sat) {Sat.Apoapsis};
+   Rapo = Sat.RMAG / 42164;
+   NonlinearConstraint Opt(Rapo = 1);
+   Maneuver GOI(Sat);
+   Sfin = Sat.SMA / 42164;
+   NonlinearConstraint Opt(Sfin = 1);
+   Cost = TOI.Element1 + GOI.Element1;
+   Minimize Opt(Cost);
+EndOptimize;
+Report R Sat.A1ModJulian Sat.SMA Sat.ECC Sat.RMAG TOI.Element1 GOI.Element1 Cost;

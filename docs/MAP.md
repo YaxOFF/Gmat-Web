@@ -1,4 +1,4 @@
-<!-- fuente: backend/app, frontend/src, shared | rev: 4d753f5 -->
+<!-- fuente: backend/app, frontend/src, shared | rev: 1ee8d23 -->
 # Map
 
 ## Entry points
@@ -7,7 +7,7 @@
 - `backend/app/engine/worker.py`: process pool with `gmatpy`; `submit(fn, ...)`.
 - `frontend/src/main.tsx` and `App.tsx`: shell (bar, tabs, console).
 - `frontend/src/store.ts`: single Zustand state.
-- `PLAN.md`: phases, decisions, progress and log.
+- `PLAN.md`: phases, decisions, progress and log of the web port. `PLAN-JUEGO.md`: the same for the "Viaje a la Luna" game (active plan).
 
 ## Concepts → file
 | Concept | Where it lives |
@@ -34,6 +34,15 @@
 | Monaco editor + GMAT highlighting + error markers (`store.logs` with line) | `frontend/src/editor/ScriptEditor.tsx`, `gmat.ts` |
 | GMAT samples | `backend/app/samples.py` (reads `GMAT_HOME/samples`) |
 | Sample batch and comparison with desktop | `backend/app/batch.py` (`python -m app.batch` regenerates `docs/COMPATIBILITY.md`); `backend/tests/test_desktop.py` (`pytest -m slow`) |
+| Own missions with desktop reference | `backend/tests/missions/` (`m1..m6.script`, `reference.json`, `make_reference.py` regenerates it); `backend/tests/test_missions.py` (`pytest -m slow`) |
+| Mission templates (Viaje a la Luna, LEO, Hohmann to GEO, ground track) and their wizard | `frontend/src/templates.ts` (scripts and limits), `TemplateDialog` in `frontend/src/Dialogs.tsx`, text `es.templates`; lunar one verified against desktop in `backend/tests/missions/m7_viaje_luna.script` |
+| Command palette (Ctrl+K), guided tour, shortcuts | `Palette` and `Tour` in `frontend/src/Dialogs.tsx`; shortcuts and action list in `App.tsx`; `store.tourSeen` |
+| Live validation and errors located in resource/field | `store.checkLater`, `store.issues`; `frontend/src/model/issues.ts` (`toIssues`, `locate`, `clean`); shown in `IssueChip` (`App.tsx`), `Field.tsx`, `ResourceForm.tsx`, `ResourceTree.tsx`, `ScriptEditor.tsx` |
+| Undo/redo (Monaco history, also for forms) | `gmat.history`, `rev`/`load` effect of `frontend/src/editor/ScriptEditor.tsx` |
+| Autosaved draft | `store.ts` (`readDraft`, `useApp.subscribe`), key `gmatweb.draft` |
+| Moon in results and lunar view of the 3D | `results.LUNA_CS`/`LUNA_COLS` (backend), `track` and `Globe` with `center` in `frontend/src/results/View3D.tsx` |
+| Responsive (tablet, mobile viewer only) | `@media` at the end of `frontend/src/App.module.css` |
 | UI text | `frontend/src/i18n/es.ts` |
+| Usage guide, adding missions, web → original C++ diagnosis | `docs/GUIDE.md` |
 
 Symbols: `grep` in `docs/SYMBOLS.tsv` (generate with `sh docs/docs.sh map`).

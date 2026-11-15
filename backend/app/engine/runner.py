@@ -19,7 +19,7 @@ from app.engine.solver import SolverLog
 LOG = "gmat.log"
 SCRIPT = "mission.script"
 HIDDEN = {LOG, SCRIPT, "startup.txt", "GmatLog.txt"}
-EXIT_MSG = {2: "El script tiene errores y no se pudo cargar", 3: "La corrida falló"}
+EXIT_MSG = {2: "The script has errors and could not be loaded", 3: "The run failed"}
 
 
 def _child(gmat_home: str, cache_dir: str, run_dir: str) -> None:
@@ -153,7 +153,7 @@ async def _supervise(run: Run) -> None:
             run.proc.terminate()
             run.proc.join(5)
             await drain(final=True)
-            msg = "Corrida detenida" if run.cancelled else f"Tiempo límite ({config.RUN_TIMEOUT_S:.0f} s) agotado"
+            msg = "Run stopped" if run.cancelled else f"Time limit ({config.RUN_TIMEOUT_S:.0f} s) reached"
             await run.emit({"type": "error", "message": msg})
             return
         if int(elapsed) > last_tick:
@@ -162,7 +162,7 @@ async def _supervise(run: Run) -> None:
     await drain(final=True)
     code = run.proc.exitcode
     if code != 0:
-        await run.emit({"type": "error", "message": EXIT_MSG.get(code, f"El motor terminó con código {code}")})
+        await run.emit({"type": "error", "message": EXIT_MSG.get(code, f"The engine exited with code {code}")})
         return
     files = sorted(p.name for p in run.dir.iterdir()
                    if p.is_file() and p.name not in HIDDEN and not p.name.startswith(results.PREFIX))

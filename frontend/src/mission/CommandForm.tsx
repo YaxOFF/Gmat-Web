@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { es } from '../i18n/es'
+import { en as es } from '../i18n/en'
 import type { Command, Mission } from '../model/mission'
 import { TextField } from '../resources/Field'
 import r from '../resources/Resources.module.css'

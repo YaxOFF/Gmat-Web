@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { es } from './i18n/es'
+import { en as es } from './i18n/en'
+import { toIssues, type Issue } from './model/issues'
 import type { Command, Mission } from './model/mission'
 import type { Results, SolverEvent, SolverRun } from './model/results'
 import type { FieldSchema, ParamInfo, TypeInfo } from './model/schema'
@@ -10,8 +11,9 @@ type Engine = { state: 'checking' | 'ready' | 'error'; version?: string; detail?
 export type LogLevel = 'info' | 'warning' | 'error' | 'system'
 export type LogEntry = { level: LogLevel; text: string; line?: number }
 export type Sample = { id: string; name: string; folder: string; description: string }
-// rev cambia solo cuando el texto viene de fuera del editor (Nuevo/Abrir/Ejemplo).
-type Doc = { text: string; name: string; rev: number }
+// rev cambia cuando el texto viene de fuera del editor (Nuevo/Abrir/Ejemplo/formularios); load solo al cargar otro
+// documento (ahí el editor reinicia su historial de deshacer).
+type Doc = { text: string; name: string; rev: number; load: number }
 type RunEvent =
   | { type: 'log'; level: LogLevel; text: string; line?: number }
   | { type: 'progress'; elapsed: number }
@@ -23,6 +25,26 @@ type RunEvent =
 const MAX_LOG = 5000
 // shortcut: solo las últimas corridas de solver (un Target en un bucle puede dar cientos); subir si hace falta.
 const MAX_SOLVERS = 200
+// Validación en vivo: espera tras el último cambio antes de pedirle al motor que cargue el script (~0,7 s por vez).
+const CHECK_DELAY_MS = 1200
+const DRAFT_KEY = 'gmatweb.draft'
+const TOUR_KEY = 'gmatweb.tour'
+
+/** ¿Ya vio el recorrido? `mark` lo anota. Sin localStorage se da por visto (no molestar en cada carga). */
+export function tourSeen(mark?: boolean): boolean {
+  try {
+    if (mark) localStorage.setItem(TOUR_KEY, '1')
+    return localStorage.getItem(TOUR_KEY) === '1'
+  } catch { return true }
+}
+
+/** Borrador guardado en este navegador (localStorage puede faltar o estar bloqueado). */
+function readDraft(): { text: string; name: string } | null {
+  try {
+    const d = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null')
+    return d && typeof d.text === 'string' && d.text.trim() && typeof d.name === 'string' ? d : null
+  } catch { return null }
+}
 
 type AppState = {
   leftTab: LeftTab
@@ -46,6 +68,10 @@ type AppState = {
   results: Results | null
   /** Corridas de solvers (Target/Optimize) de la corrida actual, en vivo. */
   solvers: SolverRun[]
+  /** Errores del motor para el texto actual (validación en vivo o botón Validar), con recurso/campo si se ubican. */
+  issues: Issue[]
+  /** null = sin validar todavía (o documento vacío). */
+  checked: boolean | null
   setLeftTab: (t: LeftTab) => void
   setCenterTab: (t: CenterTab) => void
   checkEngine: () => Promise<void>
@@ -96,6 +122,26 @@ export const useApp = create<AppState>((set, get) => {
     }, PARSE_DELAY_MS)
   }
 
+  // Validación en vivo: el motor carga el script (sin correrlo) cuando el texto deja de cambiar.
+  let cseq = 0
+  let ctimer: ReturnType<typeof setTimeout> | undefined
+  const checkLater = () => {
+    clearTimeout(ctimer)
+    const mine = ++cseq
+    if (!get().doc.text.trim()) return set({ issues: [], checked: null })
+    ctimer = setTimeout(async () => {
+      const script = get().doc.text
+      try {
+        const r = await post('/api/script/validate', { script })
+        const body = await r.json()
+        if (mine === cseq && r.ok) set({ issues: toIssues(body.errors, script), checked: true })
+      } catch { /* sin red: se reintenta con el siguiente cambio */ }
+    }, CHECK_DELAY_MS)
+  }
+
+  const draft = readDraft()
+  if (draft) queueMicrotask(() => { parseLater(); checkLater() })
+
   const onSolver = (ev: SolverEvent) => {
     if (ev.event === 'silent') return log({ level: 'warning', text: es.solver.silentLog(ev.solver) })
     if (ev.event === 'start') {
@@ -117,11 +163,11 @@ export const useApp = create<AppState>((set, get) => {
     leftTab: 'resources',
     centerTab: 'editor',
     engine: { state: 'checking' },
-    doc: { text: '', name: 'mision.script', rev: 0 },
+    doc: { text: draft?.text ?? '', name: draft?.name ?? 'mision.script', rev: 0, load: 0 },
     samples: null,
     runId: null,
     elapsed: 0,
-    logs: [],
+    logs: draft ? [{ level: 'system', text: es.draft.restored(draft.name) }] : [],
     mission: { resources: [], sequence: [], raw: [] },
     parseError: null,
     types: null,
@@ -131,6 +177,8 @@ export const useApp = create<AppState>((set, get) => {
     parameters: null,
     results: null,
     solvers: [],
+    issues: [],
+    checked: null,
     setLeftTab: (leftTab) => set({ leftTab }),
     setCenterTab: (centerTab) => set({ centerTab }),
     checkEngine: async () => {
@@ -147,8 +195,12 @@ export const useApp = create<AppState>((set, get) => {
       }
     },
     loadText: (text, name) => {
-      set((st) => ({ doc: { text, name, rev: st.doc.rev + 1 }, centerTab: 'editor', selected: null, selectedCmd: null, results: null, solvers: [] }))
+      set((st) => ({
+        doc: { text, name, rev: st.doc.rev + 1, load: st.doc.load + 1 }, centerTab: 'editor', selected: null, selectedCmd: null,
+        results: null, solvers: [], issues: [], checked: null,
+      }))
       parseLater()
+      checkLater()
       // Nuevo: modelo vacío ya, sin esperar al parse (los árboles no deben mostrar el documento anterior)
       if (!text.trim()) set({ mission: { resources: [], sequence: [], raw: [] }, parseError: null })
     },
@@ -156,6 +208,7 @@ export const useApp = create<AppState>((set, get) => {
       if (text === get().doc.text) return  // eco del editor tras setMission/loadText
       set((st) => ({ doc: { ...st.doc, text } }))
       parseLater()
+      checkLater()
     },
     fetchSamples: async () => {
       if (get().samples) return
@@ -224,10 +277,14 @@ export const useApp = create<AppState>((set, get) => {
     },
     validate: async () => {
       set({ logs: [{ level: 'system', text: es.validate.starting }] })
+      clearTimeout(ctimer)
+      const mine = ++cseq
+      const script = get().doc.text
       try {
-        const r = await post('/api/script/validate', { script: get().doc.text })
+        const r = await post('/api/script/validate', { script })
         const body: { ok: boolean; errors: LogEntry[] } = await r.json()
         if (!r.ok) return log({ level: 'error', text: `${es.validate.failed}: ${(body as { detail?: string }).detail}` })
+        if (mine === cseq) set({ issues: toIssues(body.errors, script), checked: true })
         log(...body.errors.map((e) => ({ ...e, line: e.line ?? undefined })),
           { level: body.ok ? 'system' : 'error', text: body.ok ? es.validate.ok : es.validate.bad })
       } catch (e) {
@@ -279,7 +336,9 @@ ${line};
           const r = await post('/api/script/serialize', mission)
           const body = await r.json()
           if (!r.ok) return log({ level: 'error', text: `${es.resources.serializeError}: ${body.detail}` })
-          if (mine === seq) set((st) => ({ doc: { ...st.doc, text: body.script, rev: st.doc.rev + 1 } }))
+          if (mine !== seq) return
+          set((st) => ({ doc: { ...st.doc, text: body.script, rev: st.doc.rev + 1 } }))
+          checkLater()
         } catch (e) {
           log({ level: 'error', text: `${es.resources.serializeError}: ${e}` })
         }
@@ -292,4 +351,18 @@ ${line};
       return out
     },
   }
+})
+
+// Autoguardado del borrador: el último texto queda en este navegador y vuelve al recargar (Nuevo lo descarta).
+let draftTimer: ReturnType<typeof setTimeout> | undefined
+useApp.subscribe((st, prev) => {
+  if (st.doc.text === prev.doc.text && st.doc.name === prev.doc.name) return
+  clearTimeout(draftTimer)
+  draftTimer = setTimeout(() => {
+    const { text, name } = useApp.getState().doc
+    try {
+      if (text.trim()) localStorage.setItem(DRAFT_KEY, JSON.stringify({ text, name }))
+      else localStorage.removeItem(DRAFT_KEY)
+    } catch { /* sin localStorage (modo privado, cuota): no hay borrador */ }
+  }, 500)
 })

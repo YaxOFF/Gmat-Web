@@ -114,3 +114,31 @@ await window.__dnd(__find('Prop 1 Day'),__find('Prop to Perigee'),0.2)
 - Monaco markers: after Validar with `DefaultSC.Bogus = 3;` a squiggle appears (`.squiggly-error`); Ctrl+G + number to reach the line. Today it is NOT cleared when editing by hand (ScriptEditor.tsx only clears on an external setValue).
 - Guardar: hook `HTMLAnchorElement.prototype.click` and `fetch(this.href)` to read the content; no `GMAT ` lines.
 - Mobile: 390 px iframe still has scrollWidth 717 (pre-existing).
+
+### Phase 7c2 (own missions)
+- The missions in `backend/tests/missions/` do not show up in `/api/samples`. Serve them with CORS (`python` http.server on 127.0.0.1:8765, `os.chdir` to that folder, header `Access-Control-Allow-Origin: *`) and load with `__load(name, 'http://127.0.0.1:8765/<m>.script')` (variant of `__load` with second argument = URL; a `File` in `input[type=file]` + `change`).
+- `__sel()` = the Results Vista select (options `gt:`/`sc:`/`rf:`); the solver runs selector is the select whose options start with `#N ·`. Note: the first select on the page is the Agregar one.
+- Guardar: hook `HTMLAnchorElement.prototype.click` + `fetch(href)`; compare with the original normalizing spaces (`replace(/\s+/g,' ')`). Expected and semantically equal differences: quotes are lost in `HistoricWeatherSource/PredictedWeatherSource = 'X'`, `Create Variable A B;` is split into one line per variable, an end-of-line comment becomes its own line, `1e-8` -> `1e-08`.
+- 7c2 numbers (all equal to `reference.json`): m1 X=-4177.282287801592; m2 SK.Element1 per run -3.21037154806e-05 / -3.55370228741e-05 / -5.29010330181e-06; m3 LOI -0.603883729799; m4 FuelMass 1.000000000009152; m5 TOI 2.41950136969, GOI 1.46455506119. None of the own missions has an XYPlot (Results only gt/sc/rf).
+- m6: Validar and Correr give 2 squiggles (lines 8 and 13); typing clears them; Validar brings them back.
+- The Solver's log Y axis shows "0" on several ticks (values < 0.001 rounded).
+
+### Phase 8 (UX: templates, undo, live validation, responsive)
+- Templates against the engine, without a browser: `API=http://127.0.0.1:8001 node --experimental-strip-types backend/tests/tools/templates_check.mjs [luna|leo|hohmann|track]`. It runs each template with its default values, with the minimum and the maximum of each input, and the lunar one also on 5 dates (2025 to 2030). It prints ships, rows and the last row of the report. Expected: 29 cases without `ERROR`, `NO VALIDA` or `INVALID`; lunar default `Nave.Luna.RMAG` 5003.08, TLI 3.129455786, LOI -0.6438904876; Hohmann 500 km TOI 2.369788305, GOI 1.446256485. A run that GMAT cuts halfway returns `/results` anyway: you can tell because the last row is the one from the first `Report` (it happened with LEO at 200 km: it reenters).
+- Limits taken from that test: Moon with INC 20 does not converge (TLI 4.42, ECC 4422); LEO at 200 km reenters in less than 1 day.
+- Lunar web vs desktop: `backend/tests/missions/m7_viaje_luna.script` (generated from the template) in `pytest -m slow tests/test_missions.py` -> 7 passed.
+- Moon in results: `pytest tests/test_results.py::test_moon_columns_and_static_ship` compares `LunaMJ2000Eq.X` and the distance with your own ReportFile (`DefaultSC.LunaEq.X`, `DefaultSC.Luna.RMAG`) and checks that the Moon is 356-407 thousand km from Earth.
+- Browser (helpers in the JS console): `__btn(text)`, `__set(el, value)` (native setter + `input`/`change`), `__log()` (lines of the app console), `__tab(text)`, `__w(ms)`. A `javascript_tool` longer than 45 s times out: launch Correr and read the log in another call.
+  1. First visit (no `gmatweb.tour` in localStorage): the tour shows up, 6 steps with a frame; Terminar saves it and it does not show up again.
+  2. Plantillas: 4 cards, the lunar one highlighted; radius 100 disables Crear and shows "Entre 2000 y 20000"; Crear misión loads `viaje_luna.script` (17 resources) and indicator "✓ Sin errores" after ~2 s.
+  3. Correr: ~3 s; Solver with 2 runs (the 2nd converges in 37 iterations); Results with the Distancias chart; 3D with the Moon and, with Centro = Luna, the lunar orbit (the 2-option select `Earth`/`Luna`).
+  4. Save by shortcut and read the text: override `HTMLAnchorElement.prototype.click` (stores `fetch(this.href)`) and dispatch `keydown` Ctrl+S on `window`.
+  5. Undo: resource Nave, field `DryMass` 850 -> 900 (blur), ↶ leaves it at 850, ↷ at 900, Ctrl+Z on `window` 850 again.
+  6. Validation next to the field: typing `abc` in `DryMass` shows "Debe ser un número…" without leaving the field; `-5` + blur shows after ~3 s the engine message in the field, the form box, ⚠ in the tree and "⚠ 1 error" in the bar (title with "Línea 18"); ↶ clears it.
+  7. Palette: `keydown` Ctrl+K; 39 actions with the lunar one loaded; "orbita leo" (without accent) leaves "Plantilla: Órbita LEO"; "solver" + Enter opens the Solver tab.
+  8. Draft: reloading the page restores the script and the first line of the console is "Se recuperó el borrador…".
+  9. F5 (`keydown` on `window`) runs the Traza en tierra template; Hohmann from template gives TOI 2.36978830493, GOI 1.44625648474 and "DC convergió en 4 iteraciones".
+  10. Regression: Ejemplos -> Ex_HohmannTransfer -> Correr: TOI 2.24028397735, GOI 1.432966302.
+- Responsive without changing the window: a same-origin `<iframe src="/" width=768|390>` and measure the `scrollWidth` of the iframe's document. Result: 768 -> 768 (77 px bar, left panel visible); 390 -> 390 (no left panel, Editor/3D/Resultados/Solver tabs).
+- Accessibility without Lighthouse (it could not be downloaded): a script on the page that goes through buttons (accessible name), fields (aria-label, label or title) and the contrast of each text against its background (canvas to normalize colors, threshold 4.5:1 or 3:1 for large text). Views: resource, command, Solver, Results and templates dialog, in dark and in light (`document.documentElement.dataset.theme = 'light'`). Result: 0 without a name, 0 without a label, 0 with low contrast. Careful when measuring: clear the canvas (`clearRect`) before each color, otherwise a transparent background returns the previous color.
+- Closed 7c2 backlog item: `FM.Drag.HistoricWeatherSource = ConstantFluxAndGeoMag` without quotes loads the same as with quotes (`/api/script/validate` -> `ok: true` in both, with `AtmosphereModel` before).

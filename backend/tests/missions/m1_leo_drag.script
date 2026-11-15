@@ -1,0 +1,51 @@
+%  Mision propia 1: LEO de 400 km con arrastre JacchiaRoberts (flujo constante, sin archivos
+%  de clima) y gravedad 4x4. Propaga 1 dia y reporta el estado final.
+
+Create Spacecraft Sat;
+Sat.DateFormat       = UTCGregorian;
+Sat.Epoch            = '01 Jan 2025 12:00:00.000';
+Sat.CoordinateSystem = EarthMJ2000Eq;
+Sat.DisplayStateType = Keplerian;
+Sat.SMA              = 6778.137;
+Sat.ECC              = 0.0005;
+Sat.INC              = 51.6;
+Sat.RAAN             = 30;
+Sat.AOP              = 0;
+Sat.TA               = 0;
+Sat.DryMass          = 500;
+Sat.Cd               = 2.2;
+Sat.DragArea         = 10;
+
+Create ForceModel FM;
+FM.CentralBody                      = Earth;
+FM.PrimaryBodies                    = {Earth};
+FM.GravityField.Earth.Degree        = 4;
+FM.GravityField.Earth.Order         = 4;
+FM.GravityField.Earth.PotentialFile = 'JGM2.cof';
+FM.Drag.AtmosphereModel             = JacchiaRoberts;
+FM.Drag.HistoricWeatherSource       = 'ConstantFluxAndGeoMag';
+FM.Drag.PredictedWeatherSource      = 'ConstantFluxAndGeoMag';
+FM.Drag.F107                        = 150;
+FM.Drag.F107A                       = 150;
+FM.Drag.MagneticIndex               = 3;
+
+Create Propagator Prop;
+Prop.FM              = FM;
+Prop.Type            = RungeKutta89;
+Prop.InitialStepSize = 60;
+Prop.Accuracy        = 1e-11;
+Prop.MinStep         = 0.001;
+Prop.MaxStep         = 600;
+
+Create XYPlot AltPlot;
+AltPlot.XVariable  = Sat.ElapsedDays;
+AltPlot.YVariables = {Sat.Altitude};
+
+Create ReportFile R;
+R.Filename     = 'm1_leo_drag.txt';
+R.WriteHeaders = false;
+R.Precision    = 16;
+
+BeginMissionSequence;
+Propagate Prop(Sat) {Sat.ElapsedDays = 1};
+Report R Sat.A1ModJulian Sat.X Sat.Y Sat.Z Sat.VX Sat.VY Sat.VZ Sat.SMA Sat.Altitude;

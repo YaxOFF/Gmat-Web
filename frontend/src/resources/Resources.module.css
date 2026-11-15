@@ -21,7 +21,7 @@
 .select { flex: 1; }
 .input[aria-invalid='true'] { border-color: var(--error); }
 .list { flex: 1; overflow: auto; padding: 4px 8px 12px; }
-.group { margin: 10px 0 2px; font-size: 12px; text-transform: uppercase; color: var(--text-muted); }
+.group { margin: 10px 0 2px; font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); }
 .item, .itemActive {
   display: flex;
   justify-content: space-between;
@@ -44,7 +44,7 @@
 .title { margin: 4px 0 10px; font-size: 16px; }
 .row {
   display: grid;
-  grid-template-columns: minmax(140px, 260px) minmax(0, 360px) auto;
+  grid-template-columns: minmax(90px, 260px) minmax(0, 360px) auto;
   align-items: center;
   gap: var(--gap);
   padding: 2px 0;
@@ -73,3 +73,8 @@ summary.legend { cursor: pointer; }
 .ask { display: flex; flex-direction: column; gap: 8px; padding: 14px; }
 .askText { margin: 0; white-space: pre-line; max-height: 50vh; overflow: auto; font-size: 13px; }
 .askBar { display: flex; justify-content: flex-end; gap: 6px; }
+.fieldErr { grid-column: 2 / -1; color: var(--error); font-size: 12px; }
+.issues { margin: 0 0 12px; padding: 6px 10px; border: 1px solid var(--error); border-left-width: 4px; border-radius: var(--radius); font-size: 13px; }
+.issues ul { margin: 4px 0 0; padding-left: 18px; }
+.flag { color: var(--error); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

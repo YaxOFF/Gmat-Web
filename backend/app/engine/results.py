@@ -10,6 +10,9 @@ from app.engine.sanitize import CREATE, _split_comment
 PREFIX = "gmatweb_"  # archivos y recursos ocultos
 SHIP_COLS = ["A1ModJulian", "UTCGregorian", "EarthMJ2000Eq.X", "EarthMJ2000Eq.Y", "EarthMJ2000Eq.Z",
              "EarthMJ2000Eq.VX", "EarthMJ2000Eq.VY", "EarthMJ2000Eq.VZ", "Earth.Latitude", "Earth.Longitude"]
+# Posición respecto a la Luna (ejes MJ2000Eq): con ella el frontend ubica la Luna (nave − esto) y da la vista lunar.
+LUNA_CS = f"{PREFIX}LunaEq"
+LUNA_COLS = ["LunaMJ2000Eq.X", "LunaMJ2000Eq.Y", "LunaMJ2000Eq.Z"]  # nombres en la respuesta
 FIELD = re.compile(r"^\s*(?:GMAT\s+)?(\w+)\.(XVariable|YVariables|Filename|WriteHeaders|Add)\s*=\s*(.+?)\s*;?\s*$", re.I)
 MAX_ROWS = 200_000  # por archivo, para no mandar respuestas gigantes
 
@@ -53,9 +56,13 @@ def inject(text: str, run_dir: Path) -> tuple[str, dict]:
     if begin is None:
         return text, manifest
     extra: list[str] = []
-    for name in (n for n, t in types.items() if t == "Spacecraft"):
+    ships = [n for n, t in types.items() if t == "Spacecraft"]
+    if ships:
+        extra += [f"Create CoordinateSystem {LUNA_CS};", f"{LUNA_CS}.Origin = Luna;", f"{LUNA_CS}.Axes = MJ2000Eq;"]
+    for name in ships:
         file = f"{PREFIX}sc_{name}.csv"
-        extra += _report(f"{PREFIX}sc_{name}", run_dir / file, [f"{name}.{c}" for c in SHIP_COLS])
+        extra += _report(f"{PREFIX}sc_{name}", run_dir / file,
+                         [f"{name}.{c}" for c in SHIP_COLS] + [f"{name}.{LUNA_CS}.{a}" for a in "XYZ"])
         manifest["ships"][name] = file
     for name in (n for n, t in types.items() if t == "XYPlot"):
         x = fields.get((name, "xvariable"), "").strip("{} ")
@@ -120,7 +127,9 @@ def read(run_dir: Path, manifest: dict) -> dict:
         if not p.exists():
             continue
         _, rows = _csv(p)
-        cols = {c: [r[i] if i < len(r) else None for r in rows] for i, c in enumerate(SHIP_COLS)}
+        cols = {c: [r[i] if i < len(r) else None for r in rows] for i, c in enumerate(SHIP_COLS + LUNA_COLS)}
+        if len(set(cols["A1ModJulian"])) < 2:  # nave que nunca se propagó (p. ej. copia de respaldo): nada que mostrar
+            continue
         # Sin épocas de maniobra: GMAT no publica el estado justo tras un Maneuver (verificado).
         out["ships"].append({"name": name, "columns": cols})
     for name, rep in manifest["reports"].items():

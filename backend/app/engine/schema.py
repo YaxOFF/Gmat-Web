@@ -207,7 +207,7 @@ async def _isolated(fn, *args):
         try:
             while not recv.poll():
                 if time.monotonic() > deadline:
-                    raise TimeoutError(f"{getattr(fn, '__name__', fn)}: más de {config.TASK_TIMEOUT_S:.0f} s")
+                    raise TimeoutError(f"{getattr(fn, '__name__', fn)}: more than {config.TASK_TIMEOUT_S:.0f} s")
                 await asyncio.sleep(0.05)
             ok, value = recv.recv()
         except (EOFError, BrokenPipeError):  # BrokenPipe: así lo da poll en Windows

@@ -88,7 +88,7 @@ def sanitize(text: str, out_dir: Path) -> str:
     """Devuelve el script listo para correr; lanza ScriptRejected si no es seguro.
     Conserva el número de líneas para que los errores de GMAT apunten bien."""
     if len(text.encode("utf-8")) > config.MAX_SCRIPT_BYTES:
-        raise ScriptRejected(f"Script demasiado grande (máx. {config.MAX_SCRIPT_BYTES} bytes)")
+        raise ScriptRejected(f"Script too large (max {config.MAX_SCRIPT_BYTES} bytes)")
     lines = text.splitlines()
     types: dict[str, str] = {}
     inputs = set(INPUT_TYPES) | {"TrackingFileSet"}
@@ -96,7 +96,7 @@ def sanitize(text: str, out_dir: Path) -> str:
         code, _ = _split_comment(line)
         bad = FORBIDDEN.search(_strip_strings(code))
         if bad:
-            raise ScriptRejected(f"'{bad[1]}' no está permitido en el servidor", n)
+            raise ScriptRejected(f"'{bad[1]}' is not allowed on the server", n)
         if SIMULATOR.search(_strip_strings(code)):
             inputs.discard("TrackingFileSet")
         m = CREATE.match(code)
