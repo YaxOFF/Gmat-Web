@@ -4,6 +4,7 @@ import { clamp, mulberry32 } from '../engine/rng'
 import { loadCuriosity, meshHeight, type CuriosityRig } from './curiosity'
 import { HALF, loadDem, demHeight, noise, SIZE, type Dem } from './dem'
 import { edlEnvironment, loadEdl, ROVER_BRIDLE, type EdlRig } from './edl'
+import { puffs, puffTexture } from './Launch3D'
 import { untileMaterial } from './Rover3D'
 import { mountStage } from './stage'
 import { MARS, type RoverSite } from './world'
@@ -26,6 +27,12 @@ const DIV = 40 // m: la pila baja corrida en +X y el desvío propulsado la trae 
 const ROPE = 7.5 // m que baja el rover colgado de los cables
 const SEP3 = 0.15, SEP4 = 0.2 // avance de su etapa en que se suelta el escudo / la carcasa
 const Z = new THREE.Vector3(0, 0, 1)
+// Escape hacia +Z y un poco a -X: el choque queda dentro del cuadro final (cámara detrás del rover mirando a +Z).
+const FLY = new THREE.Vector3(-0.45, 0, 0.89).normalize(), FLY_AXIS = new THREE.Vector3(FLY.z, 0, -FLY.x)
+const ENTRY_DIR = new THREE.Vector3(1.2, 1, 0).normalize() // contrario a la marcha de la entrada: hacia allá va la estela
+const SUN_OFF = new THREE.Vector3(160, 220, -260)
+const CHUTE_R = 12, CHUTE_L = 30, CHUTE_TH = 1.0, GORES = 16 // casquete, largo de las líneas y abertura (rad)
+const DUST = new THREE.Color(0xe6cfb4)
 
 const smooth = (t: number) => { const u = clamp(t, 0, 1); return u * u * (3 - 2 * u) }
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
@@ -35,7 +42,7 @@ const Y_CHUTE = screenY(11000)
 
 interface Hud { alt: number; vel: number; stage: string; t: number }
 
-/** Entrada, descenso y aterrizaje en Marte (cinemática): las 8 etapas, sin efectos todavía. */
+/** Entrada, descenso y aterrizaje en Marte (cinemática): las 8 etapas con plasma, paracaídas, llamas y polvo. */
 export function Edl3D({ site, seed, onDone }: { site: RoverSite; seed: number; onDone: () => void }) {
   const host = useRef<HTMLDivElement>(null)
   const [hud, setHud] = useState<Hud | null>(null)
@@ -63,10 +70,11 @@ export function Edl3D({ site, seed, onDone }: { site: RoverSite; seed: number; o
     scene.background = sky.clone()
     const fog = new THREE.FogExp2(MARS.sky!, 0.0045); scene.fog = fog
     scene.add(new THREE.HemisphereLight(0xe0b48a, 0x3a2418, 0.9))
-    const sun = new THREE.DirectionalLight(0xffe2c4, 2.8); sun.position.set(160, 220, -260); sun.castShadow = true
-    sun.shadow.mapSize.set(2048, 2048)
-    Object.assign(sun.shadow.camera, { left: -150, right: 150, top: 150, bottom: -150, far: 900 })
-    scene.add(sun)
+    // El sol sigue a la pila (y abajo al rover) con una cámara de sombra chica: sombras nítidas en la zona de contacto.
+    const sun = new THREE.DirectionalLight(0xffe2c4, 2.8); sun.position.copy(SUN_OFF); sun.castShadow = true
+    sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0005
+    Object.assign(sun.shadow.camera, { left: -35, right: 35, top: 35, bottom: -35, far: 900 })
+    scene.add(sun, sun.target)
 
     // Terreno: el jugable de Rover3D (relieve real) y uno exterior hasta el horizonte, con el mismo material.
     const groundMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, color: new THREE.Color(0.5, 0.5, 0.5) })
@@ -106,19 +114,53 @@ export function Edl3D({ site, seed, onDone }: { site: RoverSite; seed: number; o
     const ropePos = new THREE.BufferAttribute(new Float32Array(18), 3)
     const ropes = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position', ropePos), new THREE.LineBasicMaterial({ color: 0x2a2a2a }))
     ropes.frustumCulled = false; ropes.visible = false; scene.add(ropes)
+
+    // Efectos. Una sola luz puntual: naranja del plasma en la entrada, azulada de los motores después.
+    const glow = new THREE.PointLight(0xffffff, 0, 80, 2); scene.add(glow)
+    const puff = puffTexture()
+    const trail = puffs(scene, 220, puff, true), dust = puffs(scene, 320, puff, false, height, LAND.x, LAND.z)
+    // Plasma: casquete aditivo delante del escudo (se ajusta al tamaño del escudo al cargar).
+    const plasma = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xff8a3a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }))
+    // Paracaídas de disco y banda: casquete con gajos blancos y naranjas, líneas hasta el cono de la carcasa.
+    const chute = new THREE.Group(); chute.visible = false
+    const cg = new THREE.SphereGeometry(CHUTE_R, GORES * 3, 10, 0, Math.PI * 2, 0.08, CHUTE_TH), uvs = cg.attributes.uv
+    const cc = new Float32Array(uvs.count * 3), white = new THREE.Color(0xf2efe8), orange = new THREE.Color(0xe8641e)
+    for (let k = 0; k < uvs.count; k++) {
+      const gore = Math.floor(uvs.getX(k) * GORES) % GORES, band = (1 - uvs.getY(k)) * Math.PI > 0.72 ? 2 : 0
+      ;((gore + band) % 4 === 0 ? orange : white).toArray(cc, k * 3)
+    }
+    cg.setAttribute('color', new THREE.BufferAttribute(cc, 3))
+    const canopy = new THREE.Mesh(cg, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }))
+    canopy.position.y = CHUTE_L - CHUTE_R * Math.cos(CHUTE_TH); canopy.castShadow = true
+    const rim = CHUTE_R * Math.sin(CHUTE_TH), lines: number[] = []
+    for (let k = 0; k < GORES; k++) { const f = (k / GORES) * Math.PI * 2; lines.push(0, 0, 0, Math.cos(f) * rim, CHUTE_L, Math.sin(f) * rim) }
+    chute.add(canopy, new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(lines, 3)), new THREE.LineBasicMaterial({ color: 0xd8d0c0 })))
+    // Llamas de los 8 motores: conos aditivos azulados por su -Y local, una geometría y un material compartidos.
+    const flameGeo = new THREE.ConeGeometry(0.11, 1.4, 10, 1, true).rotateX(Math.PI).translate(0, -0.7, 0)
+    const flameMat = new THREE.MeshBasicMaterial({ color: 0x8fc4ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false })
+    const flames: THREE.Mesh[] = []
+    let hsR = 3, hsBottom = 0
     let rig: EdlRig | null = null, cur: CuriosityRig | null = null, rest: THREE.Quaternion[] = [], yRest = 0, dead = false
     Promise.all([loadCuriosity(), loadEdl()]).then(([r, edl]) => {
       if (dead) return
       r.model.traverse((o) => { o.castShadow = true })
       body.add(r.model); stack.add(edl.root); rig = edl; cur = r
       rest = edl.thrusters.map((o) => o.quaternion.clone())
+      // Medidas del escudo y la punta de la carcasa, con la pila aún en el origen.
+      edl.root.updateMatrixWorld(true)
+      const hb = new THREE.Box3().setFromObject(edl.heatshield), bb = new THREE.Box3().setFromObject(edl.backshell)
+      hsR = (hb.max.x - hb.min.x) / 2; hsBottom = edl.heatshield.worldToLocal(a.set(0, hb.min.y, 0)).y
+      plasma.scale.set(hsR * 1.25, hsR * 0.6, hsR * 1.25); plasma.position.y = hsBottom + hsR * 0.25; edl.heatshield.add(plasma)
+      chute.position.copy(edl.backshell.worldToLocal(a.set(0, bb.max.y, 0))); edl.backshell.add(chute)
+      for (const nz of edl.nozzles) { const f = new THREE.Mesh(flameGeo, flameMat); flames.push(f); nz.add(f) }
       // Altura del origen del rover apoyado en llano: dice cuánto le falta a las ruedas para tocar.
       r.update(0, body, LAND.x, LAND.z, 0, 0, 0, () => h0); yRest = body.position.y - h0
     }).catch((e: Error) => !dead && setErr(e.message))
 
     const camOff = new THREE.Vector3(), want = new THREE.Vector3(), look = new THREE.Vector3(), camLook = new THREE.Vector3()
     const a = new THREE.Vector3(), b = new THREE.Vector3(), q = new THREE.Quaternion()
-    let t = 0, hudT = 0, first = true, ended = false, detached = false, crashed = false
+    let t = 0, hudT = 0, first = true, ended = false, detached = false, crashed = false, trailAcc = 0, dustAcc = 0
     const tick = (dt: number) => {
       if (!rig || !cur) return
       t = Math.min(TOTAL, t + dt)
@@ -159,16 +201,63 @@ export function Edl3D({ site, seed, onDone }: { site: RoverSite; seed: number; o
         // Vuelo de escape: sube, se inclina ~45°, acelera hacia -X y cae lejos.
         const s = p * st.dur
         tilt = 0.8 * smooth((s - 1) / 1.2)
-        stack.position.set(LAND.x - Math.max(0, s - 1.5) ** 2 * 6, h0 + ROPE + yRest + 1.5 + 4 * smooth(s / 1.5) - Math.max(0, s - 4.5) ** 2 * 6, LAND.z)
-        if (stack.position.y < height(clamp(stack.position.x, -HALF, HALF), stack.position.z)) crashed = true
+        const d = Math.max(0, s - 1.5) ** 2 * 6, sp = stack.position
+        sp.set(LAND.x + FLY.x * d, h0 + ROPE + yRest + 1.5 + 4 * smooth(s / 1.5) - Math.max(0, s - 4.5) ** 2 * 6, LAND.z + FLY.z * d)
+        const gy = height(clamp(sp.x, -HALF, HALF), clamp(sp.z, -HALF, HALF))
+        if (!crashed && sp.y < gy) {
+          crashed = true // nube de polvo donde cae
+          for (let k = 0; k < 90; k++) {
+            const f = Math.random() * Math.PI * 2, v = 3 + Math.random() * 8
+            dust.emit(a.set(sp.x, gy + 1, sp.z), b.set(Math.cos(f) * v, 2 + Math.random() * 8, Math.sin(f) * v), 5 + Math.random() * 4, 4, 5)
+          }
+        }
       }
-      stack.rotation.set(0, 0, tilt); stack.updateMatrixWorld(true)
+      if (i === 7) stack.quaternion.setFromAxisAngle(FLY_AXIS, tilt)
+      else stack.rotation.set(0, 0, tilt)
+      stack.updateMatrixWorld(true)
       rig.heatshield.position.y = -hsDrop
       rig.heatshield.rotation.set(hsDrop * 0.012, hsDrop * 0.05, 0) // cae girando
       rig.heatshield.visible = hsDrop < 150
       if (i <= 3) rig.backshell.position.y = bsRise
       else if (!detached) { scene.attach(rig.backshell); detached = true } // se queda con el paracaídas
-      if (detached) { rig.backshell.position.x += 2 * dt; rig.backshell.position.y -= 12 * dt }
+      if (detached) {
+        const bp = rig.backshell.position; bp.x += 2 * dt; bp.y -= 12 * dt
+        rig.backshell.visible = bp.y > height(clamp(bp.x, -HALF, HALF), bp.z) // se oculta al llegar al suelo
+      }
+      // Paracaídas: sale en la etapa 2 (se estira, se infla con un rebote) y queda vertical con un balanceo leve.
+      chute.visible = i >= 1
+      if (chute.visible) {
+        const k = i === 1 ? p : 1, reach = smooth(k / 0.2), inf = clamp((k - 0.15) / 0.25, 0, 1)
+        const w = 0.08 + 0.92 * smooth(inf) * (1 + 0.12 * Math.sin(inf * Math.PI * 3) * (1 - inf))
+        chute.scale.set(w, Math.max(reach, 0.01), w)
+        chute.rotation.set(Math.sin(t * 0.9) * 0.05, 0, -(i <= 3 ? tilt : 0) + Math.sin(t * 0.7) * 0.07)
+      }
+      // Plasma: crece al entrar en la atmósfera y se apaga al frenar, antes del paracaídas.
+      const heat = i === 0 ? smooth(p / 0.15) * (1 - smooth((p - 0.55) / 0.45)) : 0
+      plasma.visible = heat > 0.01
+      ;(plasma.material as THREE.MeshBasicMaterial).opacity = heat * (0.65 + Math.random() * 0.15)
+      trailAcc += dt * 110 * heat
+      for (; trailAcc >= 1; trailAcc--) {
+        const f = Math.random() * Math.PI * 2
+        rig.heatshield.localToWorld(a.set(Math.cos(f) * hsR, hsBottom + hsR * 0.3, Math.sin(f) * hsR))
+        trail.emit(a, b.copy(ENTRY_DIR).multiplyScalar(14 + Math.random() * 8).addScaledVector(Z, (Math.random() - 0.5) * 3), 0.5 + Math.random() * 0.5, hsR * 0.6, hsR * 1.2)
+      }
+      trail.step(dt, (u, m) => { m.color.setHSL(0.1 - u * 0.09, 1, 0.65 - u * 0.35); m.opacity = 0.5 * (1 - u) ** 2 })
+      // Motores: encendidos desde el descenso propulsado; más suaves colgando el rover, apagados tras el choque.
+      const thr = crashed ? 0 : i === 4 || i === 7 ? 1 : i === 5 ? 0.65 : i === 6 ? 0.5 : 0
+      for (const f of flames) { f.visible = thr > 0; f.scale.set(1, thr * (0.8 + Math.random() * 0.4), 1) }
+      if (heat > 0.01) { rig.heatshield.localToWorld(glow.position.set(0, hsBottom - hsR * 0.5, 0)); glow.color.setHex(0xff8a3a); glow.intensity = 25 * heat }
+      else if (thr > 0) { rig.skycrane.localToWorld(glow.position.set(0, -0.8, 0)); glow.color.setHex(0x9fc8ff); glow.intensity = thr * (35 + Math.random() * 15) }
+      else glow.intensity = 0
+      // Polvo: el chorro levanta el suelo cuando la nave baja de 25 m.
+      const sp = stack.position, gy = height(clamp(sp.x, -HALF, HALF), clamp(sp.z, -HALF, HALF)), blast = thr * clamp(1 - (sp.y - gy) / 25, 0, 1)
+      dustAcc += dt * 120 * blast
+      for (; dustAcc >= 1; dustAcc--) {
+        const f = Math.random() * Math.PI * 2, r = 1 + Math.random() * 3, v = 6 + Math.random() * 8 * blast
+        const x = sp.x + Math.cos(f) * r, z = sp.z + Math.sin(f) * r
+        dust.emit(a.set(x, height(clamp(x, -HALF, HALF), clamp(z, -HALF, HALF)) + 0.6, z), b.set(Math.cos(f) * v, 0.5 + Math.random() * 2, Math.sin(f) * v), 2.5 + Math.random() * 1.5, 1.8, 3)
+      }
+      dust.step(dt, (u, m) => { m.color.copy(DUST); m.opacity = 0.7 * Math.min(1, u * 10) * (1 - u) ** 1.5 }, 0.9, 0.4)
       rig.skycrane.visible = open && !crashed; body.visible = open // con la cápsula cerrada no se ven: ahorra dibujado
       // Propulsores: giran desde su pivote para compensar parte de la inclinación del desvío, con un temblor leve.
       rig.thrusters.forEach((o, j) => o.quaternion.copy(rest[j]).premultiply(q.setFromAxisAngle(Z, -comp + (i >= 4 ? Math.sin(t * 7 + j * 1.9) * 0.02 : 0))))
@@ -192,17 +281,18 @@ export function Edl3D({ site, seed, onDone }: { site: RoverSite; seed: number; o
       // Cielo: más oscuro arriba, el color de Rover3D abajo.
       const ys = stack.position.y - h0, air = smooth((Math.log10(Math.max(alt, 1)) - 3.9) / 1.1) // 0 bajo 8 km, 1 a 100 km
       ;(scene.background as THREE.Color).copy(sky).lerp(space, air); fog.color.copy(scene.background as THREE.Color)
+      sun.target.position.copy(i >= 5 ? body.position : stack.position); sun.position.copy(sun.target.position).add(SUN_OFF)
       fog.density = 0.0045 * Math.min(1, 50 / Math.max(ys, 1)) // arriba la niebla de Rover3D taparía todo el suelo
 
       if (i <= 4) {
         // Cámara de costado por etapa; al escudo se lo mira desde abajo para verlo caer.
         if (i === 0) camOff.set(20, 5, 24)
-        else if (i === 1) camOff.set(15, 2, 20)
+        else if (i === 1) camOff.set(15, 2, 20).lerp(a.set(30, 6, 44), smooth(p / 0.4)) // se aleja para que entre el paracaídas
         else if (i === 2) camOff.set(12 + hsDrop * 0.2, -6 - hsDrop * 0.1, 16 + hsDrop * 0.3)
         else if (i === 3) camOff.set(14 + bsRise * 0.5, 3 + bsRise * 0.4, 20 + bsRise * 0.7) // se aleja para ver la pila y la carcasa
         else camOff.set(14, 3, 20)
         want.copy(stack.position).add(camOff)
-        look.copy(stack.position).setY(stack.position.y + 1.5 + (i === 2 ? -hsDrop * 0.15 : bsRise * 0.5))
+        look.copy(stack.position).setY(stack.position.y + 1.5 + (i === 1 ? 12 * smooth(p / 0.4) : i === 2 ? -hsDrop * 0.15 : bsRise * 0.5))
       } else {
         // Abajo: junto al sitio, mirando entre el SkyCrane y el rover; al final, a donde arranca la cámara de Rover3D.
         // Gira en arco alrededor del rover (en línea recta pasaría por encima de él).

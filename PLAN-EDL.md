@@ -234,7 +234,7 @@ Verificar: lint y build; `sh docs/docs.sh stale` sin pendientes.
 - [x] Fase E2 — Módulo de carga y vista de prueba
 - [x] Fase E3 — Escena y línea de tiempo: de la entrada a la carcasa trasera
 - [x] Fase E4 — Descenso propulsado, sky crane, contacto y escape
-- [ ] Fase E5 — Efectos
+- [x] Fase E5 — Efectos
 - [ ] Fase E6 — Integración en "Try Mars"
 - [ ] Fase E7 — Pulido, rendimiento y documentación
 
@@ -266,3 +266,9 @@ Verificar: lint y build; `sh docs/docs.sh stale` sin pendientes.
   de la misma malla que `Rover3D`), así las ruedas tocan sin salto. Cables con un `LineSegments`; los propulsores giran
   desde su pivote para compensar la inclinación. Escape: se inclina ~45°, vuela hacia -X y se oculta al tocar el suelo
   (el polvo queda para E5). La cámara termina donde arranca la de `Rover3D`. Revisado en Chrome, sin errores de consola.
+- **2026-11-15 · Fase E5** — Efectos en `Edl3D.tsx`, reusando `puffs`/`puffTexture` de `Launch3D.tsx` (ahora exportados; `puffs`
+  acepta altura del suelo y centro del rebote, `Launch3D` igual). Plasma: casquete aditivo medido del escudo + estela; paracaídas
+  procedural (gajos, líneas, inflado con rebote, vertical con balanceo) colgado de la carcasa; 8 llamas con geometría y material
+  compartidos y una sola `PointLight` (naranja en la entrada, azulada después); polvo bajo 25 m y nube en el choque. El escape
+  ahora va hacia +Z y algo de -X para que el choque se vea en el cuadro final. El sol sigue a la pila/rover con sombra de ±35 m.
+  Revisado en Chrome (con un arranque temporal en t=44 s para el final, ya quitado); `?screen=launch` sin cambios.
