@@ -16,6 +16,7 @@
 | Live solvers (`solver` events per Target/Optimize iteration, Achieve tolerances) | `backend/app/engine/solver.py` (`SolverLog.feed`, `tolerances`), called from `runner._supervise`; tab `frontend/src/results/SolverPanel.tsx` (reuses `XYChart`/`Table` from `Results.tsx`), types `SolverEvent`/`SolverRun` in `model/results.ts`, `store.solvers`; tests `tests/test_solver.py` |
 | Results (hidden ReportFiles per ship/XYPlot, reading, `/results`, `/files`) | `backend/app/engine/results.py` (`inject`, `read`), routes in `main.py`; tab `frontend/src/results/Results.tsx` (uPlot, table, SVG ground track), types `model/results.ts`, `store.results` |
 | 3D view (Cesium: offline NaturalEarthII Earth, trajectories, clock/timeline, follow ship, inertial camera) | `frontend/src/results/View3D.tsx` (tab `view3d`, lazy in `App.tsx`), `results/cesiumBase.ts`, asset copy in `frontend/vite.config.ts` |
+| Game: launch (Atlas V 541 and pad in GLB, particle fire and smoke; `?screen=launch` jumps to the scene) | `frontend/src/mission-architect/three/Launch3D.tsx`, model `frontend/public/models/atlas_v_541.glb` (nodes `AtlasV541`, `LaunchPlatform`, `*_Nozzle`); cruise craft after launch: `frontend/public/models/msl.glb` |
 | Script security (forbidden, output paths) | `backend/app/engine/sanitize.py` |
 | Script ↔ JSON model | `backend/app/script/parser.py`, `serializer.py`; types in `frontend/src/model/mission.ts`, `shared/mission.schema.json` |
 | Round-trip exceptions | `docs/ROUNDTRIP_EXCEPTIONS.md`, `backend/tests/test_script.py` |

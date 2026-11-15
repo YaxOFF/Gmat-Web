@@ -169,7 +169,7 @@ export default function MissionArchitect({ onInspect, onExit }: {
           onForce={() => startLaunch(true)}
         />
       )}
-      {phase === 'launch' && launch && <Launch3D launch={launch} seed={seed} partIds={design.partIds} onDone={afterLaunch} />}
+      {phase === 'launch' && launch && <Launch3D launch={launch} seed={seed} onDone={afterLaunch} />}
       {phase === 'mapping' && mission && (
         <Mapping ctx={ctx} mission={mission} setMission={setMission} rng={rng.current} onFinish={() => setPhase('site')} />
       )}
