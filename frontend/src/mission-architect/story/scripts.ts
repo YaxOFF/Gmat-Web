@@ -57,7 +57,7 @@ export const HANGAR_TALK: Line[] = [
 export function reviewLines(items: ReviewItem[], passed: boolean, iterations: number): Line[] {
   const L: Line[] = [
     bg('review'),
-    title('DESIGN REVIEW', 'CML 4 · Point Design'),
+    title('DESIGN REVIEW', 'Three experts check your spacecraft before launch'),
     cap('Three reviewers. One checklist. No favors.'),
   ]
   for (const it of items) {
@@ -202,11 +202,11 @@ export function siteTalk(mapped: string[], hasHydrogen: Record<string, boolean>)
 export interface EndingInfo { id: EndingId; icon: string; name: string; blurb: string }
 
 export const ENDINGS: Record<EndingId, EndingInfo> = {
-  launch_failure: { id: 'launch_failure', icon: '💥', name: 'Launch failure', blurb: 'The mission ended before it started. The mass margin is not optional.' },
-  lost: { id: 'lost', icon: '❌', name: 'Mission lost', blurb: 'Selene missed the Moon. Physics does not forgive. Check the cause line.' },
-  lead: { id: 'lead', icon: '🎯', name: 'Strong lead', blurb: 'You found the best place to look. Phase two now has a real chance of touching lunar ice.' },
-  bold: { id: 'bold', icon: '⚠️', name: 'Bold bet', blurb: 'A solid lead, but the terrain or the hydrogen is not the best on the map. Phase two will earn its data.' },
-  poor: { id: 'poor', icon: '🌑', name: 'Safe but poor', blurb: 'The rover would land safely and find very little. The next mission will pay for this pick.' },
+  launch_failure: { id: 'launch_failure', icon: '', name: 'Launch failure', blurb: 'The mission ended before it started. The mass margin is not optional.' },
+  lost: { id: 'lost', icon: '', name: 'Mission lost', blurb: 'Selene missed the Moon. Physics does not forgive. Check the cause line.' },
+  lead: { id: 'lead', icon: '', name: 'Strong lead', blurb: 'You found the best place to look. Phase two now has a real chance of touching lunar ice.' },
+  bold: { id: 'bold', icon: '', name: 'Bold bet', blurb: 'A solid lead, but the terrain or the hydrogen is not the best on the map. Phase two will earn its data.' },
+  poor: { id: 'poor', icon: '', name: 'Safe but poor', blurb: 'The rover would land safely and find very little. The next mission will pay for this pick.' },
 }
 
 export function endingLines(siteId: string, mapped: boolean): Line[] {

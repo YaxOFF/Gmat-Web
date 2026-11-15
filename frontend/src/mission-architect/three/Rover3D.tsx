@@ -3,8 +3,10 @@ import * as THREE from 'three'
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { Crater } from '../data/types'
 import { clamp, mulberry32, type Rng } from '../engine/rng'
+import { buildLander } from './spacecraft'
 import { loadCuriosity, meshHeight, type CuriosityRig, type HeightFn } from './curiosity'
 import { at, mountStage, stars } from './stage'
+import { MOON, type RoverSite, type World } from './world'
 import { makeXray } from './xray'
 
 export type RoverEnding = 'return' | 'last' | 'frozen' | 'dead'
@@ -23,8 +25,8 @@ const SIZE = 240, HALF = SIZE / 2, RIM = 92, SEG = 200
 const DRILL_T = 5 // s por perforación: el brazo se despliega (0.9), baja (0.5) y perfora el resto
 const DRILL_BUSY = DRILL_T - 1.4 - 0.2 // s con la broca adentro (el margen evita que el corte termine antes)
 const CLIMB = 0.5 // m: una roca que sobresale hasta aquí se pasa por encima (el rocker-bogie la trepa); más alta, es obstáculo
-// Regolito "moon_03" (Poly Haven, CC0): un mosaico cada TILE unidades; GAIN compensa que la difusa es oscura.
-const TILE = 12, GAIN = 1.8
+// Suelo: un mosaico de la textura del mundo (world.ground) cada TILE unidades; world.gain compensa difusas oscuras.
+const TILE = 12
 
 // Hex-tiling (Mikkelsen, "Practical Real-Time Hex-Tiling", JCGT 2022): el plano se parte en hexágonos y cada uno
 // muestrea la textura con su propio giro y desplazamiento; cada píxel mezcla los 3 más cercanos, así no hay período.
@@ -117,18 +119,18 @@ function permanentShadow(mat: THREE.Material, key: string) {
 }
 
 /** Relieve real del cráter (LOLA, tools/moon/build_moon.py): n×n alturas en metros sobre una ventana de size_m. */
-interface Dem { n: number; size: number; h: Float32Array }
+interface Dem { n: number; size: number; vex: number; h: Float32Array }
 const dems = new Map<string, Promise<Dem | null>>()
-function loadDem(id: string): Promise<Dem | null> {
-  if (!dems.has(id)) {
-    const base = `${import.meta.env.BASE_URL}moon/craters/${id}`
+function loadDem(dir: string, id: string): Promise<Dem | null> {
+  const base = `${import.meta.env.BASE_URL}${dir}/${id}`
+  if (!dems.has(base)) {
     const get = (ext: string) => fetch(base + ext).then((r) => (r.ok ? r : Promise.reject(new Error(r.statusText))))
-    dems.set(id, Promise.all([get('.json').then((r) => r.json()), get('.bin').then((r) => r.arrayBuffer())])
-      .then(([m, b]) => ({ n: m.n, size: m.size_m, h: new Float32Array(b) }))
+    dems.set(base, Promise.all([get('.json').then((r) => r.json()), get('.bin').then((r) => r.arrayBuffer())])
+      .then(([m, b]) => ({ n: m.n, size: m.size_m, vex: m.vex ?? 1, h: new Float32Array(b) }))
       .then((d) => (d.h.length === d.n * d.n ? d : null))
       .catch(() => null)) // sin datos: terreno procedural
   }
-  return dems.get(id)!
+  return dems.get(base)!
 }
 const LIGHT_Z = -58 // al sur de esta línea el borde recibe sol; al norte, sombra permanente
 const STEEP: Record<Crater['terrain'], number> = { soft: 0.6, rocky: 1, steep: 1.6, 'very steep': 2.2 }
@@ -161,9 +163,9 @@ function noise(rng: Rng) {
   return (x: number, y: number) => one(x / 22, y / 22) + one(x / 9, y / 9) * 0.4 + one(x / 3.5, y / 3.5) * 0.12
 }
 
-/** Altura (unidades) desde el DEM: escala uniforme, así las pendientes son las reales; el ruido solo da detalle fino. */
+/** Altura (unidades) desde el DEM: escala uniforme (× vex del sitio), así las pendientes son las reales; el ruido solo da detalle fino. */
 function demHeight(dem: Dem, n: (x: number, y: number) => number) {
-  const k = SIZE / dem.size, last = dem.n - 1, h = dem.h
+  const k = (SIZE / dem.size) * dem.vex, last = dem.n - 1, h = dem.h
   return (x: number, z: number) => {
     const c = clamp(((x + HALF) / SIZE) * last, 0, last - 1e-6), r = clamp(((z + HALF) / SIZE) * last, 0, last - 1e-6)
     const c0 = Math.floor(c), r0 = Math.floor(r), fc = c - c0, fr = r - r0, i = r0 * dem.n + c0
@@ -175,7 +177,7 @@ function demHeight(dem: Dem, n: (x: number, y: number) => number) {
 interface Hud {
   bat: number; need: number; temp: number; heaters: boolean; sig: number; speed: number; slope: number
   samples: number; stored: number; sent: number; drill: number; depth: number; jam: number
-  integ: number; stuck: boolean; teleop: boolean; extended: boolean
+  integ: number; stuck: boolean; teleop: boolean; extended: boolean; goal: string
   relay: number; link: boolean; spike: number; shadow: boolean; trapped: boolean; canReturn: boolean; toast: string
   /** Cámara de perforación: pov = vista activa; xray = broca adentro; xcm = cm perforados; xice = hielo a la vista. */
   pov: boolean; xray: boolean; xcm: number; xice: boolean
@@ -183,8 +185,8 @@ interface Hud {
 type Final = null | { kind: 'choice' } | { kind: 'terminal'; ending: RoverEnding; lines: string[] }
 
 /** Acto IV: el rover entra a la sombra, perfora y tiene que volver a la luz antes de quedarse sin batería. */
-export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
-  crater: Crater; quality: number; seed: number; orbitId: string; start: RoverStart; onDone: (r: RoverResult) => void
+export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world = MOON }: {
+  crater: RoverSite; world?: World; quality: number; seed: number; orbitId: string; start: RoverStart; onDone: (r: RoverResult) => void
 }) {
   const host = useRef<HTMLDivElement>(null)
   const [hud, setHud] = useState<Hud | null>(null)
@@ -198,12 +200,13 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
   const soundRef = useRef(sound)
   useEffect(() => { soundRef.current = sound }, [sound])
   const [loaded, setLoaded] = useState<{ id: string; dem: Dem | null } | null>(null)
-  const dem = loaded?.id === crater.id ? loaded.dem : undefined // undefined = cargando
+  const key = `${world.dir}/${crater.id}`
+  const dem = loaded?.id === key ? loaded.dem : undefined // undefined = cargando
   useEffect(() => {
     let on = true
-    void loadDem(crater.id).then((d) => { if (on) setLoaded({ id: crater.id, dem: d }) })
+    void loadDem(world.dir, crater.id).then((d) => { if (on) setLoaded({ id: key, dem: d }) })
     return () => { on = false }
-  }, [crater.id])
+  }, [world.dir, crater.id, key])
 
   // Mensaje final letra por letra.
   useEffect(() => {
@@ -221,28 +224,30 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
       const rim = r > RIM - 20 ? Math.pow((r - (RIM - 20)) / 20, 2) * 9 * steep : 0
       return n(x + 500, z + 500) * 3.2 * steep + rim
     }
-    const shade = (z: number) => clamp((z - LIGHT_Z) / 4 + 0.5, 0, 1) // 0 = sol, 1 = sombra
+    const shade = (z: number) => world.shadow ? clamp((z - LIGHT_Z) / 4 + 0.5, 0, 1) : 0 // 0 = sol, 1 = sombra
     // Hielo solo en la sombra permanente; menos si se desvió a un sitio más seguro.
     type Dep = { x: number; z: number; rich: number; taken: boolean; spike?: boolean }
     const deposits: Dep[] = []
     const want = Math.max(1, Math.round((2 + crater.h * 1.3) * start.sciMul))
     while (deposits.length < want) {
       const a = rng() * Math.PI * 2, r = 12 + rng() * (RIM - 30), x = Math.cos(a) * r, z = Math.sin(a) * r
-      if (z > LIGHT_Z + 12) deposits.push({ x, z, rich: crater.ice * (0.4 + rng()) * 1.3, taken: false })
+      if (!world.shadow || z > LIGHT_Z + 12) deposits.push({ x, z, rich: crater.ice * (0.4 + rng()) * 1.3, taken: false })
     }
     const signalAt = (x: number, z: number) =>
       clamp(deposits.reduce((s, d) => s + (d.taken ? 0 : d.rich * Math.exp(-((Math.hypot(d.x - x, d.z - z) / 13) ** 2))), 0) / 10, 0, 1)
 
-    scene.background = new THREE.Color(0x000000)
-    scene.add(stars(rng, 3000, 1500))
-    scene.add(new THREE.HemisphereLight(0x9aa6c8, 0x050505, 0.35))
-    const sun = new THREE.DirectionalLight(0xfff3dd, 3.6)
-    sun.position.set(40, 30, -400); sun.castShadow = true
+    scene.background = new THREE.Color(world.sky ?? 0x000000)
+    if (world.sky === undefined) scene.add(stars(rng, 3000, 1500))
+    else scene.fog = new THREE.FogExp2(world.sky, 0.0045) // polvo en suspensión: el horizonte se pierde en el cielo
+    scene.add(world.sky === undefined ? new THREE.HemisphereLight(0x9aa6c8, 0x050505, 0.35) : new THREE.HemisphereLight(0xe0b48a, 0x3a2418, 0.9))
+    const sun = new THREE.DirectionalLight(world.shadow ? 0xfff3dd : 0xffe2c4, world.shadow ? 3.6 : 2.8)
+    if (world.shadow) sun.position.set(40, 30, -400); else sun.position.set(160, 220, -260)
+    sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
     Object.assign(sun.shadow.camera, { left: -150, right: 150, top: 150, bottom: -150, far: 900 })
     scene.add(sun)
     const earth = new THREE.Mesh(new THREE.SphereGeometry(18, 32, 16), new THREE.MeshBasicMaterial({ color: 0x3d7bff }))
-    earth.position.set(-500, 40, -900); scene.add(earth)
+    earth.position.set(-500, 40, -900); if (world.shadow) scene.add(earth)
 
     // Terreno: borde iluminado al sur, piso en sombra; velo azul = hidrógeno que vio el orbitador.
     const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG); geo.rotateX(-Math.PI / 2)
@@ -254,9 +259,9 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
       col.set([g * (1 - h * 0.6), g * (1 - h * 0.2), g + h * 0.7], i * 3)
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals()
-    // Empieza en gris 0.5 (igual que antes); al cargar la textura pasa a GAIN. Sin textura se queda el gris.
+    // Empieza en gris 0.5 (igual que antes); al cargar la textura pasa a world.gain. Sin textura se queda el gris.
     const groundMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, color: new THREE.Color(0.5, 0.5, 0.5) })
-    untileMaterial(groundMat); permanentShadow(groundMat, 'rover-ground')
+    untileMaterial(groundMat); if (world.shadow) permanentShadow(groundMat, 'rover-ground')
     const ground = new THREE.Mesh(geo, groundMat)
     ground.receiveShadow = true; ground.castShadow = true; scene.add(ground)
     const floor = meshHeight(geo, SIZE, SEG) // la malla que se ve, no el ruido analítico
@@ -279,10 +284,10 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
     const outer = new THREE.Mesh(ogeo, groundMat); outer.receiveShadow = true; scene.add(outer)
     // Muro invisible sobre la línea de sombra: con el Sol a 4° proyecta la sombra permanente sobre el piso.
     const wall = new THREE.Mesh(new THREE.BoxGeometry(320, 16, 0.5), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }))
-    wall.position.set(0, 9, LIGHT_Z - 1); wall.castShadow = true; scene.add(wall)
+    wall.position.set(0, 9, LIGHT_Z - 1); wall.castShadow = true; if (world.shadow) scene.add(wall)
     // Línea de sombra marcada sobre el suelo.
     const edge = Array.from({ length: 141 }, (_, i) => new THREE.Vector3(i - 70, height(i - 70, LIGHT_Z) + 0.15, LIGHT_Z))
-    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(edge), new THREE.LineDashedMaterial({ color: 0xffb020, dashSize: 1.2, gapSize: 0.8 })).computeLineDistances())
+    if (world.shadow) scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(edge), new THREE.LineDashedMaterial({ color: 0xffb020, dashSize: 1.2, gapSize: 0.8 })).computeLineDistances())
 
     // Rocas: las bajas se trepan; las altas chocan y frenan al rover.
     // Cada roca guarda lo que de verdad se ve: los vértices que asoman sobre el suelo (pts, XYZ de mundo), el radio
@@ -290,7 +295,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
     type Rock = { x: number; z: number; r: number; h: number; pts: Float32Array }
     const rockN = ROCKS[crater.terrain], rocks: Rock[] = []
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), v0 = new THREE.Vector3(), tint = new THREE.Color()
-    // Roca irregular: icosaedro subdividido deformado con el mismo ruido; tono medio del regolito (sin GAIN).
+    // Roca irregular: icosaedro subdividido deformado con el mismo ruido; tono medio del regolito (sin gain).
     const rockGeo = mergeVertices(new THREE.IcosahedronGeometry(1, 2).deleteAttribute('normal').deleteAttribute('uv'))
     const rp = rockGeo.attributes.position
     for (let i = 0; i < rp.count; i++) {
@@ -298,7 +303,8 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
       rp.setXYZ(i, v0.x, v0.y, v0.z)
     }
     rockGeo.computeVertexNormals()
-    const rockMat = new THREE.MeshStandardMaterial({ color: 0x8a8277, roughness: 1 }); permanentShadow(rockMat, 'rover-rock')
+    const rockMat = new THREE.MeshStandardMaterial({ color: world.rock, roughness: 1 })
+    if (world.shadow) permanentShadow(rockMat, 'rover-rock')
     const rockMesh = new THREE.InstancedMesh(rockGeo, rockMat, rockN)
     for (let i = 0; i < rockN; i++) {
       const a = rng() * Math.PI * 2, r = 8 + rng() * (RIM - 12), x = Math.cos(a) * r, z = Math.sin(a) * r
@@ -347,24 +353,18 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
     rockMesh.castShadow = true; rockMesh.receiveShadow = true; scene.add(rockMesh)
 
     // Texturas en mosaico (RepeatWrapping): el suelo se ve continuo; las rocas usan una sola copia.
-    const reg = `${import.meta.env.BASE_URL}moon/regolith/`, loader = new THREE.TextureLoader(), aniso = renderer.capabilities.getMaxAnisotropy()
+    const reg = `${import.meta.env.BASE_URL}${world.ground}`, loader = new THREE.TextureLoader(), aniso = renderer.capabilities.getMaxAnisotropy()
     const tile = (t: THREE.Texture, reps: number) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(reps, reps); t.anisotropy = aniso; return t }
     const done = () => { groundMat.needsUpdate = true }
     loader.load(reg + 'diff.jpg', (t) => {
       t.colorSpace = THREE.SRGBColorSpace
-      groundMat.map = tile(t, SIZE / TILE); groundMat.color.setScalar(GAIN); done()
+      groundMat.map = tile(t, SIZE / TILE); groundMat.color.setRGB(world.gain * world.tint[0], world.gain * world.tint[1], world.gain * world.tint[2]); done()
     })
     loader.load(reg + 'normal.jpg', (t) => { groundMat.normalMap = tile(t, SIZE / TILE); done() })
     loader.load(reg + 'orm.jpg', (t) => { groundMat.aoMap = groundMat.roughnessMap = tile(t, SIZE / TILE); done() }) // R = AO, G = rugosidad
 
     // Lander en el borde y rover.
-    const lander = new THREE.Group(), gold = new THREE.MeshStandardMaterial({ color: 0xd9a441, metalness: 0.7, roughness: 0.35 })
-    lander.add(at(new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.8, 1.4, 8), gold), 0, 1.6, 0))
-    for (let i = 0; i < 4; i++) {
-      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2), gold)
-      leg.position.set(Math.cos(i * 1.57) * 1.6, 0.8, Math.sin(i * 1.57) * 1.6); leg.rotation.set(Math.sin(i * 1.57) * 0.4, 0, -Math.cos(i * 1.57) * 0.4)
-      lander.add(leg)
-    }
+    const lander = buildLander(); lander.rotation.y = 0.6
     lander.position.set(9, height(9, -70), -70); scene.add(lander)
 
     // Rover: caja provisional hasta que carga el Curiosity articulado (public/models/curiosity_rover.glb).
@@ -378,7 +378,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
       const w = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.3, 14), new THREE.MeshStandardMaterial({ color: 0x333338 }))
       w.rotation.z = Math.PI / 2; w.position.set(sx * 0.95, 0.32, sz); proxy.add(w); wheels.push(w)
     }
-    const drill = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.02, 0.8), new THREE.MeshStandardMaterial({ color: 0xff3d81 }))
+    const drill = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.02, 0.8), new THREE.MeshStandardMaterial({ color: 0xef6f6c }))
     drill.position.set(0, 0.2, -1.1); proxy.add(drill); rover.add(proxy)
     const lamp = new THREE.SpotLight(0xe8f4ff, 60, 45, 0.55, 0.5, 1.4); lamp.position.set(0, 1.9, 1); lamp.castShadow = true
     lamp.target.position.set(0, -1, 12); rover.add(lamp, lamp.target)
@@ -388,7 +388,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
     loadCuriosity().then((r) => { if (gone) return; rig = r; rover.remove(proxy); rover.add(r.model) }).catch((err) => console.error(err))
 
     // Orbitador cruzando el cielo durante cada ventana de relevo.
-    const orb = new THREE.Mesh(new THREE.SphereGeometry(3, 12, 8), new THREE.MeshBasicMaterial({ color: 0xd7ff3a }))
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(3, 12, 8), new THREE.MeshBasicMaterial({ color: 0x5cc8f0 }))
     scene.add(orb)
     const relay = RELAY[orbitId] ?? RELAY.polar_high
     let beacon: THREE.Mesh | null = null
@@ -485,7 +485,8 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
         say('Extended mission approved: +4 cycles. New hydrogen targets deeper in the crater.', 5)
       },
     }
-    say(`Touchdown on the sunlit rim of ${crater.name}. The ice is in the dark beyond the orange line.`, 5)
+    say(world.shadow ? `Touchdown on the sunlit rim of ${crater.name}!`
+      : `Touchdown at ${crater.name}. Free drive: follow the neutron signal and drill anywhere.`, world.shadow ? 3 : 5)
     const up3 = new THREE.Vector3(0, 1, 0), nrm = new THREE.Vector3(), qy = new THREE.Quaternion(), camT = new THREE.Vector3(), off = new THREE.Vector3()
     camera.position.set(0, 8, -86)
     // Cámara de perforación (POV junto a la broca) + corte de rayos X + luz de trabajo de la torreta.
@@ -546,7 +547,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
         }
         if (Math.hypot(nx, nz) > HALF - 8 || (slope > 34 && uphill * speed > 0)) { say('Too steep — the wheels slip.'); speed *= -0.2; nx = x; nz = z }
         x = nx; z = nz
-        const dark = z > LIGHT_Z
+        const dark = world.shadow && z > LIGHT_Z
         // Regolito blando: a veces atrapa las ruedas.
         if (dark && !stuck && Math.abs(speed) > 1.5 && rng() < dt * (crater.terrain === 'soft' ? 0.012 : 0.006)) {
           stuck = true; speed = 0; say(`Stuck in soft regolith! Press R to break free (${start.mesh ? '85' : '50'}% per try).`, 5)
@@ -564,7 +565,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
 
         // Perforación.
         if (keys.has('Space') && drillT === 0 && jamT <= 0 && Math.abs(speed) < 0.8) {
-          if (!dark) say('Nothing to find on the sunlit rim: drive into the shadow first.')
+          if (!dark && world.shadow) say('Nothing to find on the sunlit rim: drive into the shadow first.')
           else {
             drillT = DRILL_T; bat -= DEPTHS[depth].cost * kB
             xT = 0; xIce = sampleAt(DEPTHS[depth].mul).pct; xray.reset() // los rayos X muestran el hielo que hay ahí
@@ -587,7 +588,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
                 anomaly = true
                 const sx = (rng() - 0.5) * 60, sz = 52
                 deposits.push({ x: sx, z: sz, rich: crater.ice * 2.2 + 4, taken: false, spike: true })
-                beacon = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 60, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xff3d81, transparent: true, opacity: 0.25, side: THREE.DoubleSide }))
+                beacon = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 60, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xef6f6c, transparent: true, opacity: 0.25, side: THREE.DoubleSide }))
                 beacon.position.set(sx, height(sx, sz) + 30, sz); scene.add(beacon)
                 setTimeout(() => say(`ANOMALOUS READING: a massive hydrogen spike ${Math.round(Math.hypot(sx - x, sz - z))} m deeper inside (pink beacon). Go for it, or head back to recharge?`, 7), 3600)
               }
@@ -618,7 +619,18 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
         if (hudT <= 0) {
           hudT = 0.1
           const spike = deposits.find((d) => d.spike && !d.taken)
+          const goal = trapped ? 'No way back to the light. Make the remaining power count.'
+            : stuck ? 'Stuck! Press R to rock the wheels free.'
+            : !world.shadow ? (sig > 0.2 ? 'Strong signal! Stop (S) and press SPACE to drill here.' : 'Free drive: follow the neutron signal and drill anywhere.')
+            : !dark && !entered ? 'Drive north (W) across the orange line. The ice is in the permanent shadow.'
+            : !dark && st.wet > 0 ? 'Safe in the sunlight. End the mission, or recharge and go back in.'
+            : !dark ? 'Recharging in the sun. Head back into the shadow when ready.'
+            : bat < need + 12 ? 'Battery is getting low: turn back south to the light now.'
+            : sig > 0.2 ? 'Strong signal! Stop (S) and press SPACE to drill here.'
+            : st.wet > 0 ? 'Ice found! Keep exploring, or drive back south to the light to finish.'
+            : 'Follow the neutron signal: the bar fills and the beeps speed up near ice.'
           setHud({
+            goal,
             bat, need, temp, heaters, sig, speed, slope, samples: st.samples, stored: stored.length, sent: st.waterG,
             drill: drillT / DRILL_T, depth, jam: Math.max(0, jamT), relay: inWin ? 0 : relay.period - relay.dur - ph, link,
             spike: spike ? Math.hypot(spike.x - x, spike.z - z) : -1, shadow: dark, trapped,
@@ -665,7 +677,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
       camera.lookAt(look.copy(chaseLook).lerp(povLook, k))
     }
     return Object.assign(tick, { cleanup: () => { gone = true; removeEventListener('keydown', down); removeEventListener('keyup', up); void audio?.close() } })
-  }), [crater, quality, seed, orbitId, start, dem])
+  }), [crater, world, quality, seed, orbitId, start, dem])
 
   const h = hud
   const text = final?.kind === 'terminal' ? final.lines.join('\n').slice(0, typed) : ''
@@ -685,7 +697,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
       {h && (
         <div className="rv-hud">
           <h3>BUSCADOR · {crater.name}</h3>
-          <div className="rv-row"><span>Battery</span><b>{h.bat.toFixed(0)}%{h.shadow ? '' : ' ☀ charging'}</b></div>
+          <div className="rv-row"><span>Battery</span><b>{h.bat.toFixed(0)}%{h.shadow ? '' : ' charging'}</b></div>
           <div className="rv-bar rv-bat">
             <i style={{ width: `${h.bat}%`, background: h.trapped || h.bat < h.need + 5 ? 'var(--red)' : undefined }} />
             {h.need > 0 && <em style={{ left: `${Math.min(h.need, 100)}%` }} title="Battery needed to return to the light" />}
@@ -700,7 +712,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
           <div className="rv-row"><span>Samples · waiting · sent</span><b>{h.samples} · {h.stored} · {h.sent} g</b></div>
           {h.spike >= 0 && <div className="rv-row"><span>Hydrogen spike</span><b className="pink">{h.spike.toFixed(0)} m</b></div>}
           {h.drill > 0 && <div className="rv-drill"><i style={{ width: `${(1 - h.drill) * 100}%` }} /></div>}
-          <p className="hint">Blue tint = hydrogen your orbiter mapped ({Math.round(quality * 100)}% quality). Seed {seed}{dem ? ' · Real LOLA relief' : ''}</p>
+          <p className="hint">Blue tint = hydrogen your orbiter mapped ({Math.round(quality * 100)}% quality). Seed {seed}{dem ? ` · ${world.relief}${dem.vex !== 1 ? ` ×${dem.vex}` : ''}` : ''}</p>
         </div>
       )}
       <div className="rv-keys">
@@ -708,10 +720,11 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
         <div><kbd>L</kbd> lights · <kbd>C</kbd> top view · <kbd>R</kbd> unstick</div>
         <button className="btn small ghost" onClick={() => setSound(!sound)}>{sound ? 'Sound on' : 'Sound off'}</button>
       </div>
+      {h && !final && <div className="rv-goal" role="status"><small>WHAT TO DO</small>{h.goal}</div>}
       {h?.toast && !final && <div className="rv-toast">{h.toast}</div>}
       {h?.canReturn && !final && (
         <div className="rv-end">
-          <button className="btn big" onClick={() => api.current?.finish('return')}>Back in the light — end mission ☀</button>
+          <button className="btn big" onClick={() => api.current?.finish('return')}>Back in the light — end mission </button>
           {start.canExtend && !h.extended && <button className="btn big ghost" onClick={() => api.current?.extend()}>Request extended mission (+4 cycles)</button>}
         </div>
       )}

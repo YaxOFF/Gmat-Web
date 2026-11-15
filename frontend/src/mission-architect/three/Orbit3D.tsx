@@ -15,7 +15,7 @@ export function Orbit3D({ orbitId, seed = 7, highlight, targets, partIds = [] }:
   useEffect(() => {
     for (const [id, d] of Object.entries(dots.current)) {
       const on = id === highlight || !!targets?.includes(id)
-      ;(d.material as THREE.MeshBasicMaterial).color.set(on ? 0xd7ff3a : 0x38e1ff); d.scale.setScalar(on ? 1.8 : 1)
+      ;(d.material as THREE.MeshBasicMaterial).color.set(on ? 0x5cc8f0 : 0x38e1ff); d.scale.setScalar(on ? 1.8 : 1)
     }
   }, [targets, highlight])
   useEffect(() => mountStage(host.current!, ({ scene, camera, renderer }) => {
@@ -32,7 +32,7 @@ export function Orbit3D({ orbitId, seed = 7, highlight, targets, partIds = [] }:
       const lat = (c.lat * Math.PI) / 180, lon = (c.lon * Math.PI) / 180
       const p = new THREE.Vector3(Math.cos(lat) * Math.cos(lon), Math.sin(lat), -Math.cos(lat) * Math.sin(lon))
       const on = c.id === highlight || !!targets?.includes(c.id)
-      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.018), new THREE.MeshBasicMaterial({ color: on ? 0xd7ff3a : 0x38e1ff }))
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.018), new THREE.MeshBasicMaterial({ color: on ? 0x5cc8f0 : 0x38e1ff }))
       dot.scale.setScalar(on ? 1.8 : 1); dot.position.copy(p.multiplyScalar(1.003)); moon.add(dot); dots.current[c.id] = dot
     }
     // Elipse en el plano polar x–y con el periapsis hacia el polo sur.
@@ -43,7 +43,7 @@ export function Orbit3D({ orbitId, seed = 7, highlight, targets, partIds = [] }:
       return new THREE.Vector3(r * Math.cos(nu + w), r * Math.sin(nu + w), 0)
     }
     const pts = Array.from({ length: 361 }, (_, i) => at((i / 360) * Math.PI * 2))
-    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ color: 0xd7ff3a, dashSize: 0.04, gapSize: 0.03 })).computeLineDistances())
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ color: 0x5cc8f0, dashSize: 0.04, gapSize: 0.03 })).computeLineDistances())
     const sc = new THREE.Group()
     const model = buildSpacecraft(partIds.length ? partIds : ['bus_medium', 'panel_gaas', 'hga', 'tank_s', 'neutron', 'camera'])
     model.remove(...model.children.filter((c) => c.position.y < -1.2)) // sin el lander en órbita

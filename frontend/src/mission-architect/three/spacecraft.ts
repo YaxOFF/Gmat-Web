@@ -61,7 +61,7 @@ export function buildSpacecraft(partIds: string[]): THREE.Group {
 
   // Instrumentos en la cara que mira a la Luna (+z).
   const face = w / 2
-  if (has('neutron')) g.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.45, 16), mat(0xd7ff3a, 0.4)), -w * 0.25, h * 0.15, face + 0.22).rotateX(Math.PI / 2))
+  if (has('neutron')) g.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.45, 16), mat(0x5cc8f0, 0.4)), -w * 0.25, h * 0.15, face + 0.22).rotateX(Math.PI / 2))
   if (has('camera')) {
     g.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.25), mat(0x1c1f27, 0.5)), w * 0.25, h * 0.2, face + 0.12))
     g.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.06, 20), new THREE.MeshStandardMaterial({ color: 0x38e1ff, emissive: 0x0a3040, metalness: 0.9, roughness: 0.1 })), w * 0.25, h * 0.2, face + 0.27).rotateX(Math.PI / 2))
@@ -71,7 +71,7 @@ export function buildSpacecraft(partIds: string[]): THREE.Group {
   if (has('radar')) {
     const radar = at(new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.04, 0.5), mat(0xf0e8ee, 0.4)), 0, -h / 2 - 0.05, face + 0.45)
     radar.rotateX(-0.5); g.add(radar)
-    g.add(at(new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.01, 0.42), new THREE.MeshStandardMaterial({ color: 0xff3d81, emissive: 0x300010 })), 0, -h / 2 - 0.02, face + 0.45).rotateX(-0.5))
+    g.add(at(new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.01, 0.42), new THREE.MeshStandardMaterial({ color: 0xef6f6c, emissive: 0x300010 })), 0, -h / 2 - 0.02, face + 0.45).rotateX(-0.5))
   }
 
   // Módulo de aterrizaje con el rover, acoplado debajo para el viaje.
@@ -85,6 +85,41 @@ export function buildSpacecraft(partIds: string[]): THREE.Group {
     lander.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.25, 0.8), mat(0xdedfe6, 0.5)), 0, 0.48, 0))
     lander.position.y = nozzleY - 0.6; g.add(lander)
   }
+  g.traverse((o) => { o.castShadow = true })
+  return g
+}
+
+/** Módulo de aterrizaje con Buscador plegado encima. Origen en el suelo (patas apoyadas). */
+export function buildLander(): THREE.Group {
+  const g = new THREE.Group()
+  const foil = new THREE.MeshStandardMaterial({ color: 0xe0b04e, metalness: 0.85, roughness: 0.3 })
+  const steel = mat(0xb9bec9, 0.8, 0.35)
+  g.add(at(new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.7, 1.1, 8), foil), 0, 1.75, 0))
+  g.add(at(new THREE.Mesh(new THREE.CylinderGeometry(1.55, 1.55, 0.12, 8), mat(0x2c303a, 0.6)), 0, 2.36, 0))
+  // Tanques esféricos alrededor del cuerpo.
+  for (let i = 0; i < 4; i++) g.add(at(new THREE.Mesh(new THREE.SphereGeometry(0.42, 18, 12), steel), Math.cos(i * 1.57 + 0.78) * 1.25, 1.35, Math.sin(i * 1.57 + 0.78) * 1.25))
+  // Patas con apoyos.
+  for (let i = 0; i < 4; i++) {
+    const a = i * 1.57, cx = Math.cos(a), sz = Math.sin(a)
+    const leg = at(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.9), steel), cx * 1.9, 0.85, sz * 1.9)
+    leg.lookAt(cx * 1.2, 1.9, sz * 1.2); leg.rotateX(Math.PI / 2); g.add(leg)
+    g.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 0.08, 16), steel), cx * 2.35, 0.04, sz * 2.35))
+  }
+  // Motor principal y propulsores de control.
+  g.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.5, 0.6, 20, 1, true), new THREE.MeshStandardMaterial({ color: 0x4b505c, metalness: 0.9, roughness: 0.25, side: THREE.DoubleSide })), 0, 0.95, 0))
+  for (let i = 0; i < 4; i++) g.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.22), mat(0x2c303a, 0.6)), Math.cos(i * 1.57) * 1.62, 2.1, Math.sin(i * 1.57) * 1.62))
+  // Panel solar y antena.
+  const panel = at(new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.04, 0.9), new THREE.MeshStandardMaterial({ map: cells(), metalness: 0.5, roughness: 0.3 })), 2.2, 2.6, 0)
+  panel.rotation.z = -0.4; g.add(panel)
+  g.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.7), steel), -1, 2.75, -0.6))
+  const dish = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 8, 0, Math.PI * 2, 0, 1.1), new THREE.MeshStandardMaterial({ color: 0xf0f0f0, side: THREE.DoubleSide }))
+  dish.position.set(-1, 3.15, -0.6); dish.rotation.x = Math.PI; g.add(dish)
+  // Buscador plegado encima.
+  const rover = new THREE.Group()
+  rover.add(at(new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.35, 1.6), mat(0xdedfe6, 0.5)), 0, 0.3, 0))
+  rover.add(at(new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.04, 1.2), new THREE.MeshStandardMaterial({ map: cells(), metalness: 0.5 })), 0, 0.52, 0))
+  for (const sx of [-1, 1]) for (const sz of [-0.55, 0, 0.55]) rover.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.18, 12), mat(0x2c303a)), sx * 0.7, 0.18, sz).rotateZ(Math.PI / 2))
+  rover.position.y = 2.42; g.add(rover)
   g.traverse((o) => { o.castShadow = true })
   return g
 }

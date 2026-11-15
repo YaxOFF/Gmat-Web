@@ -15,3 +15,12 @@ Datos de la Luna (frontend/public/moon/, generados con tools/moon/build_moon.py)
   (https://pgda.gsfc.nasa.gov/products/90), Barker et al.
 - Coordenadas de cráteres: USGS/IAU Gazetteer of Planetary Nomenclature.
 - Textura de regolito "moon_03" del suelo del rover: Poly Haven (https://polyhaven.com), CC0.
+
+Datos de Marte (frontend/public/mars/, generados con tools/mars/build_mars.py), de dominio público:
+- Color: mosaico global Viking MDIM2.1 colorizado (USGS Astrogeology), servido por NASA Mars Trek
+  (https://trek.nasa.gov/mars).
+- Relieve: "HRSC and MOLA Blended Digital Elevation Model at 200m v2", Fergason, Hare y Laura (2018),
+  USGS Astrogeology (https://astrogeology.usgs.gov/search/map/mars_mgs_mola_mex_hrsc_blended_dem_global_200m).
+- Coordenadas de sitios: USGS/IAU Gazetteer of Planetary Nomenclature.
+- Textura del suelo del rover en Marte: "Textura uniforme de suelo marciano rojizo", elegida por el equipo (solo color;
+  normal y AO derivados en tools/mars/build_mars.py; no son datos escaneados).
