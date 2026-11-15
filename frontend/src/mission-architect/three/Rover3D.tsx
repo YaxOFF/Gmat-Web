@@ -370,7 +370,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     scene.add(rover)
     let rig: CuriosityRig | null = null, gone = false
     // Paneles solares (Luna): sol = 0 plegados (en la sombra) .. 1 desplegados (a la luz).
-    const panels: { hinge: THREE.Group; open: number; fold: number }[] = []
+    const panels: { low: THREE.Group; high: THREE.Group; inward: number }[] = []
     let sol = 1
     loadCuriosity().then((r) => {
       if (gone) return
@@ -379,15 +379,21 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       // Luna: paneles solares verticales a los costados y atrás, para el Sol rasante del polo (como VIPER).
       const cell = new THREE.MeshStandardMaterial({ color: 0x16296b, metalness: 0.6, roughness: 0.3, emissive: 0x060d2a })
       const frame = new THREE.MeshStandardMaterial({ color: 0xc9ccd4, metalness: 0.4, roughness: 0.5 })
-      // Cada panel cuelga de una bisagra en su borde inferior: abierto queda vertical (algo inclinado hacia afuera);
-      // plegado gira 90° hacia adentro y queda acostado sobre la cubierta.
-      for (const [px, pz, ry, hy] of [[0.6, -0.35, 0, 1.19], [-0.6, -0.35, 0, 1.21], [0, -1.02, Math.PI / 2, 1.23]] as const) {
-        const hinge = new THREE.Group(), inward = px < 0 ? -1 : 1
-        hinge.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.62, 1.15), cell), 0, 0.34, 0), at(new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.68, 1.21), frame), 0, 0.34, 0))
-        hinge.position.set(px, hy, pz); hinge.rotation.y = ry
-        hinge.traverse((o) => { o.castShadow = true })
-        r.model.add(hinge)
-        panels.push({ hinge, open: -inward * 0.14, fold: inward * 1.52 })
+      // Tres pétalos (costados y atrás), cada uno de dos tramos en acordeón. Cerrado: el tramo de abajo queda
+      // vertical pegado a la cubierta y el de arriba doblado hacia abajo por fuera. Al abrir, el pétalo se inclina
+      // hacia afuera como una flor y luego el segundo tramo se despliega y lo alarga.
+      const seg = (dx: number) => {
+        const g = new THREE.Group()
+        g.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.48, 1.15), cell), dx, 0.25, 0), at(new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.5, 1.19), frame), dx, 0.25, 0))
+        g.traverse((o) => { o.castShadow = true })
+        return g
+      }
+      for (const [px, pz, ry] of [[0.6, -0.35, 0], [-0.6, -0.35, 0], [0, -1.02, Math.PI / 2]] as const) {
+        const inward = px < 0 ? -1 : 1 // signo del giro en Z que lleva el panel hacia el centro del rover
+        const low = seg(0), high = seg(inward * 0.035) // el desfase evita que los dos tramos se encimen al doblarse
+        low.position.set(px, 1.19, pz); low.rotation.y = ry; high.position.y = 0.5; low.add(high)
+        r.model.add(low)
+        panels.push({ low, high, inward })
       }
     }).catch((err) => console.error(err))
 
@@ -728,7 +734,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         if (dark && !stuck && Math.abs(speed) > 1.5 && rng() < dt * (crater.terrain === 'soft' ? 0.012 : 0.006)) {
           stuck = true; speed = 0; say(`Stuck in soft regolith! Press R to break free (${start.mesh ? '85' : '50'}% per try).`, 5)
         }
-        if (dark && !entered) { entered = true; say('Entering permanent shadow. Solar panels folded: no sunlight, no charging. Watch the red return marker.', 5) }
+        if (dark && !entered) { entered = true; say('Entering permanent shadow. Solar panels folding: no sunlight, no charging. Watch the red return marker.', 5) }
 
         // Energía y temperatura.
         bat -= dt * (drain() + Math.abs(speed) * 0.07) * kB
@@ -938,9 +944,14 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       ;(earth.userData.spin as (d: number) => void)(dt)
       if (beacon) (beacon.material as THREE.MeshBasicMaterial).opacity = 0.18 + Math.sin(performance.now() / 300) * 0.08
       // Paneles: se despliegan a la luz y se pliegan al entrar a la sombra permanente (ahí no sirven y estorban).
-      sol = clamp(sol + (world.shadow && z > LIGHT_Z ? -1 : 1) * dt / 1.6, 0, 1)
-      const open = sol * sol * (3 - 2 * sol)
-      for (const p of panels) p.hinge.rotation.z = p.fold + (p.open - p.fold) * open
+      sol = clamp(sol + (world.shadow && z > LIGHT_Z ? -1 : 1) * dt / 2.4, 0, 1)
+      // Primero se abre el pétalo (mitad del recorrido) y después se despliega el segundo tramo.
+      const ez = (v: number) => { const c = clamp(v, 0, 1); return c * c * (3 - 2 * c) }
+      const petal = ez(sol * 2), unfold = ez(sol * 2 - 1)
+      for (const p of panels) {
+        p.low.rotation.z = p.inward * (0.06 - 0.81 * petal) // de casi vertical a 43° hacia afuera
+        p.high.rotation.z = -p.inward * 3.02 * (1 - unfold) // de doblado por fuera a recto
+      }
       if (paused) { drilling = false; laserT = 0; scanT = 0 }
       // Onda del escaneo: un anillo que se abre sobre el suelo hasta SCAN_R.
       wave.visible = scanT > 0
