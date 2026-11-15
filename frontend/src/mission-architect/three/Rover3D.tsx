@@ -159,7 +159,6 @@ const DEPTHS = [
   { label: '25 cm', m: 0.25, mul: 0.6, cost: 3, jam: 0.03 },
   { label: '50 cm', m: 0.5, mul: 1, cost: 4, jam: 0.08 },
   { label: '1 m', m: 1, mul: 1.4, cost: 6, jam: 0.15 },
-  { label: '2 m', m: 2, mul: 1.8, cost: 8, jam: 0.22 },
 ]
 const tier = (pct: number) => pct > 5 ? { pts: 100, msg: 'RICH VEIN! Viable resource for Artemis.' }
   : pct >= 1 ? { pts: 60, msg: 'WATER ICE CONFIRMED.' }
@@ -389,7 +388,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     let beacon: THREE.Mesh | null = null
 
     let x = 0, z = -74, yaw = 0, speed = 0, bat = start.batteryPct, temp = 20, heaters = true
-    const depth = start.deep ? 3 : 2 // hondura fija: la del taladro instalado (1 m, o 2 m con el taladro profundo)
+    const depth = start.deep ? 2 : 1 // hondura fija: la del taladro instalado (50 cm, o 1 m con el profundo: el tope real de VIPER)
     let prog = 0, drilling = false, holeX = Infinity, holeZ = Infinity, contact = 0
     let laserT = 0, aimed = false, aimT = 0, zapT = 0, libsT = 0, scannedN = 0, scanT = 0, cores = 0, mapDirty = true
     let drillRock: Rock | null = null
