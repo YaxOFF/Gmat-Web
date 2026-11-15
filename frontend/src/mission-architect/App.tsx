@@ -23,14 +23,15 @@ import { Mapping } from './ui/Mapping'
 import { Hangar, OrbitPick, Review, Title } from './ui/screens1'
 import { Report, Site } from './ui/screens2'
 import { MarsTest } from './ui/MarsTest'
+import { EdlStatic } from './three/EdlStatic'
 
 type Phase =
   | 'title' | 'intro' | 'setup' | 'orbit' | 'hangar' | 'review'
-  | 'launch' | 'mapping' | 'site' | 'ending' | 'descent' | 'rover' | 'finale' | 'report' | 'mars'
+  | 'launch' | 'mapping' | 'site' | 'ending' | 'descent' | 'rover' | 'finale' | 'report' | 'mars' | 'edl'
 
 const STEP_OF: Record<Phase, number> = {
   title: 0, intro: 0, setup: 0, orbit: 1, hangar: 2, review: 3,
-  launch: 4, mapping: 5, site: 6, ending: 6, descent: 7, rover: 8, finale: 9, report: 10, mars: 0,
+  launch: 4, mapping: 5, site: 6, ending: 6, descent: 7, rover: 8, finale: 9, report: 10, mars: 0, edl: 0,
 }
 // Pantalla anterior del botón "← Back". Solo antes del lanzamiento: después la partida ya tiró dados.
 const PREV: Partial<Record<Phase, Phase>> = { intro: 'title', setup: 'title', orbit: 'setup', hangar: 'orbit', review: 'hangar' }
@@ -38,7 +39,7 @@ const PREV: Partial<Record<Phase, Phase>> = { intro: 'title', setup: 'title', or
 const STEP_PHASE: Partial<Record<number, Phase>> = { 0: 'setup', 1: 'orbit', 2: 'hangar', 3: 'review' }
 
 const urlSeed = () => Number(new URLSearchParams(location.search).get('seed')) || 0
-// Atajos de prueba: ?rover=cabeus o ?landing=cabeus (y opcional &seed=123); ?screen=mars abre la prueba de Marte
+// Atajos de prueba: ?rover=cabeus o ?landing=cabeus (y opcional &seed=123); ?screen=mars abre la prueba de Marte; ?screen=edl, los modelos del aterrizaje
 const q = (k: string) => { const v = new URLSearchParams(location.search).get(k); return v && CRATER[v] ? v : null }
 const urlRover = () => q('rover') ?? q('landing')
 const SCREEN = new URLSearchParams(location.search).get('screen')
@@ -71,7 +72,7 @@ export default function MissionArchitect({ onInspect, onExit }: {
   const minBat = useRef(100)
   const [landing, setLanding] = useState<Landing | null>(null)
   const [finale, setFinale] = useState<FinaleResult | null>(null)
-  const [phase, setPhase] = useState<Phase>(() => (q('rover') ? 'rover' : q('landing') ? 'descent' : SCREEN === 'setup' ? 'setup' : SCREEN === 'launch' ? 'launch' : SCREEN === 'hangar' ? 'hangar' : SCREEN === 'orbit' ? 'orbit' : SCREEN === 'mars' ? 'mars' : DEMO ? SCREEN as Phase : 'title'))
+  const [phase, setPhase] = useState<Phase>(() => (q('rover') ? 'rover' : q('landing') ? 'descent' : SCREEN === 'setup' ? 'setup' : SCREEN === 'launch' ? 'launch' : SCREEN === 'hangar' ? 'hangar' : SCREEN === 'orbit' ? 'orbit' : SCREEN === 'mars' ? 'mars' : SCREEN === 'edl' ? 'edl' : DEMO ? SCREEN as Phase : 'title'))
   const [design, setDesign] = useState<Design>(() => (DEMO ? demoDesign() : defaultDesign()))
   const [iterations, setIterations] = useState(0)
   const [forced, setForced] = useState(false)
@@ -155,12 +156,13 @@ export default function MissionArchitect({ onInspect, onExit }: {
   return (
     <div className="ma app">
       {phase === 'title' && <button className="btn small ghost ma-exit" onClick={onExit}>← Back to GMAT</button>}
-      {phase !== 'title' && phase !== 'mars' && (
+      {phase !== 'title' && phase !== 'mars' && phase !== 'edl' && (
         <TopBar step={STEP_OF[phase]} steps={STEP_NAMES}
           canJump={(k) => !!PREV[phase] && !!STEP_PHASE[k]} onJump={(k) => setPhase(STEP_PHASE[k]!)} right={<><span className="hint">{money(budgetLeft)} left</span><span className="seed" title="Same seed = same craters and ice. Share it to replay this game.">seed {seed}</span>{PREV[phase] && <button className="btn small ghost ma-exit" onClick={() => setPhase(PREV[phase]!)}>← Back</button>}<button className="btn small ghost ma-exit" onClick={onExit}>← GMAT</button></>} />
       )}
       {phase === 'title' && <Title onStart={() => setPhase('intro')} onMars={() => setPhase('mars')} />}
       {phase === 'mars' && <MarsTest onExit={() => setPhase('title')} />}
+      {phase === 'edl' && <EdlStatic />}
       {phase === 'intro' && <Dialogue lines={INTRO} startScene="void" onDone={() => setPhase('setup')} />}
       {phase === 'setup' && <Setup mode={design.mode} team={team} onDone={(mode, t) => { setTeam(t); setDesign({ ...design, mode, partIds: [] }); setPhase('orbit') }} />}
       {phase === 'orbit' && <OrbitPick design={design} onInspect={inspect} onPick={(orbitId) => { setDesign({ ...design, orbitId }); setPhase('hangar') }} />}

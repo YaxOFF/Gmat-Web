@@ -34,8 +34,8 @@ Modelos de origen: `D:\YaxonFolder\Github\RoverCuriosity\curiosity_rover.blend`.
 | Compresión | Texturas a 1024 px máximo y WebP. Sin Draco (el juego no carga el decodificador). Nunca `gltf-transform optimize`. |
 | Posición acoplada | Constantes en código, en el marco del rover (origen de `gltf.scene` de `curiosity_rover.glb`): SkyCrane 2.17 m arriba, plano de separación de la cápsula 0.77 m arriba. Confirmadas en E1: el rover del juego mide lo mismo que el del `.blend` (2.78 × 2.22 × 3.95 m en x, y, z de Three.js) y su nodo `Curiosity` está en z = -0.035, igual que en Blender. |
 | Propulsores | En Three.js el chorro de cada `Thruster_*` va por su **-Y local** (el -Z de Blender); `Nozzle_*` está en y = -0.63 dentro de él. |
-| Interior de la cápsula | `MAT-aeroshell_interior` no se exporta (ninguna cara lo usa en el `.blend`). Por dentro se ve el material exterior, que es de doble cara. E2 decide si basta. |
-| Enganche de cables | 3 puntos del rover como constantes en código (el GLB del rover no tiene esos nodos). Arriba se usan los nodos `Bridle_Anchor_1..3` del SkyCrane. |
+| Interior de la cápsula | `MAT-aeroshell_interior` no se exporta (ninguna cara lo usa en el `.blend`). Por dentro se ve el material exterior, que es de doble cara. Revisado en E2: basta. |
+| Enganche de cables | 3 puntos del rover como constantes en código (`ROVER_BRIDLE` en `edl.ts`: cubierta a y = 1.15 m, uno al frente y dos atrás; el GLB del rover no tiene esos nodos). Arriba se usan los nodos `Bridle_Anchor_1..3` del SkyCrane. |
 | Animación | Toda en código (máquina de estados con tiempos), sin clips de Blender. Motivos en `SKYCRANE.md` §4. |
 | Paracaídas | Geometría procedural en Three.js (casquete con franjas blancas y naranjas, líneas). No hay modelo. |
 | Efectos | Llamas, plasma de entrada, polvo y humo se hacen en el juego con sprites o mallas simples. |
@@ -113,7 +113,7 @@ Meta: `skycrane.glb` y `aeroshell.glb` en `frontend/public/models/`, comprobados
 Verificar: `inspect` de los dos archivos; cada GLB por debajo de 2 MB; los dos se ven bien en
 `https://sandbox.babylonjs.com` o en la vista de la fase E2.
 
-### Fase E2 — Módulo de carga y vista de prueba
+### Fase E2 — Módulo de carga y vista de prueba ✅
 
 Meta: los tres modelos acoplados en una escena del juego, bien iluminados.
 
@@ -231,7 +231,7 @@ Verificar: lint y build; `sh docs/docs.sh stale` sin pendientes.
 
 - [x] Fase E0 — Preparar
 - [x] Fase E1 — Exportar los modelos
-- [ ] Fase E2 — Módulo de carga y vista de prueba
+- [x] Fase E2 — Módulo de carga y vista de prueba
 - [ ] Fase E3 — Escena y línea de tiempo: de la entrada a la carcasa trasera
 - [ ] Fase E4 — Descenso propulsado, sky crane, contacto y escape
 - [ ] Fase E5 — Efectos
@@ -249,3 +249,8 @@ Verificar: lint y build; `sh docs/docs.sh stale` sin pendientes.
   Nodos, `COLOR_0`, metallicRoughness y malla compartida de propulsores comprobados con `inspect` y
   leyendo el JSON del GLB. Posición acoplada confirmada sin cambios. Hallazgos anotados en Decisiones:
   chorro por -Y local y cápsula sin material interior. Revisión visual queda para la vista de E2.
+- **2026-11-15 · Fase E2** — `three/edl.ts` (`loadEdl`, `edlEnvironment` con `RoomEnvironment`, constantes de
+  acople y `ROVER_BRIDLE`) y `three/EdlStatic.tsx` en `?screen=edl`. Con entorno el metal ya no sale negro y el
+  rover con `metalness` rebajado se ve bien: no hizo falta quitar el rebaje. Cápsula cerrada sin cruces; escudo y
+  carcasa se separan limpios. Los cambios ajenos de `main` (`src/App.tsx` declara `game` dos veces) rompen lint y
+  build: para verificar se apartaron con `git stash -u` por ruta y se devolvieron después.
