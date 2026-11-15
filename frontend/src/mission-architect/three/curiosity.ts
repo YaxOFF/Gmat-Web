@@ -7,14 +7,23 @@ export type HeightFn = (x: number, z: number) => number
 export interface CuriosityRig {
   /** Nodo raíz del modelo; se cuelga del grupo del rover (frente = +Z, arriba = +Y). */
   model: THREE.Object3D
+  /** Huella de las ruedas en el marco del rover (m, frente = +Z), con el radio y el ancho de la rueda incluidos. */
+  foot: { minX: number; maxX: number; minZ: number; maxZ: number }
   /**
    * Suspensión rocker-bogie procedural: apoya las seis ruedas sobre `ground` y coloca `body` (el grupo del rover,
    * padre de `model`) con la altura, el cabeceo y el alabeo que resultan. `x, z, yaw` ubican el rover;
    * `speed` (m/s) gira las ruedas y `turn` (-1..1) orienta las cuatro de dirección.
    */
   update(dt: number, body: THREE.Object3D, x: number, z: number, yaw: number, speed: number, turn: number, ground: HeightFn): void
-  /** Gira la broca mientras perfora. */
-  drill(dt: number, on: boolean): void
+  /**
+   * Brazo robótico: con `on` se despliega frente al rover, baja la broca vertical hasta `ground` (suelo o lomo de
+   * roca, en mundo) y perfora girando; sin `on` la saca y vuelve a guardarse. Llamar después de `update`.
+   */
+  drill(dt: number, on: boolean, ground: HeightFn): void
+  /** Punto (mundo) donde la broca toca o tocaría el suelo ahora mismo. */
+  drillPoint(out: THREE.Vector3): THREE.Vector3
+  /** 0 = broca en el aire o guardada, 1 = apoyada (y girando si sigue perforando). */
+  drillContact(): number
 }
 
 const SIDES = ['Izq', 'Der'] as const
@@ -62,14 +71,27 @@ export function rigCuriosity(model: THREE.Object3D): CuriosityRig {
     }
   })
   const radius = (sides[0].wheels[0].userData.radio as number | undefined) ?? 0.244
-  const diff = model.getObjectByName('Diferencial'), bit = model.getObjectByName('Taladro')
+  const diff = model.getObjectByName('Diferencial')
   const track = Math.abs(sides[0].xRocker - sides[1].xRocker)
-  model.traverse((o) => { o.castShadow = true; o.receiveShadow = true })
+  const wxs = sides.flatMap((s) => s.wx), wzs = sides.flatMap((s) => s.wz), halfW = 0.2 // medio ancho de rueda
+  const foot = {
+    minX: Math.min(...wxs) - halfW, maxX: Math.max(...wxs) + halfW,
+    minZ: Math.min(...wzs) - radius, maxZ: Math.max(...wzs) + radius,
+  }
+  model.traverse((o) => {
+    o.castShadow = true; o.receiveShadow = true
+    // El export de Blender deja metallic = 1 en tex_03, tex_04, wheels y parts_AO sin mapa de metal. La escena
+    // no tiene environment map, así que un metal puro no refleja nada y la textura se ve negra: se baja a casi 0.
+    const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined
+    if (m?.isMeshStandardMaterial && !m.metalnessMap && m.metalness > 0.2) m.metalness = 0.15
+  })
 
   let steer = 0
+  const arm = armRig(model)
 
   return {
     model,
+    foot,
     update(dt, body, x, z, yaw, speed, turn, ground) {
       const sn = Math.sin(yaw), cs = Math.cos(yaw)
       // 1. Estimación directa: suelo bajo cada rueda en su posición de reposo girada por el rumbo.
@@ -122,7 +144,85 @@ export function rigCuriosity(model: THREE.Object3D): CuriosityRig {
         for (const w of s.wheels) w.rotation.x += spin
       }
     },
-    drill(dt, on) { if (bit && on) bit.rotation.z += dt * 30 },
+    drill: (dt, on, ground) => arm.drill(dt, on, ground),
+    drillPoint: (out) => arm.point(out),
+    drillContact: () => arm.contact(),
+  }
+}
+
+const ARM_REACH = 1.05 // m: distancia de la broca al pie del brazo, hacia adelante
+const ARM_HOVER = 0.22 // m: altura de la punta sobre el suelo antes de bajar
+const ARM_PLUNGE = 0.06 // m: cuánto se mete la broca al perforar
+
+/**
+ * Brazo de 5 articulaciones (Brazo → Superior → Antebrazo → Muñeca → Torreta → Taladro). Hombro, codo y muñeca giran
+ * en X local, en el plano vertical del brazo. Hombro y codo resuelven un IK de dos eslabones hasta la muñeca; la
+ * muñeca deja la broca (eje +Z del Taladro) apuntando hacia abajo, así la punta cae en el objetivo a cualquier altura.
+ */
+function armRig(model: THREE.Object3D) {
+  const get = (n: string) => model.getObjectByName(n)
+  const base = get('Brazo'), sh = get('Brazo_Superior'), el = get('Brazo_Antebrazo'), wr = get('Brazo_Muneca'), bit = get('Taladro')
+  if (!base || !sh || !el || !wr || !bit) {
+    const p = new THREE.Vector3()
+    return { drill: () => {}, point: (out: THREE.Vector3) => out.copy(model.getWorldPosition(p)), contact: () => 0 }
+  }
+  model.updateMatrixWorld(true)
+  // Geometría en reposo, en el marco de Brazo (plano z-y). Ángulo de cada eslabón: atan2(y, z).
+  const S = sh.position.clone(), E = el.position.clone(), W = wr.position.clone()
+  const L1 = Math.hypot(E.z, E.y), a1 = Math.atan2(E.y, E.z)
+  const L2 = Math.hypot(W.z, W.y), a2 = Math.atan2(W.y, W.z)
+  // Punta de la broca en el marco de la muñeca: el vértice más adelantado (+Z) del Taladro.
+  const toWrist = wr.matrixWorld.clone().invert(), v = new THREE.Vector3(), tip = new THREE.Vector3(0, 0, -Infinity)
+  bit.traverse((o) => {
+    const g = (o as THREE.Mesh).isMesh ? (o as THREE.Mesh).geometry.attributes.position : null
+    for (let i = 0; g && i < g.count; i++) {
+      v.fromBufferAttribute(g, i).applyMatrix4(o.matrixWorld).applyMatrix4(toWrist)
+      if (v.z > tip.z) tip.copy(v)
+    }
+  })
+  const Lt = Math.hypot(tip.z, tip.y), at = Math.atan2(tip.y, tip.z)
+  const tipX = S.x + E.x + W.x + tip.x // los giros en X no mueven la punta de lado
+
+  // Girar +θ en X baja el ángulo del eslabón en θ: el eje de la broca (ángulo 0) queda en −θ.
+  let deploy = 0, lower = 0, spin = 0
+  const target = new THREE.Vector3(), local = new THREE.Vector3(), down = new THREE.Vector3()
+  const toBase = new THREE.Quaternion()
+  const ease = (x: number) => x * x * (3 - 2 * x)
+
+  const aim = (ground: HeightFn) => {
+    target.set(tipX, 0, ARM_REACH); base.localToWorld(target)
+    target.y = ground(target.x, target.z)
+    return target
+  }
+  return {
+    point: (out: THREE.Vector3) => out.copy(target),
+    contact: () => lower,
+    drill(dt: number, on: boolean, ground: HeightFn) {
+      // Fases: desplegar → bajar → perforar; al terminar, subir → guardar.
+      if (on) { deploy = Math.min(1, deploy + dt / 0.9); if (deploy >= 1) lower = Math.min(1, lower + dt / 0.5) }
+      else { lower = Math.max(0, lower - dt / 0.35); if (lower <= 0) deploy = Math.max(0, deploy - dt / 0.9) }
+      const drilling = on && lower >= 1
+      spin = drilling ? spin + dt * 25 : spin
+      bit.rotation.z = spin
+      if (deploy <= 0) { sh.rotation.x = el.rotation.x = wr.rotation.x = 0; aim(ground); return }
+
+      aim(ground)
+      const plunge = drilling ? ARM_PLUNGE + Math.sin(performance.now() / 18) * 0.004 : 0
+      local.copy(target); local.y += ARM_HOVER * (1 - ease(lower)) - plunge
+      base.worldToLocal(local)
+      // Giro total para que la broca apunte a la vertical del mundo aunque el chasis esté inclinado.
+      down.set(0, -1, 0).applyQuaternion(base.getWorldQuaternion(toBase).invert())
+      const total = -Math.atan2(down.y, down.z), tz = Lt * Math.cos(at - total), ty = Lt * Math.sin(at - total)
+      // Muñeca = objetivo menos la herramienta; IK de dos eslabones (codo arriba) desde el hombro.
+      let dz = local.z - tz - S.z, dy = local.y - ty - S.y
+      const d = THREE.MathUtils.clamp(Math.hypot(dz, dy), Math.abs(L1 - L2) + 1e-3, L1 + L2 - 1e-3)
+      const ang = Math.atan2(dy, dz); dz = Math.cos(ang) * d; dy = Math.sin(ang) * d
+      const alpha = ang + Math.acos(THREE.MathUtils.clamp((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), -1, 1))
+      const beta = Math.atan2(dy - L1 * Math.sin(alpha), dz - L1 * Math.cos(alpha))
+      const ts = a1 - alpha, te = a2 - beta - ts, tw = total - ts - te
+      const k = ease(deploy)
+      sh.rotation.x = ts * k; el.rotation.x = te * k; wr.rotation.x = tw * k
+    },
   }
 }
 

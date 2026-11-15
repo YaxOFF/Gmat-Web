@@ -266,6 +266,22 @@
 .rv-keys kbd { background: var(--panel2); color: var(--text); padding: 1px 6px; font-family: var(--mono); }
 .rv-toast { position: absolute; left: 50%; bottom: 90px; transform: translateX(-50%); z-index: 3; background: #ffe45e; color: #14110a; font-weight: 700; padding: 10px 18px; border: 3px solid #14110a; box-shadow: 6px 6px 0 #000a; }
 .rv-end { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 3; display: flex; gap: 12px; }
+/* Cámara de perforación: viñeta y marco al acercarse; con la broca adentro, tinte cian y scanlines de rayos X. */
+.rv-xray { position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: 0; transition: opacity .5s;
+  background: radial-gradient(ellipse at center, transparent 50%, #000c 100%); }
+.rv-xray.on { opacity: 1; }
+.rv-xray::before { content: ""; position: absolute; inset: 0; opacity: 0; transition: opacity .4s;
+  background: repeating-linear-gradient(0deg, #6ff7ff14 0 2px, transparent 2px 4px), radial-gradient(ellipse at center, #38e1ff1a 30%, #02303acc 100%);
+  box-shadow: inset 0 0 0 3px #6ff7ff88, inset 0 0 80px #38e1ff55; animation: rv-scan 2.4s linear infinite; }
+.rv-xray.scan::before { opacity: 1; }
+@keyframes rv-scan { from { background-position: 0 0, 0 0; } to { background-position: 0 40px, 0 0; } }
+.rv-xray-tag { position: absolute; right: 18px; top: 120px; font-family: var(--mono); font-size: 12px; letter-spacing: .14em; color: #9ffcff; text-shadow: 0 0 6px #38e1ff; }
+.rv-xray.scan .rv-xray-tag { animation: rv-blink 1s steps(2) infinite; }
+@keyframes rv-blink { 50% { opacity: .45; } }
+.rv-xray-read { position: absolute; right: 18px; bottom: 150px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-family: var(--mono); color: #9ffcff; text-shadow: 0 0 6px #38e1ff; }
+.rv-xray-read span { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; opacity: .8; }
+.rv-xray-read b { font-size: 26px; font-weight: 400; }
+.rv-xray-read em { font-style: normal; font-size: 12px; letter-spacing: .12em; color: #38e1ff; background: #02303acc; padding: 3px 8px; border: 1px solid #38e1ff; }
 .rv-drill { height: 6px; background: var(--panel2); margin-top: 6px; }
 .rv-drill i { display: block; height: 100%; background: var(--pink); }
 .rv-bat { position: relative; }
