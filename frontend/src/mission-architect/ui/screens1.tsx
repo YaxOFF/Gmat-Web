@@ -14,7 +14,7 @@ import { pct } from '../engine/rng'
 
 // ---------- Título ----------
 
-export function Title({ onStart }: { onStart: () => void }) {
+export function Title({ onStart, onMars }: { onStart: () => void; onMars: () => void }) {
   return (
     <div className="title-screen">
       <div className="halftone" />
@@ -25,6 +25,7 @@ export function Title({ onStart }: { onStart: () => void }) {
         <p className="tag">Episode 1 · Water on the Moon</p>
         <p className="sub">Design a spacecraft with a tight budget, launch it, and find out <em>why</em> it worked or failed.</p>
         <button className="btn big" onClick={onStart}>START MISSION ▶</button>
+        <button className="btn ghost" onClick={onMars}>TRY MARS ▶</button>
         <p className="hint">1 or 4 players · 20–30 min · click, Space or → advances the story</p>
       </div>
     </div>

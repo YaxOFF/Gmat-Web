@@ -21,18 +21,19 @@ import { STEP_NAMES, TopBar } from './ui/Hud'
 import { Mapping } from './ui/Mapping'
 import { Hangar, OrbitPick, Review, Title } from './ui/screens1'
 import { Report, Site } from './ui/screens2'
+import { MarsTest } from './ui/MarsTest'
 
 type Phase =
   | 'title' | 'intro' | 'setup' | 'orbit' | 'hangar' | 'review'
-  | 'launch' | 'mapping' | 'site' | 'ending' | 'descent' | 'rover' | 'finale' | 'report'
+  | 'launch' | 'mapping' | 'site' | 'ending' | 'descent' | 'rover' | 'finale' | 'report' | 'mars'
 
 const STEP_OF: Record<Phase, number> = {
   title: 0, intro: 0, setup: 0, orbit: 1, hangar: 2, review: 3,
-  launch: 4, mapping: 5, site: 6, ending: 6, descent: 7, rover: 8, finale: 9, report: 10,
+  launch: 4, mapping: 5, site: 6, ending: 6, descent: 7, rover: 8, finale: 9, report: 10, mars: 0,
 }
 
 const urlSeed = () => Number(new URLSearchParams(location.search).get('seed')) || 0
-// Atajos de prueba: ?rover=cabeus o ?landing=cabeus (y opcional &seed=123)
+// Atajos de prueba: ?rover=cabeus o ?landing=cabeus (y opcional &seed=123); ?screen=mars abre la prueba de Marte
 const q = (k: string) => { const v = new URLSearchParams(location.search).get(k); return v && CRATER[v] ? v : null }
 const urlRover = () => q('rover') ?? q('landing')
 const SCREEN = new URLSearchParams(location.search).get('screen')
@@ -58,7 +59,7 @@ export default function MissionArchitect({ onInspect, onExit }: {
   const minBat = useRef(100)
   const [landing, setLanding] = useState<Landing | null>(null)
   const [finale, setFinale] = useState<FinaleResult | null>(null)
-  const [phase, setPhase] = useState<Phase>(() => (q('rover') ? 'rover' : q('landing') ? 'descent' : SCREEN === 'setup' ? 'setup' : SCREEN === 'launch' ? 'launch' : SCREEN === 'hangar' ? 'hangar' : SCREEN === 'orbit' ? 'orbit' : 'title'))
+  const [phase, setPhase] = useState<Phase>(() => (q('rover') ? 'rover' : q('landing') ? 'descent' : SCREEN === 'setup' ? 'setup' : SCREEN === 'launch' ? 'launch' : SCREEN === 'hangar' ? 'hangar' : SCREEN === 'orbit' ? 'orbit' : SCREEN === 'mars' ? 'mars' : 'title'))
   const [design, setDesign] = useState<Design>(defaultDesign())
   const [iterations, setIterations] = useState(0)
   const [forced, setForced] = useState(false)
@@ -143,10 +144,11 @@ export default function MissionArchitect({ onInspect, onExit }: {
   return (
     <div className="ma app">
       <button className="btn small ghost ma-exit" onClick={onExit}>← GMAT workspace</button>
-      {phase !== 'title' && (
+      {phase !== 'title' && phase !== 'mars' && (
         <TopBar step={STEP_OF[phase]} steps={STEP_NAMES} right={<span className="hint">Budget left: {money(stats.budgetLeftM)} · seed {seed}</span>} />
       )}
-      {phase === 'title' && <Title onStart={() => setPhase('intro')} />}
+      {phase === 'title' && <Title onStart={() => setPhase('intro')} onMars={() => setPhase('mars')} />}
+      {phase === 'mars' && <MarsTest onExit={() => setPhase('title')} />}
       {phase === 'intro' && <Dialogue lines={INTRO} startScene="void" onDone={() => setPhase('setup')} />}
       {phase === 'setup' && <Setup mode={design.mode} team={team} onDone={(mode, t) => { setTeam(t); setDesign({ ...design, mode, partIds: [] }); setPhase('orbit') }} />}
       {phase === 'orbit' && <OrbitPick design={design} onInspect={inspect} onPick={(orbitId) => { setDesign({ ...design, orbitId }); setPhase('hangar') }} />}
