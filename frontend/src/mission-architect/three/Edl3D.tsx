@@ -5,7 +5,7 @@ import { loadCuriosity, meshHeight, type CuriosityRig } from './curiosity'
 import { HALF, loadDem, demHeight, noise, SIZE, type Dem } from './dem'
 import { edlEnvironment, loadEdl, ROVER_BRIDLE, type EdlRig } from './edl'
 import { puffs, puffTexture } from './Launch3D'
-import { untileMaterial } from './Rover3D'
+import { DEFAULT_ROVER, siteDeposits, siteRocks, untileMaterial } from './Rover3D'
 import { mountStage } from './stage'
 import { MARS, type RoverSite } from './world'
 
@@ -33,6 +33,7 @@ const ENTRY_DIR = new THREE.Vector3(1.2, 1, 0).normalize() // contrario a la mar
 const SUN_OFF = new THREE.Vector3(160, 220, -260)
 const CHUTE_R = 12, CHUTE_L = 30, CHUTE_TH = 1.0, GORES = 16 // casquete, largo de las líneas y abertura (rad)
 const DUST = new THREE.Color(0xe6cfb4)
+const QUALITY = 0.8 // el de MarsTest para Rover3D: tiñe el suelo con la señal de hidrógeno igual que allá
 
 const smooth = (t: number) => { const u = clamp(t, 0, 1); return u * u * (3 - 2 * u) }
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
@@ -61,6 +62,7 @@ export function Edl3D({ site, seed, onDone }: { site: RoverSite; seed: number; o
     // Mismo relieve que Rover3D: misma semilla, mismo ruido (el ruido consume el rng primero).
     const rng = mulberry32(seed ^ Math.imul(site.id.length, 0x9e3779b1))
     const n = noise(rng)
+    const { signalAt } = siteDeposits(rng, site, DEFAULT_ROVER, MARS) // mismo rng que Rover3D: después salen las mismas rocas
     const d = dem!.dem
     const height = d ? demHeight(d, n) : (x: number, z: number) => n(x + 500, z + 500) * 3.2
     const h0 = height(LAND.x, LAND.z)
@@ -76,27 +78,30 @@ export function Edl3D({ site, seed, onDone }: { site: RoverSite; seed: number; o
     Object.assign(sun.shadow.camera, { left: -35, right: 35, top: 35, bottom: -35, far: 900 })
     scene.add(sun, sun.target)
 
-    // Terreno: el jugable de Rover3D (relieve real) y uno exterior hasta el horizonte, con el mismo material.
-    const groundMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, color: new THREE.Color(0.5, 0.5, 0.5) })
+    // Terreno: el jugable de Rover3D (relieve real) y uno exterior hasta el horizonte, con el mismo material. Sin luz del
+    // entorno (Rover3D no tiene) y con los mismos colores de vértice, así el corte a Rover3D no cambia el suelo.
+    const groundMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, color: new THREE.Color(0.5, 0.5, 0.5), envMapIntensity: 0 })
     untileMaterial(groundMat)
-    const plane = (size: number, seg: number, y: (x: number, z: number) => number, uvMeters: boolean) => {
+    const plane = (size: number, seg: number, y: (x: number, z: number) => number, uvMeters: boolean, tint: boolean) => {
       const g = new THREE.PlaneGeometry(size, size, seg, seg); g.rotateX(-Math.PI / 2)
       const p = g.attributes.position, uv = g.attributes.uv, col = new Float32Array(p.count * 3)
       for (let i = 0; i < p.count; i++) {
         const x = p.getX(i), z = p.getZ(i); p.setY(i, y(x, z))
         if (uvMeters) uv.setXY(i, (x + HALF) / SIZE, (HALF - z) / SIZE)
-        const v = 0.84 + n(x * 3, z * 3) * 0.24
-        col.set([v, v, v], i * 3)
+        const v = (0.84 + n(x * 3, z * 3) * 0.24) * 1.15, s = tint ? signalAt(x, z) * QUALITY * 0.8 : 0
+        col.set([v * (1 - s * 0.6), v * (1 - s * 0.2), v + s * 0.7], i * 3)
       }
       g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.computeVertexNormals()
       const m = new THREE.Mesh(g, groundMat); m.receiveShadow = true; scene.add(m)
       return g
     }
-    const floor = meshHeight(plane(SIZE, SEG, height, false), SIZE, SEG) // lo que pisan las ruedas, igual que en Rover3D
+    const floor = meshHeight(plane(SIZE, SEG, height, false, true), SIZE, SEG) // lo que pisan las ruedas, igual que en Rover3D
+    const rocks = siteRocks(rng, n, height, floor, site, MARS); scene.add(rocks.mesh)
+    for (const m of [rocks.mesh.material].flat()) (m as THREE.MeshStandardMaterial).envMapIntensity = 0
     plane(SIZE * 10, SIZE, (x, z) => {
       const out = Math.max(Math.abs(x), Math.abs(z)) - HALF, bx = clamp(x, -HALF, HALF), bz = clamp(z, -HALF, HALF)
       return out < -1e-3 ? height(bx, bz) - 6 : height(bx, bz) - 0.3 + clamp(out / 60, 0, 1) * (n(x * 0.2 + 900, z * 0.2 + 900) - 0.8) * 14
-    }, true)
+    }, true, false)
     const reg = `${import.meta.env.BASE_URL}${MARS.ground}`, loader = new THREE.TextureLoader(), aniso = renderer.capabilities.getMaxAnisotropy()
     const tile = (t: THREE.Texture) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(SIZE / 12, SIZE / 12); t.anisotropy = aniso; groundMat.needsUpdate = true; return t }
     const tex: THREE.Texture[] = []
@@ -298,12 +303,16 @@ export function Edl3D({ site, seed, onDone }: { site: RoverSite; seed: number; o
         // Gira en arco alrededor del rover (en línea recta pasaría por encima de él).
         const e = i === 7 ? smooth(p) : 0, ang = lerp(Math.atan2(11, 15), Math.PI, e), r = lerp(Math.hypot(11, 15), 10, e)
         camOff.set(Math.sin(ang) * r, lerp(3.5, 5.5, e), Math.cos(ang) * r)
-        want.copy(body.position).add(camOff)
+        // Al final, exactamente la persecución con que arranca Rover3D: suelo + (0, 5.5, -10), mirando a suelo + 1.2.
+        want.copy(body.position).lerp(a.set(LAND.x, h0, LAND.z), e).add(camOff)
         look.copy(body.position).lerp(stack.position, i === 7 ? 0.5 * (1 - smooth((p - 0.2) / 0.5)) : 0.5); look.y += 1
+        look.lerp(b.set(LAND.x, h0 + 1.2, LAND.z), e)
       }
-      want.y = Math.max(want.y, height(want.x, want.z) + 3)
+      const fin = i === 7 ? smooth(p) : 0
+      want.y = Math.max(want.y, height(want.x, want.z) + 3 * (1 - fin)) // Rover3D no corrige la altura: al final tampoco
+      scene.environmentIntensity = 1 - fin // Rover3D no tiene entorno: se apaga mientras el SkyCrane se va
       if (first) { camera.position.copy(want); camLook.copy(look); first = false }
-      const k = 1 - Math.exp(-dt * 2.5)
+      const k = 1 - Math.exp(-dt * (2.5 + 6 * fin)) // al final se pega al encuadre de Rover3D
       camera.position.lerp(want, k); camLook.lerp(look, k); camera.lookAt(camLook)
 
       hudT -= dt

@@ -235,7 +235,7 @@ Verificar: lint y build; `sh docs/docs.sh stale` sin pendientes.
 - [x] Fase E3 — Escena y línea de tiempo: de la entrada a la carcasa trasera
 - [x] Fase E4 — Descenso propulsado, sky crane, contacto y escape
 - [x] Fase E5 — Efectos
-- [ ] Fase E6 — Integración en "Try Mars"
+- [x] Fase E6 — Integración en "Try Mars"
 - [ ] Fase E7 — Pulido, rendimiento y documentación
 
 ## Bitácora
@@ -272,3 +272,9 @@ Verificar: lint y build; `sh docs/docs.sh stale` sin pendientes.
   compartidos y una sola `PointLight` (naranja en la entrada, azulada después); polvo bajo 25 m y nube en el choque. El escape
   ahora va hacia +Z y algo de -X para que el choque se vea en el cuadro final. El sol sigue a la pila/rover con sombra de ±35 m.
   Revisado en Chrome (con un arranque temporal en t=44 s para el final, ya quitado); `?screen=launch` sin cambios.
+- **2026-11-15 · Fase E6** — `MarsTest`: "Land and drive at …" abre `Edl3D`; al terminar o con "Skip landing ▶" pasa a `Rover3D`.
+  `cachedGlb` en `curiosity.ts`: cada GLB se descarga una vez y cada escena recibe un `clone()` (`loadCuriosity` y `loadEdl` lo
+  usan). Para que el corte no salte, `Rover3D` exporta `siteDeposits`/`siteRocks` y `Edl3D` consume el rng igual: mismas rocas y
+  mismo tinte de hidrógeno; suelo y rocas sin luz de entorno y el entorno se apaga durante el escape; la cámara termina
+  exactamente en la persecución inicial de `Rover3D`, que ahora arranca ya en ese punto. En Marte `Rover3D` no pone el lander
+  lunar. Revisado en Chrome: Arcadia (saltar) y Korolev (secuencia completa); `?rover=cabeus` sigue igual, sin errores.

@@ -1,6 +1,6 @@
 import * as THREE from 'three'
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
+import { cachedGlb } from './curiosity'
 
 /** Posición acoplada en el marco del rover (origen de `curiosity_rover.glb`, m): ver PLAN-EDL.md, Decisiones. */
 export const SKYCRANE_Y = 2.17
@@ -31,14 +31,13 @@ export interface EdlRig {
 
 /** Carga `skycrane.glb` y `aeroshell.glb` y los deja en la posición acoplada sobre el origen del rover. */
 export async function loadEdl(): Promise<EdlRig> {
-  const loader = new GLTFLoader(), base = `${import.meta.env.BASE_URL}models/`
-  const [sc, ae] = await Promise.all([loader.loadAsync(base + 'skycrane.glb'), loader.loadAsync(base + 'aeroshell.glb')])
+  const [sc, ae] = await Promise.all([cachedGlb('skycrane.glb'), cachedGlb('aeroshell.glb')])
   const node = (root: THREE.Object3D, file: string, name: string) => {
     const o = root.getObjectByName(name)
     if (!o) throw new Error(`${file}: falta el nodo ${name}`)
     return o
   }
-  const skycrane = node(sc.scene, 'skycrane.glb', 'SkyCrane'), aeroshell = node(ae.scene, 'aeroshell.glb', 'Aeroshell')
+  const skycrane = node(sc, 'skycrane.glb', 'SkyCrane'), aeroshell = node(ae, 'aeroshell.glb', 'Aeroshell')
   // Buscar dentro de cada raíz: al colgarlas de `root` ya no están en `gltf.scene`.
   const n1 = (name: string) => node(skycrane, 'skycrane.glb', name), n2 = (name: string) => node(aeroshell, 'aeroshell.glb', name)
   const root = new THREE.Group()

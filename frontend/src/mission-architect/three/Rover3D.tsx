@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { Crater } from '../data/types'
-import { clamp, mulberry32 } from '../engine/rng'
+import { clamp, mulberry32, type Rng } from '../engine/rng'
 import { demHeight, HALF, loadDem, noise, SIZE, type Dem } from './dem'
 import { buildLander } from './spacecraft'
 import { loadCuriosity, meshHeight, type CuriosityRig, type HeightFn } from './curiosity'
 import { at, mountStage, stars } from './stage'
+import type { RockField } from './rocks'
 import { MOON, type RoverSite, type World } from './world'
 import { makeXray } from './xray'
 
@@ -119,6 +120,26 @@ function permanentShadow(mat: THREE.Material, key: string) {
 
 const LIGHT_Z = -58 // al sur de esta línea el borde recibe sol; al norte, sombra permanente
 const STEEP: Record<Crater['terrain'], number> = { soft: 0.6, rocky: 1, steep: 1.6, 'very steep': 2.2 }
+type Dep = { x: number; z: number; rich: number; taken: boolean; spike?: boolean }
+
+/** Depósitos de hielo del sitio y su señal. Consume el rng: Edl3D lo llama igual, así sus rocas salen como aquí. */
+export function siteDeposits(rng: Rng, crater: RoverSite, start: RoverStart, world: World) {
+  // Hielo solo en la sombra permanente; menos si se desvió a un sitio más seguro.
+  const deposits: Dep[] = []
+  const want = Math.max(1, Math.round((2 + crater.h * 1.3) * start.sciMul))
+  while (deposits.length < want) {
+    const a = rng() * Math.PI * 2, r = 12 + rng() * (RIM - 30), x = Math.cos(a) * r, z = Math.sin(a) * r
+    if (!world.shadow || z > LIGHT_Z + 12) deposits.push({ x, z, rich: crater.ice * (0.4 + rng()) * 1.3, taken: false })
+  }
+  const signalAt = (x: number, z: number) =>
+    clamp(deposits.reduce((s, d) => s + (d.taken ? 0 : d.rich * Math.exp(-((Math.hypot(d.x - x, d.z - z) / 13) ** 2))), 0) / 10, 0, 1)
+  return { deposits, signalAt }
+}
+
+/** Campo de rocas del sitio (RockField en rocks.ts), con el rng justo después de `siteDeposits`. */
+export function siteRocks(rng: Rng, n: (x: number, y: number) => number, height: HeightFn, floor: HeightFn, crater: RoverSite, world: World): RockField {
+  return new world.rocks({ rng, noise: n, height, floor, count: ROCKS[crater.terrain], rim: RIM, clear: { x: 0, z: -76, r: 8 } })
+}
 const ROCKS: Record<Crater['terrain'], number> = { soft: 50, rocky: 260, steep: 130, 'very steep': 170 }
 // Pasos del orbitador sobre el cráter (s de juego): la órbita elegida en CML 2 decide el relevo.
 const RELAY: Record<string, { period: number; dur: number }> = {
@@ -185,16 +206,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       return n(x + 500, z + 500) * 3.2 * steep + rim
     }
     const shade = (z: number) => world.shadow ? clamp((z - LIGHT_Z) / 4 + 0.5, 0, 1) : 0 // 0 = sol, 1 = sombra
-    // Hielo solo en la sombra permanente; menos si se desvió a un sitio más seguro.
-    type Dep = { x: number; z: number; rich: number; taken: boolean; spike?: boolean }
-    const deposits: Dep[] = []
-    const want = Math.max(1, Math.round((2 + crater.h * 1.3) * start.sciMul))
-    while (deposits.length < want) {
-      const a = rng() * Math.PI * 2, r = 12 + rng() * (RIM - 30), x = Math.cos(a) * r, z = Math.sin(a) * r
-      if (!world.shadow || z > LIGHT_Z + 12) deposits.push({ x, z, rich: crater.ice * (0.4 + rng()) * 1.3, taken: false })
-    }
-    const signalAt = (x: number, z: number) =>
-      clamp(deposits.reduce((s, d) => s + (d.taken ? 0 : d.rich * Math.exp(-((Math.hypot(d.x - x, d.z - z) / 13) ** 2))), 0) / 10, 0, 1)
+    const { deposits, signalAt } = siteDeposits(rng, crater, start, world)
 
     scene.background = new THREE.Color(world.sky ?? 0x000000)
     if (world.sky === undefined) scene.add(stars(rng, 3000, 1500))
@@ -251,9 +263,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
 
     // Rocas: las bajas se trepan; las altas chocan y frenan al rover.
     // Campo de rocas del mundo (RockField en rocks.ts: ubicación, choque y apoyo comunes; aspecto por mundo).
-    const field = new world.rocks({
-      rng, noise: n, height, floor, count: ROCKS[crater.terrain], rim: RIM, clear: { x: 0, z: -76, r: 8 },
-    })
+    const field = siteRocks(rng, n, height, floor, crater, world)
     if (world.shadow) permanentShadow(field.mesh.material as THREE.Material, 'rover-rock')
     scene.add(field.mesh)
     // Lo que pisan las ruedas: el suelo más el lomo de las rocas chicas.
@@ -273,9 +283,9 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     loader.load(reg + 'normal.jpg', (t) => { groundMat.normalMap = tile(t, SIZE / TILE); done() })
     loader.load(reg + 'orm.jpg', (t) => { groundMat.aoMap = groundMat.roughnessMap = tile(t, SIZE / TILE); done() }) // R = AO, G = rugosidad
 
-    // Lander en el borde y rover.
+    // Lander en el borde (en Marte no: el rover bajó colgado del SkyCrane, Edl3D) y rover.
     const lander = buildLander(); lander.rotation.y = 0.6
-    lander.position.set(9, height(9, -70), -70); scene.add(lander)
+    lander.position.set(9, height(9, -70), -70); if (world.sky === undefined) scene.add(lander)
 
     // Rover: caja provisional hasta que carga el Curiosity articulado (public/models/curiosity_rover.glb).
     const rover = new THREE.Group(), proxy = new THREE.Group(), metal = new THREE.MeshStandardMaterial({ color: 0xdedfe6, metalness: 0.5, roughness: 0.4 })
@@ -398,7 +408,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     say(world.shadow ? `Touchdown on the sunlit rim of ${crater.name}!`
       : `Touchdown at ${crater.name}. Free drive: follow the neutron signal and drill anywhere.`, world.shadow ? 3 : 5)
     const up3 = new THREE.Vector3(0, 1, 0), nrm = new THREE.Vector3(), qy = new THREE.Quaternion(), camT = new THREE.Vector3(), off = new THREE.Vector3()
-    camera.position.set(0, 8, -86)
+    camera.position.set(0, height(0, -74) + 5.5, -84) // ya en la persecución: el corte desde Edl3D no salta
     // Cámara de perforación (POV junto a la broca) + corte de rayos X + luz de trabajo de la torreta.
     const xray = makeXray(); scene.add(xray.group)
     const work = new THREE.PointLight(0xfff1dc, 0, 4, 1.4); scene.add(work)

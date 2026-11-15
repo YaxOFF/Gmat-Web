@@ -42,10 +42,21 @@ interface Side {
   rho: number; beta: number
 }
 
+const glbs = new Map<string, Promise<THREE.Object3D>>()
+/** Descarga `public/models/<file>` una sola vez y devuelve una copia nueva cada vez (comparte geometrías y materiales). */
+export async function cachedGlb(file: string): Promise<THREE.Object3D> {
+  let p = glbs.get(file)
+  if (!p) {
+    p = new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/${file}`).then((g) => g.scene)
+    p.catch(() => glbs.delete(file)) // si falla, el próximo intento vuelve a descargar
+    glbs.set(file, p)
+  }
+  return (await p).clone()
+}
+
 /** Carga el Curiosity articulado (nodos nombrados en Blender) y arma su rig de suspensión. */
 export async function loadCuriosity(): Promise<CuriosityRig> {
-  const gltf = await new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/curiosity_rover.glb`)
-  return rigCuriosity(gltf.scene)
+  return rigCuriosity(await cachedGlb('curiosity_rover.glb'))
 }
 
 /** Arma el rig sobre un modelo ya cargado, en reposo y sin transformar. */
