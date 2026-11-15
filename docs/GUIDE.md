@@ -1,4 +1,4 @@
-<!-- fuente: frontend/src/i18n/es.ts, frontend/src/mission/commands.ts, backend/app/engine/sanitize.py, backend/app/samples.py, backend/app/batch.py, backend/tests/missions/make_reference.py, backend/tests/test_missions.py, dev.ps1 | rev: 7b35a0e -->
+<!-- fuente: frontend/src/i18n/es.ts, frontend/src/mission/commands.ts, backend/app/engine/sanitize.py, backend/app/samples.py, backend/app/batch.py, backend/tests/missions/make_reference.py, backend/tests/test_missions.py, dev.ps1 | rev: e76b7b9 -->
 # Usage guide
 
 How to use the simulator, how to add missions, what else you can do with it and where to look (web and original C++) when something fails.
