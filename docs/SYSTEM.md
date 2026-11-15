@@ -1,4 +1,4 @@
-<!-- fuente: backend/app/main.py, frontend/vite.config.ts, backend/app/config.py | rev: 1ee8d23 -->
+<!-- fuente: backend/app/main.py, frontend/vite.config.ts, backend/app/config.py | rev: 7b35a0e -->
 # System
 
 | Piece | Where it lives | Stack | Docs |
@@ -23,5 +23,5 @@ There is no database and no accounts (v1). Docker deployment: `docker-compose.ym
 | New resource field/type | nothing if the engine exposes it (`engine/schema.py` reads it); bump the cache suffix if the shape changes | `ResourceForm.tsx` (generic) or dedicated editor |
 | New endpoint | `main.py`, worker function in `engine/worker.py` if it touches the engine, `docs/API.md` | call in `store.ts`, UI |
 | New sequence command | `script/parser.py` (`_args`, `COMMENTABLE`) and `serializer.py` | `model/mission.ts`, `mission/commands.ts`, `mission/CommandForm.tsx` |
-| UI text | n/a | `frontend/src/i18n/es.ts` |
+| UI text | n/a | `frontend/src/i18n/en.ts` (active, English; `es.ts` keeps Spanish with the same keys) |
 | Script security rule | `engine/sanitize.py` + `tests/test_sanitize.py` | n/a |

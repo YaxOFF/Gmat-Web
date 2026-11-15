@@ -1,4 +1,4 @@
-<!-- fuente: backend/app, frontend/src, shared | rev: 1ee8d23 -->
+<!-- fuente: backend/app, frontend/src, shared | rev: 7b35a0e -->
 # Map
 
 ## Entry points
@@ -43,10 +43,11 @@
 | Autosaved draft | `store.ts` (`readDraft`, `useApp.subscribe`), key `gmatweb.draft` |
 | Moon in results and lunar view of the 3D | `results.LUNA_CS`/`LUNA_COLS` (backend), `track` and `Globe` with `center` in `frontend/src/results/View3D.tsx` |
 | Responsive (tablet, mobile viewer only) | `@media` at the end of `frontend/src/App.module.css` |
-| UI text | `frontend/src/i18n/es.ts` |
+| UI text | `frontend/src/i18n/en.ts` (active, English; `es.ts` keeps Spanish with the same keys); the `mission-architect` game writes its text in the components |
 | Usage guide, adding missions, web → original C++ diagnosis | `docs/GUIDE.md` |
-| Real Moon data (globe, polar map, crater relief) and how to regenerate it | `tools/moon/build_moon.py`, `tools/moon/README.md`; output in `frontend/public/moon/`; used by `realMoon` (`mission-architect/three/stage.ts`), `Rover3D.tsx` (`loadDem`, `demHeight`), `ui/Mapping.tsx`; crater lat/lon in `mission-architect/data/catalog.ts` (`POLE_MAP_DEG`) |
+| Real Moon data (globe, polar map, crater relief) and how to regenerate it | `tools/moon/build_moon.py`, `tools/moon/README.md`; output in `frontend/public/moon/`; used by `realMoon` (`mission-architect/three/stage.ts`), `three/dem.ts` (`loadDem`, `demHeight`, shared by `Rover3D.tsx` and `Edl3D.tsx`), `ui/Mapping.tsx`; crater lat/lon in `mission-architect/data/catalog.ts` (`POLE_MAP_DEG`) |
 | Mars test view ("Try Mars" on the title: real globe + free rover on real sites) and its data | `mission-architect/ui/MarsTest.tsx`, sites `data/mars.ts`, rover world (`World`, `MOON`, `MARS`: DEM folder, ground textures `ground`/`gain`, sky) in `three/world.ts`; data from `tools/mars/build_mars.py` (`tools/mars/README.md`) into `frontend/public/mars/` |
+| Mars landing (EDL cinematic before driving: entry, parachute, heat shield, backshell, powered descent, sky crane, touchdown, flyaway; `?screen=edl&site=<id>`, `&static=1` = docked models) | `mission-architect/three/Edl3D.tsx` (stage timeline `STAGES`, effects, camera that ends on `Rover3D`'s first frame, loading overlay `.edl-loading`); `three/edl.ts` (`loadEdl`, `edlEnvironment`, docked constants `SKYCRANE_Y`, `ROVER_BRIDLE`); `three/EdlStatic.tsx`; GLB cache `cachedGlb` in `three/curiosity.ts` (prefetched by `ui/MarsTest.tsx`); models `frontend/public/models/skycrane.glb`, `aeroshell.glb` exported by `tools/msl/export_edl.py` (`tools/msl/README.md`); plan `PLAN-EDL.md` |
 | Rover drive: terrain beyond the playable area, permanent shadow, rock collisions, drilling | `mission-architect/three/Rover3D.tsx` (outer terrain ring, `permanentShadow`, `drillGround`, drill cam POV); rocks in `three/rocks.ts` (base `RockField`: placement, visible `pts`, `hits`, `bump`, `top`; `MoonRocks`/`MarsRocks` only change the look; chosen by `World.rocks`); Curiosity rig (suspension, arm IK `armRig`, `foot`, `drillPoint`/`drillContact`) in `three/curiosity.ts`; x-ray drill cutaway in `three/xray.ts` (`makeXray`); overlay `.rv-xray*` in `mission-architect/styles.css` |
 
 Symbols: `grep` in `docs/SYMBOLS.tsv` (generate with `sh docs/docs.sh map`).

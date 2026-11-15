@@ -1,4 +1,4 @@
-<!-- fuente: backend/app, frontend/src, backend/tests | rev: 1ee8d23 -->
+<!-- fuente: backend/app, frontend/src, backend/tests | rev: 7b35a0e -->
 # Tasks
 
 ## Commands
@@ -42,7 +42,7 @@ Model: `luna` in `templates.ts`. Verify: `npm run lint; npm run build` and creat
 `backend/app/engine/sanitize.py` and case in `backend/tests/test_sanitize.py` (does not need the engine).
 
 ## UI component or text
-1. Text in `frontend/src/i18n/es.ts`, never literal in the JSX.
+1. Text in `frontend/src/i18n/en.ts` (and the same key in `es.ts`), never literal in the JSX.
 2. State in `store.ts`; styles in CSS modules next to the component.
 
 Model: `frontend/src/resources/ResourceTree.tsx`.
