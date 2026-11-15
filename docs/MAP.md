@@ -45,6 +45,6 @@
 | UI text | `frontend/src/i18n/es.ts` |
 | Usage guide, adding missions, web → original C++ diagnosis | `docs/GUIDE.md` |
 | Real Moon data (globe, polar map, crater relief) and how to regenerate it | `tools/moon/build_moon.py`, `tools/moon/README.md`; output in `frontend/public/moon/`; used by `realMoon` (`mission-architect/three/stage.ts`), `Rover3D.tsx` (`loadDem`, `demHeight`), `ui/Mapping.tsx`; crater lat/lon in `mission-architect/data/catalog.ts` (`POLE_MAP_DEG`) |
-| Mars test view ("Try Mars" on the title: real globe + free rover on real sites) and its data | `mission-architect/ui/MarsTest.tsx`, sites `data/mars.ts`, rover world (`World`, `MOON`, `MARS`: DEM folder, ground textures `ground`/`gain`, sky) in `three/world.ts`; data from `tools/mars/build_mars.py` (`tools/mars/README.md`) into `frontend/public/mars/` |
+| Mars test view ("Try Mars" on the title: real globe + free rover on real sites) and its data | `mission-architect/ui/MarsTest.tsx`, sites `data/mars.ts`, rover world (`World`, `MOON`, `MARS`: DEM folder, ground textures `ground`/`gain`, sky, area `scale`, `storms`) in `three/world.ts`; sunset sky dome, storm dust, seeded irregular outcrops (`outcropGeometry`) and triplanar rock texture (`triplanarRock`) in `three/mars.ts`; dust storm cycle and shelter in `Rover3D.tsx` (`STORM`, test shortcut `?storm`, temporary "Dust storm (test)" checkbox via `api.storm`); data from `tools/mars/build_mars.py` (`tools/mars/README.md`) into `frontend/public/mars/` |
 
 Symbols: `grep` in `docs/SYMBOLS.tsv` (generate with `sh docs/docs.sh map`).

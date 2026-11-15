@@ -22,5 +22,6 @@ Datos de Marte (frontend/public/mars/, generados con tools/mars/build_mars.py), 
 - Relieve: "HRSC and MOLA Blended Digital Elevation Model at 200m v2", Fergason, Hare y Laura (2018),
   USGS Astrogeology (https://astrogeology.usgs.gov/search/map/mars_mgs_mola_mex_hrsc_blended_dem_global_200m).
 - Coordenadas de sitios: USGS/IAU Gazetteer of Planetary Nomenclature.
+- Textura de rocas y afloramientos en Marte: "rock_face_03" de Poly Haven (https://polyhaven.com), CC0.
 - Textura del suelo del rover en Marte: "Textura uniforme de suelo marciano rojizo", elegida por el equipo (solo color;
   normal y AO derivados en tools/mars/build_mars.py; no son datos escaneados).

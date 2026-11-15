@@ -2,6 +2,7 @@
 
     uv run --with rasterio --with pillow --with numpy tools/mars/build_mars.py
     uv run --with rasterio --with pillow --with numpy tools/mars/build_mars.py --regolith <imagen de suelo>
+    uv run --with rasterio --with pillow --with numpy --with OpenEXR tools/mars/build_mars.py --rock <carpeta textures de rock_face_03>
 
 Fuentes (dominio público, NASA/USGS):
 - Color: mosaico Viking MDIM2.1 colorizado (USGS), servido en teselas WMTS por NASA Trek (trek.nasa.gov).
@@ -131,9 +132,41 @@ def regolith(img: Path) -> None:
         print(f"regolith: {p.name} {Image.open(p).size} {p.stat().st_size / 1e6:.1f} MB")
 
 
+def exr(path: Path) -> np.ndarray:
+    """EXR → float32 (h, w, c). Las capas de Poly Haven traen RGB o Y (igual que tools/moon/build_moon.py)."""
+    import OpenEXR  # solo para --rock
+    with OpenEXR.File(str(path)) as f:
+        ch = f.channels()
+        if "RGB" in ch:
+            return ch["RGB"].pixels.astype(np.float32)
+        names = [n for n in ("R", "G", "B", "Y") if n in ch]
+        return np.stack([ch[n].pixels for n in names], -1).astype(np.float32)
+
+
+def rock(src: Path) -> None:
+    """Material "rock_face_03" de Poly Haven (CC0) → diff/normal/orm de las rocas y afloramientos (triplanar en Rover3D)."""
+    out = OUT / "rock"
+    out.mkdir(parents=True, exist_ok=True)
+    Image.open(src / "rock_face_03_diff_4k.jpg").convert("RGB").resize((2048, 2048), Image.LANCZOS).save(out / "diff.jpg", quality=85)
+    nor = exr(src / "rock_face_03_nor_gl_4k.exr")[..., :3]
+    nor = nor * 0.5 + 0.5 if nor.min() < 0 else nor  # algunos EXR guardan [-1,1], otros ya [0,1]
+    Image.fromarray((np.clip(nor, 0, 1) * 255).astype(np.uint8)).resize((2048, 2048), Image.LANCZOS).save(out / "normal.jpg", quality=92)
+    # No trae AO: sale del desplazamiento (más bajo que su entorno = grieta). La rugosidad es la real.
+    h = np.asarray(Image.open(src / "rock_face_03_disp_4k.png").resize((1024, 1024), Image.LANCZOS), np.float32)
+    h = (h - h.mean()) / h.std()
+    ao = Image.fromarray(((1 - np.clip((blur(h, 6) - h) / 3, 0, 1) * 0.55) * 255).astype(np.uint8))
+    rough = exr(src / "rock_face_03_rough_4k.exr")[..., 0]
+    rough = Image.fromarray((np.clip(rough, 0, 1) * 255).astype(np.uint8)).resize((1024, 1024), Image.LANCZOS)
+    Image.merge("RGB", (ao, rough, Image.new("L", ao.size))).save(out / "orm.jpg", quality=90, subsampling=0)  # R = AO, G = rugosidad
+    for p in sorted(out.iterdir()):
+        print(f"rock: {p.name} {Image.open(p).size} {p.stat().st_size / 1e6:.1f} MB")
+
+
 def main() -> None:
     if len(sys.argv) == 3 and sys.argv[1] == "--regolith":
         return regolith(Path(sys.argv[2]))
+    if len(sys.argv) == 3 and sys.argv[1] == "--rock":
+        return rock(Path(sys.argv[2]))
     (OUT / "sites").mkdir(parents=True, exist_ok=True)
     with rasterio.open(DEM) as ds:
         globe(ds)

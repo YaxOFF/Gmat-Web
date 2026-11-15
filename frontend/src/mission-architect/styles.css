@@ -634,4 +634,6 @@
 .mars-drive { position: relative; display: flex; }
 .mars-drive > .rover { flex: 1; }
 .mars-back { position: absolute; left: 14px; bottom: 14px; z-index: 4; }
+.rv-wind { display: inline-block; color: var(--amber); margin-left: 4px; }
+.rv-test { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--amber); cursor: pointer; }
 @media (max-width: 760px) { .mars { grid-template-columns: 1fr; grid-template-rows: 45vh 1fr; } .mars-side { border-left: 0; border-top: 2px solid var(--line); } }

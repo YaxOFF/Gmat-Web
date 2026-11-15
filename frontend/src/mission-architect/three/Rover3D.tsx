@@ -7,6 +7,7 @@ import { buildLander } from './spacecraft'
 import { loadCuriosity, meshHeight, type CuriosityRig, type HeightFn } from './curiosity'
 import { at, mountStage, stars } from './stage'
 import { MOON, type RoverSite, type World } from './world'
+import { DUST, dust, outcropGeometry, skyDome, triplanarRock } from './mars'
 
 export type RoverEnding = 'return' | 'last' | 'frozen' | 'dead'
 export interface RoverResult {
@@ -20,7 +21,7 @@ export interface RoverStart {
 }
 export const DEFAULT_ROVER: RoverStart = { batteryPct: 100, sciMul: 1, integrity: 100, batteryKWh: 6, mesh: false, deep: true, massSpec: true, autonav: true, canExtend: true }
 
-const SIZE = 240, HALF = SIZE / 2, RIM = 92, SEG = 200
+const SIZE = 240, RIM = 92, SEG = 200 // × world.scale (Marte usa un área más grande)
 const REACH = 1.7 // m del centro del Curiosity a su rueda más lejana: las rocas chocan ahí, no dentro del chasis
 const CLIMB = 0.5 // m: una roca que sobresale hasta aquí se pasa por encima (el rocker-bogie la trepa); más alta, es obstáculo
 // Suelo: un mosaico de la textura del mundo (world.ground) cada TILE unidades; world.gain compensa difusas oscuras.
@@ -107,6 +108,10 @@ function loadDem(dir: string, id: string): Promise<Dem | null> {
   }
   return dems.get(base)!
 }
+// Tormentas de polvo (world.storms): calma mínima, promedio entre tormentas, aviso y duración (s); descarga (%/s) y
+// fracción que queda al resguardo de un afloramiento.
+const STORM = { calm: 25, every: 35, warn: 8, dur: [20, 32], drain: 1.1, shelter: 0.15 }
+const FORCE_STORM = new URLSearchParams(location.search).has('storm') // ?storm: la primera tormenta avisa a los 3 s (prueba)
 const LIGHT_Z = -58 // al sur de esta línea el borde recibe sol; al norte, sombra permanente
 const STEEP: Record<Crater['terrain'], number> = { soft: 0.6, rocky: 1, steep: 1.6, 'very steep': 2.2 }
 const ROCKS: Record<Crater['terrain'], number> = { soft: 50, rocky: 260, steep: 130, 'very steep': 170 }
@@ -139,10 +144,10 @@ function noise(rng: Rng) {
 }
 
 /** Altura (unidades) desde el DEM: escala uniforme (× vex del sitio), así las pendientes son las reales; el ruido solo da detalle fino. */
-function demHeight(dem: Dem, n: (x: number, y: number) => number) {
-  const k = (SIZE / dem.size) * dem.vex, last = dem.n - 1, h = dem.h
+function demHeight(dem: Dem, n: (x: number, y: number) => number, size: number) {
+  const k = (size / dem.size) * dem.vex, last = dem.n - 1, h = dem.h, half = size / 2
   return (x: number, z: number) => {
-    const c = clamp(((x + HALF) / SIZE) * last, 0, last - 1e-6), r = clamp(((z + HALF) / SIZE) * last, 0, last - 1e-6)
+    const c = clamp(((x + half) / size) * last, 0, last - 1e-6), r = clamp(((z + half) / size) * last, 0, last - 1e-6)
     const c0 = Math.floor(c), r0 = Math.floor(r), fc = c - c0, fr = r - r0, i = r0 * dem.n + c0
     const m = (h[i] * (1 - fc) + h[i + 1] * fc) * (1 - fr) + (h[i + dem.n] * (1 - fc) + h[i + dem.n + 1] * fc) * fr
     return m * k + n(x + 500, z + 500) * 0.5
@@ -152,7 +157,7 @@ function demHeight(dem: Dem, n: (x: number, y: number) => number) {
 interface Hud {
   bat: number; need: number; temp: number; heaters: boolean; sig: number; speed: number; slope: number
   samples: number; stored: number; sent: number; drill: number; depth: number; jam: number
-  integ: number; stuck: boolean; teleop: boolean; extended: boolean; goal: string
+  integ: number; stuck: boolean; teleop: boolean; extended: boolean; goal: string; storm: string; wind: number
   relay: number; link: boolean; spike: number; shadow: boolean; trapped: boolean; canReturn: boolean; toast: string
 }
 type Final = null | { kind: 'choice' } | { kind: 'terminal'; ending: RoverEnding; lines: string[] }
@@ -166,7 +171,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
   const [final, setFinal] = useState<Final>(null)
   const [typed, setTyped] = useState(0)
   const result = useRef<RoverResult>({ samples: 0, wet: 0, waterG: 0, lostG: 0, bestPct: 0, points: 0, ending: 'dead', seed, minTemp: 20, confirmed: 0, live: false, extended: false })
-  const api = useRef<{ lastDrill: () => void; transmitAll: () => void; finish: (e: RoverEnding) => void; extend: () => void } | null>(null)
+  const api = useRef<{ lastDrill: () => void; transmitAll: () => void; finish: (e: RoverEnding) => void; extend: () => void; storm: (on: boolean) => void } | null>(null)
   const doneRef = useRef(onDone)
   useEffect(() => { doneRef.current = onDone }, [onDone])
   const [sound, setSound] = useState(true)
@@ -192,10 +197,11 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
   useEffect(() => dem === undefined ? undefined : mountStage(host.current!, ({ scene, camera, el, renderer }) => {
     const rng = mulberry32(seed ^ Math.imul(crater.id.length, 0x9e3779b1))
     const n = noise(rng), steep = STEEP[crater.terrain]
-    const height = dem ? demHeight(dem, n) : (x: number, z: number) => {
+    const size = SIZE * world.scale, half = size / 2, rim = RIM * world.scale, seg = Math.round(SEG * world.scale)
+    const height = dem ? demHeight(dem, n, size) : (x: number, z: number) => {
       const r = Math.hypot(x, z)
-      const rim = r > RIM - 20 ? Math.pow((r - (RIM - 20)) / 20, 2) * 9 * steep : 0
-      return n(x + 500, z + 500) * 3.2 * steep + rim
+      const wall = r > rim - 20 ? Math.pow((r - (rim - 20)) / 20, 2) * 9 * steep : 0
+      return n(x + 500, z + 500) * 3.2 * steep + wall
     }
     const shade = (z: number) => world.shadow ? clamp((z - LIGHT_Z) / 4 + 0.5, 0, 1) : 0 // 0 = sol, 1 = sombra
     // Hielo solo en la sombra permanente; menos si se desvió a un sitio más seguro.
@@ -203,7 +209,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     const deposits: Dep[] = []
     const want = Math.max(1, Math.round((2 + crater.h * 1.3) * start.sciMul))
     while (deposits.length < want) {
-      const a = rng() * Math.PI * 2, r = 12 + rng() * (RIM - 30), x = Math.cos(a) * r, z = Math.sin(a) * r
+      const a = rng() * Math.PI * 2, r = 12 + rng() * (rim - 30), x = Math.cos(a) * r, z = Math.sin(a) * r
       if (!world.shadow || z > LIGHT_Z + 12) deposits.push({ x, z, rich: crater.ice * (0.4 + rng()) * 1.3, taken: false })
     }
     const signalAt = (x: number, z: number) =>
@@ -214,16 +220,19 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     else scene.fog = new THREE.FogExp2(world.sky, 0.0045) // polvo en suspensión: el horizonte se pierde en el cielo
     scene.add(world.sky === undefined ? new THREE.HemisphereLight(0x9aa6c8, 0x050505, 0.35) : new THREE.HemisphereLight(0xe0b48a, 0x3a2418, 0.9))
     const sun = new THREE.DirectionalLight(world.shadow ? 0xfff3dd : 0xffe2c4, world.shadow ? 3.6 : 2.8)
-    if (world.shadow) sun.position.set(40, 30, -400); else sun.position.set(160, 220, -260)
+    if (world.shadow) sun.position.set(40, 30, -400); else sun.position.set(-90, 95, 440) // bajo (~12°) y al frente del arranque: atardecer
     sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
-    Object.assign(sun.shadow.camera, { left: -150, right: 150, top: 150, bottom: -150, far: 900 })
+    const sc = 150 * world.scale
+    Object.assign(sun.shadow.camera, { left: -sc, right: sc, top: sc, bottom: -sc, far: 900 })
     scene.add(sun)
+    const sky = world.storms ? skyDome(sun.position) : null // atardecer de Marte con halo azul; la niebla toma el color del horizonte
+    if (sky) scene.add(sky)
     const earth = new THREE.Mesh(new THREE.SphereGeometry(18, 32, 16), new THREE.MeshBasicMaterial({ color: 0x3d7bff }))
     earth.position.set(-500, 40, -900); if (world.shadow) scene.add(earth)
 
     // Terreno: borde iluminado al sur, piso en sombra; velo azul = hidrógeno que vio el orbitador.
-    const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG); geo.rotateX(-Math.PI / 2)
+    const geo = new THREE.PlaneGeometry(size, size, seg, seg); geo.rotateX(-Math.PI / 2)
     const pos = geo.attributes.position, col = new Float32Array(pos.count * 3)
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), z = pos.getZ(i); pos.setY(i, height(x, z))
@@ -237,7 +246,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     untileMaterial(groundMat)
     const ground = new THREE.Mesh(geo, groundMat)
     ground.receiveShadow = true; ground.castShadow = true; scene.add(ground)
-    const floor = meshHeight(geo, SIZE, SEG) // la malla que se ve, no el ruido analítico
+    const floor = meshHeight(geo, size, seg) // la malla que se ve, no el ruido analítico
     // Muro invisible sobre la línea de sombra: con el Sol a 4° proyecta la sombra permanente sobre el piso.
     const wall = new THREE.Mesh(new THREE.BoxGeometry(320, 16, 0.5), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }))
     wall.position.set(0, 9, LIGHT_Z - 1); wall.castShadow = true; if (world.shadow) scene.add(wall)
@@ -246,7 +255,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     if (world.shadow) scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(edge), new THREE.LineDashedMaterial({ color: 0xffb020, dashSize: 1.2, gapSize: 0.8 })).computeLineDistances())
 
     // Rocas: las bajas se trepan; las altas chocan y frenan al rover.
-    const rockN = ROCKS[crater.terrain], rocks: { x: number; z: number; r: number; h: number }[] = []
+    const rockN = Math.round(ROCKS[crater.terrain] * world.scale ** 2), rocks: { x: number; z: number; r: number; h: number }[] = []
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), v0 = new THREE.Vector3(), tint = new THREE.Color()
     // Roca irregular: icosaedro subdividido deformado con el mismo ruido; tono medio del regolito (sin gain).
     const rockGeo = mergeVertices(new THREE.IcosahedronGeometry(1, 2).deleteAttribute('normal').deleteAttribute('uv'))
@@ -259,7 +268,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     const rockMat = new THREE.MeshStandardMaterial({ color: world.rock, roughness: 1 })
     const rockMesh = new THREE.InstancedMesh(rockGeo, rockMat, rockN)
     for (let i = 0; i < rockN; i++) {
-      const a = rng() * Math.PI * 2, r = 8 + rng() * (RIM - 12), x = Math.cos(a) * r, z = Math.sin(a) * r
+      const a = rng() * Math.PI * 2, r = 8 + rng() * (rim - 12), x = Math.cos(a) * r, z = Math.sin(a) * r
       if (Math.hypot(x, z + 76) < 8) continue // despeja la zona de aterrizaje
       const s = 0.3 + Math.pow(rng(), 3) * 2.6
       q.setFromEuler(new THREE.Euler((rng() - 0.5) * 0.6, rng() * 6.3, (rng() - 0.5) * 0.6)) // apoyada: poco ladeo
@@ -268,6 +277,27 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       rockMesh.setMatrixAt(i, m4.compose(v.set(x, height(x, z) - sy * bury, z), q, new THREE.Vector3(s * (0.8 + rng() * 0.4), sy, s * (0.8 + rng() * 0.4))))
       rockMesh.setColorAt(i, tint.setScalar(0.85 + rng() * 0.25))
     }
+    // Afloramientos (Marte): rocas claras de 4-9 m de alto que frenan al rover y lo resguardan de las tormentas.
+    // Cada una tiene su propia forma, sacada del rng sembrado: la misma semilla da las mismas estructuras.
+    const outcrops: { x: number; z: number; r: number; h: number }[] = []
+    const outMat = world.storms ? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }) : null
+    if (outMat) {
+      const want = Math.round(12 * world.scale ** 2)
+      for (let tries = 0; outcrops.length < want && tries < 500; tries++) {
+        const a = rng() * Math.PI * 2, r = 20 + rng() * (rim - 26), x = Math.cos(a) * r, z = Math.sin(a) * r
+        // Proporciones de la semilla: agujas altas y angostas o lomos anchos. Alto visible 4-9, semiejes ~3-17.
+        const sy = 4 + rng() * 5, sx = sy * (0.7 + rng() * 1.2), sz = sx * (0.5 + rng() * 0.6)
+        if (Math.hypot(x, z + 74) < 22 || outcrops.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + Math.min(sx, sz) + 10)) continue
+        const o = { x, z, r: Math.min(sx, sz) * 0.85, h: sy }
+        outcrops.push(o); rocks.push(o) // h > CLIMB: entra a `blocks`
+        // La geometría va de y = -0.3 a 0.7: escalada a sy/0.7 sobre el punto más bajo del suelo, la cima queda a sy.
+        const g0 = Math.min(height(x, z), height(x + sx, z), height(x - sx, z), height(x, z + sz), height(x, z - sz))
+        const mesh = new THREE.Mesh(outcropGeometry(n, rng), outMat)
+        mesh.position.set(x, g0, z); mesh.rotation.set((rng() - 0.5) * 0.24, rng() * 6.3, (rng() - 0.5) * 0.24); mesh.scale.set(sx, sy / 0.7, sz)
+        mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh)
+      }
+    }
+    if (world.rockTex) triplanarRock(outMat ? [rockMat, outMat] : [rockMat], `${import.meta.env.BASE_URL}${world.rockTex}`, renderer.capabilities.getMaxAnisotropy())
     // Lo que pisan las ruedas: el suelo más el lomo de las rocas chicas, redondeado con el ancho de la rueda.
     const pebbles = rocks.filter((r) => r.h <= CLIMB), blocks = rocks.filter((r) => r.h > CLIMB)
     const surface: HeightFn = (px, pz) => {
@@ -286,10 +316,10 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     const done = () => { groundMat.needsUpdate = true }
     loader.load(reg + 'diff.jpg', (t) => {
       t.colorSpace = THREE.SRGBColorSpace
-      groundMat.map = tile(t, SIZE / TILE); groundMat.color.setRGB(world.gain * world.tint[0], world.gain * world.tint[1], world.gain * world.tint[2]); done()
+      groundMat.map = tile(t, size / TILE); groundMat.color.setRGB(world.gain * world.tint[0], world.gain * world.tint[1], world.gain * world.tint[2]); done()
     })
-    loader.load(reg + 'normal.jpg', (t) => { groundMat.normalMap = tile(t, SIZE / TILE); done() })
-    loader.load(reg + 'orm.jpg', (t) => { groundMat.aoMap = groundMat.roughnessMap = tile(t, SIZE / TILE); done() }) // R = AO, G = rugosidad
+    loader.load(reg + 'normal.jpg', (t) => { groundMat.normalMap = tile(t, size / TILE); done() })
+    loader.load(reg + 'orm.jpg', (t) => { groundMat.aoMap = groundMat.roughnessMap = tile(t, size / TILE); done() }) // R = AO, G = rugosidad
 
     // Lander en el borde y rover.
     const lander = buildLander(); lander.rotation.y = 0.6
@@ -325,6 +355,11 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     let drillT = 0, jamT = 0, top = false, steer = 0, toast = '', toastT = 0, hudT = 0, beepT = 0, t = 0
     let paused = false, trapped = false, entered = false, anomaly = false, link = false
     let integ = start.integrity, stuck = false, freeT = 0
+    // Tormenta: calma → aviso → activa → calma. `storm` (0..1) suaviza la fase para cielo, polvo, niebla y Sol.
+    let phase: 'calm' | 'warn' | 'on' = 'calm', stormT = FORCE_STORM ? 3 : STORM.calm, storm = 0, wind = 0, sheltered = false, forceNext = FORCE_STORM
+    const dustFx = world.storms ? dust() : null
+    if (dustFx) scene.add(dustFx.points)
+    const fogBase = new THREE.Color(world.sky ?? 0), fogDust = new THREE.Color(DUST), sunI = sun.intensity
     const kB = 6 / start.batteryKWh // una batería de 3 kWh se vacía (y se llena) el doble de rápido en %
     const stored: { pct: number; conf: boolean }[] = [] // muestras aún sin bajar a la Tierra
     const keys = new Set<string>()
@@ -393,6 +428,12 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       paused = true; st.ending = ending; setTyped(0); setFinal({ kind: 'terminal', ending, lines })
     }
     api.current = {
+      // shortcut: control de prueba para forzar/terminar la tormenta; quitarlo cuando las tormentas estén balanceadas.
+      storm: (on) => {
+        phase = on ? 'on' : 'calm'; stormT = on ? Infinity : STORM.calm
+        if (on) wind = rng() * Math.PI * 2
+        say(on ? 'Test: dust storm started (lasts until you turn it off).' : 'Test: dust storm stopped.')
+      },
       lastDrill: () => {
         const { pct, dep } = sampleAt(DEPTHS[depth].mul)
         if (dep) dep.taken = true
@@ -447,7 +488,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
           }
           speed *= -0.3; nx = x; nz = z
         }
-        if (Math.hypot(nx, nz) > HALF - 8 || (slope > 34 && uphill * speed > 0)) { say('Too steep — the wheels slip.'); speed *= -0.2; nx = x; nz = z }
+        if (Math.hypot(nx, nz) > half - 8 || (slope > 34 && uphill * speed > 0)) { say('Too steep — the wheels slip.'); speed *= -0.2; nx = x; nz = z }
         x = nx; z = nz
         const dark = world.shadow && z > LIGHT_Z
         // Regolito blando: a veces atrapa las ruedas.
@@ -458,7 +499,23 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
 
         // Energía y temperatura.
         bat -= dt * (drain() + Math.abs(speed) * 0.07) * kB
-        if (!dark) bat = Math.min(100, bat + dt * 1.4 * kB)
+        if (!dark && storm < 0.3) bat = Math.min(100, bat + dt * 1.4 * kB) // el polvo tapa los paneles
+        if (world.storms) {
+          stormT -= dt
+          if (phase === 'calm' && stormT <= 0 && (forceNext || rng() < dt / STORM.every)) {
+            forceNext = false; phase = 'warn'; stormT = STORM.warn; wind = rng() * Math.PI * 2
+            say(`DUST STORM in ${STORM.warn} s! Put a rock outcrop between you and the wind (arrow in the panel).`, 6)
+          } else if (phase === 'warn' && stormT <= 0) { phase = 'on'; stormT = STORM.dur[0] + rng() * (STORM.dur[1] - STORM.dur[0]) }
+          else if (phase === 'on' && stormT <= 0) { phase = 'calm'; stormT = STORM.calm; say('The storm has passed. The solar panels charge again.') }
+          storm += ((phase === 'on' ? 1 : 0) - storm) * (1 - Math.exp(-dt * 0.8))
+          // Resguardo: un afloramiento a barlovento, con el rover dentro de su "sombra" de viento.
+          const ux = -Math.cos(wind), uz = -Math.sin(wind)
+          sheltered = outcrops.some((o) => {
+            const dx = o.x - x, dz = o.z - z, along = dx * ux + dz * uz
+            return along > 0 && along < o.r + o.h * 2.5 && Math.abs(dx * uz - dz * ux) < o.r * 0.9
+          })
+          if (phase === 'on') bat -= dt * STORM.drain * (sheltered ? STORM.shelter : 1) * kB
+        }
         st.minTemp = Math.min(st.minTemp, temp)
         temp += dt * (!dark ? (20 - temp) * 0.3 : heaters ? (20 - temp) * 0.05 : -1.2)
         const need = needToReturn()
@@ -518,7 +575,9 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         if (hudT <= 0) {
           hudT = 0.1
           const spike = deposits.find((d) => d.spike && !d.taken)
-          const goal = trapped ? 'No way back to the light. Make the remaining power count.'
+          const goal = phase === 'warn' ? `Dust storm in ${Math.ceil(stormT)} s! Get behind a rock outcrop: the wind blows the way the arrow points.`
+            : phase === 'on' ? (sheltered ? 'Sheltered from the storm. Stay here until it passes.' : 'DUST STORM! You are exposed and losing power: hide on the downwind side of an outcrop.')
+            : trapped ? 'No way back to the light. Make the remaining power count.'
             : stuck ? 'Stuck! Press R to rock the wheels free.'
             : !world.shadow ? (sig > 0.2 ? 'Strong signal! Stop (S) and press SPACE to drill here.' : 'Free drive: follow the neutron signal and drill anywhere.')
             : !dark && !entered ? 'Drive north (W) across the orange line. The ice is in the permanent shadow.'
@@ -535,6 +594,9 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
             spike: spike ? Math.hypot(spike.x - x, spike.z - z) : -1, shadow: dark, trapped,
             canReturn: !dark && entered && st.wet > 0, toast: toastT > 0 ? toast : '',
             integ, stuck, teleop: !start.autonav && !link, extended: st.extended,
+            storm: !world.storms ? '' : phase === 'warn' ? `in ${Math.ceil(stormT)} s` : phase === 'on' ? (sheltered ? 'sheltered' : 'EXPOSED') : 'calm',
+            // Viento relativo a la cámara (detrás del rover): 0° = hacia adelante en pantalla.
+            wind: (Math.atan2(-Math.cos(wind) * Math.cos(yaw) + Math.sin(wind) * Math.sin(yaw), Math.cos(wind) * Math.sin(yaw) + Math.sin(wind) * Math.cos(yaw)) * 180) / Math.PI,
           })
         }
       }
@@ -548,10 +610,17 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         rover.position.set(x, height(x, z), z)
         rover.quaternion.setFromUnitVectors(up3, nrm).multiply(qy.setFromAxisAngle(up3, yaw))
       }
-      if (top) off.set(0, 45, -0.1); else off.set(-Math.sin(yaw) * 10, 5.5, -Math.cos(yaw) * 10)
+      // En Marte la cámara va más baja y mira más alto: entra el horizonte y el cielo del atardecer.
+      if (top) off.set(0, 45, -0.1); else off.set(-Math.sin(yaw) * 10, world.storms ? 3.6 : 5.5, -Math.cos(yaw) * 10)
       camT.set(x, height(x, z), z)
       camera.position.lerp(off.add(camT), 1 - Math.exp(-dt * 4))
-      camera.lookAt(camT.x, camT.y + 1.2, camT.z)
+      camera.lookAt(camT.x, camT.y + (world.storms && !top ? 3.2 : 1.2), camT.z)
+      if (dustFx && sky) {
+        dustFx.update(dt, camera.position, Math.cos(wind), Math.sin(wind), storm)
+        const fog = scene.fog as THREE.FogExp2
+        fog.density = 0.0045 + storm * 0.03; fog.color.copy(fogBase).lerp(fogDust, storm)
+        sky.material.uniforms.uStorm.value = storm; sun.intensity = sunI * (1 - 0.65 * storm)
+      }
     }
     return Object.assign(tick, { cleanup: () => { gone = true; removeEventListener('keydown', down); removeEventListener('keyup', up); void audio?.close() } })
   }), [crater, world, quality, seed, orbitId, start, dem])
@@ -565,7 +634,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       {h && (
         <div className="rv-hud">
           <h3>BUSCADOR · {crater.name}</h3>
-          <div className="rv-row"><span>Battery</span><b>{h.bat.toFixed(0)}%{h.shadow ? '' : ' charging'}</b></div>
+          <div className="rv-row"><span>Battery</span><b>{h.bat.toFixed(0)}%{h.shadow || h.storm === 'EXPOSED' || h.storm === 'sheltered' ? '' : ' charging'}</b></div>
           <div className="rv-bar rv-bat">
             <i style={{ width: `${h.bat}%`, background: h.trapped || h.bat < h.need + 5 ? 'var(--red)' : undefined }} />
             {h.need > 0 && <em style={{ left: `${Math.min(h.need, 100)}%` }} title="Battery needed to return to the light" />}
@@ -573,6 +642,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
           <div className="rv-row"><span>Needed to return</span><b className={h.trapped ? 'bad' : ''}>{h.trapped ? 'NO RETURN' : `${h.need.toFixed(0)}%`}</b></div>
           <div className="rv-row"><span>Temperature · heaters <kbd>H</kbd></span><b className={h.temp < -10 ? 'bad' : ''}>{h.temp.toFixed(0)}°C · {h.heaters ? 'on' : 'off'}</b></div>
           <div className="rv-row"><span>Wheels</span><b className={h.integ < 30 ? 'bad' : ''}>{h.stuck ? 'STUCK: press R' : `${h.integ}%`}{h.teleop ? ' · teleop (slow)' : ''}</b></div>
+          {h.storm && <div className="rv-row"><span>Dust storm · wind <b className="rv-wind" style={{ transform: `rotate(${h.wind}deg)` }}>↑</b></span><b className={h.storm === 'EXPOSED' ? 'bad' : h.storm === 'sheltered' ? 'good' : ''}>{h.storm}</b></div>}
           <div className="rv-row"><span>Neutron signal (H)</span><b>{Math.round(h.sig * 100)}</b></div>
           <div className="rv-bar sig"><i style={{ width: `${h.sig * 100}%` }} /></div>
           <div className="rv-row"><span>Drill depth <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd>{start.deep && <kbd>4</kbd>}</span><b>{h.jam > 0 ? `JAMMED ${h.jam.toFixed(0)}s` : DEPTHS[h.depth].label}</b></div>
@@ -587,6 +657,13 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         <div><kbd>W A S D</kbd> drive · <kbd>SPACE</kbd> drill</div>
         <div><kbd>L</kbd> lights · <kbd>C</kbd> top view · <kbd>R</kbd> unstick</div>
         <button className="btn small ghost" onClick={() => setSound(!sound)}>{sound ? 'Sound on' : 'Sound off'}</button>
+        {/* shortcut: interruptor temporal para probar tormentas; quitarlo junto con api.storm. */}
+        {world.storms && h && (
+          <label className="rv-test">
+            <input type="checkbox" checked={h.storm === 'EXPOSED' || h.storm === 'sheltered'}
+              onChange={(e) => { api.current?.storm(e.target.checked); e.target.blur() }} /> Dust storm (test)
+          </label>
+        )}
       </div>
       {h && !final && <div className="rv-goal" role="status"><small>WHAT TO DO</small>{h.goal}</div>}
       {h?.toast && !final && <div className="rv-toast">{h.toast}</div>}
