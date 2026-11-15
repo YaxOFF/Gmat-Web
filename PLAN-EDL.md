@@ -201,7 +201,7 @@ Meta: el jugador ve la secuencia antes de manejar.
 Verificar: lint y build; en el navegador: título → Try Mars → elegir 2 sitios distintos → Drive: corre la
 secuencia, salta bien con el botón, y el rover se maneja igual que antes.
 
-### Fase E7 — Pulido, rendimiento y documentación
+### Fase E7 — Pulido, rendimiento y documentación ✅
 
 - Medir en un equipo modesto o en móvil: bajar partículas o sombras si hace falta.
 - Pantalla de carga mientras bajan los GLB.
@@ -236,7 +236,7 @@ Verificar: lint y build; `sh docs/docs.sh stale` sin pendientes.
 - [x] Fase E4 — Descenso propulsado, sky crane, contacto y escape
 - [x] Fase E5 — Efectos
 - [x] Fase E6 — Integración en "Try Mars"
-- [ ] Fase E7 — Pulido, rendimiento y documentación
+- [x] Fase E7 — Pulido, rendimiento y documentación
 
 ## Bitácora
 
@@ -278,3 +278,8 @@ Verificar: lint y build; `sh docs/docs.sh stale` sin pendientes.
   mismo tinte de hidrógeno; suelo y rocas sin luz de entorno y el entorno se apaga durante el escape; la cámara termina
   exactamente en la persecución inicial de `Rover3D`, que ahora arranca ya en ese punto. En Marte `Rover3D` no pone el lander
   lunar. Revisado en Chrome: Arcadia (saltar) y Korolev (secuencia completa); `?rover=cabeus` sigue igual, sin errores.
+- **2026-11-15 · Fase E7** — Pantalla de carga `.edl-loading` en `Edl3D` hasta el primer cuadro (o "LOAD FAILED"); `MarsTest`
+  precarga los 3 GLB con `cachedGlb` mientras se elige sitio. Rendimiento no medido: en el Chrome automatizado hasta una página
+  vacía va a 1.5 fps (la ventana está frenada), así que no hay cifra válida; partículas y sombras quedan como estaban. Pendiente:
+  medir en un equipo modesto. `docs/`: fila EDL en `MAP.md`, `loadDem` en `dem.ts`, textos de UI ahora en `i18n/en.ts`; sellos al
+  día. `SKYCRANE.md` (repo de modelos) con los pendientes resueltos. Opcionales (crucero, pose plegada, sonido) no se hicieron.

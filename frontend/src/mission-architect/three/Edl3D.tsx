@@ -326,6 +326,7 @@ export function Edl3D({ site, seed, onDone }: { site: RoverSite; seed: number; o
   return (
     <div className="rover">
       <div ref={host} className="view3d" />
+      {!h && <div className="edl-loading"><b>{err ? 'LOAD FAILED' : 'PREPARING ENTRY…'}</b><span>{site.name} · terrain and spacecraft</span></div>}
       <div className="ds-hud">
         <div>ALTITUDE</div><b>{!h ? '—' : h.alt >= 1000 ? `${(h.alt / 1000).toFixed(1)} km` : `${Math.round(h.alt)} m`}</b>
         <div>VELOCITY {h ? `${Math.round(h.vel * 3.6)} km/h` : '—'}</div>

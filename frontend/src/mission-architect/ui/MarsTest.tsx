@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { MARS_SITES } from '../data/mars'
 import { mulberry32 } from '../engine/rng'
+import { cachedGlb } from '../three/curiosity'
 import { Edl3D } from '../three/Edl3D'
 import { DEFAULT_ROVER, Rover3D } from '../three/Rover3D'
 import { MARS } from '../three/world'
@@ -14,6 +15,8 @@ export function MarsTest({ onExit }: { onExit: () => void }) {
   // Drive: primero el aterrizaje (EDL), después el rover en el mismo punto donde tocó suelo.
   const [mode, setMode] = useState<'globe' | 'edl' | 'drive'>('globe')
   const site = MARS_SITES.find((s) => s.id === sel)!
+  // Precarga los GLB mientras se elige sitio: al pulsar "Land" ya están en caché.
+  useEffect(() => { for (const f of ['curiosity_rover.glb', 'skycrane.glb', 'aeroshell.glb']) cachedGlb(f).catch(() => {}) }, [])
   if (mode !== 'globe') return (
     <div className="mars-drive">
       {mode === 'edl'
