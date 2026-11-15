@@ -32,6 +32,10 @@ const STEP_OF: Record<Phase, number> = {
   title: 0, intro: 0, setup: 0, orbit: 1, hangar: 2, review: 3,
   launch: 4, mapping: 5, site: 6, ending: 6, descent: 7, rover: 8, finale: 9, report: 10, mars: 0,
 }
+// Pantalla anterior del botón "← Back". Solo antes del lanzamiento: después la partida ya tiró dados.
+const PREV: Partial<Record<Phase, Phase>> = { intro: 'title', setup: 'title', orbit: 'setup', hangar: 'orbit', review: 'hangar' }
+// Pasos de la barra a los que se puede saltar hacia atrás (mismas fases, sin repetir diálogos).
+const STEP_PHASE: Partial<Record<number, Phase>> = { 0: 'setup', 1: 'orbit', 2: 'hangar', 3: 'review' }
 
 const urlSeed = () => Number(new URLSearchParams(location.search).get('seed')) || 0
 // Atajos de prueba: ?rover=cabeus o ?landing=cabeus (y opcional &seed=123); ?screen=mars abre la prueba de Marte
@@ -152,7 +156,8 @@ export default function MissionArchitect({ onInspect, onExit }: {
     <div className="ma app">
       {phase === 'title' && <button className="btn small ghost ma-exit" onClick={onExit}>← Back to GMAT</button>}
       {phase !== 'title' && phase !== 'mars' && (
-        <TopBar step={STEP_OF[phase]} steps={STEP_NAMES} right={<><span className="hint">{money(budgetLeft)} left</span><span className="seed" title="Same seed = same craters and ice. Share it to replay this game.">seed {seed}</span><button className="btn small ghost ma-exit" onClick={onExit}>← GMAT</button></>} />
+        <TopBar step={STEP_OF[phase]} steps={STEP_NAMES}
+          canJump={(k) => !!PREV[phase] && !!STEP_PHASE[k]} onJump={(k) => setPhase(STEP_PHASE[k]!)} right={<><span className="hint">{money(budgetLeft)} left</span><span className="seed" title="Same seed = same craters and ice. Share it to replay this game.">seed {seed}</span>{PREV[phase] && <button className="btn small ghost ma-exit" onClick={() => setPhase(PREV[phase]!)}>← Back</button>}<button className="btn small ghost ma-exit" onClick={onExit}>← GMAT</button></>} />
       )}
       {phase === 'title' && <Title onStart={() => setPhase('intro')} onMars={() => setPhase('mars')} />}
       {phase === 'mars' && <MarsTest onExit={() => setPhase('title')} />}
@@ -169,7 +174,7 @@ export default function MissionArchitect({ onInspect, onExit }: {
           onForce={() => startLaunch(true)}
         />
       )}
-      {phase === 'launch' && launch && <Launch3D launch={launch} seed={seed} partIds={design.partIds} onDone={afterLaunch} />}
+      {phase === 'launch' && launch && <Launch3D launch={launch} seed={seed} onDone={afterLaunch} />}
       {phase === 'mapping' && mission && (
         <Mapping ctx={ctx} mission={mission} setMission={setMission} rng={rng.current} onFinish={() => setPhase('site')} />
       )}

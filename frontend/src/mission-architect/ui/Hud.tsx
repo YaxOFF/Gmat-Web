@@ -30,12 +30,20 @@ export function Term({ k, children }: { k: keyof typeof GLOSSARY; children: Reac
 
 export const statusIcon = (s: 'ok' | 'warn' | 'fail') => (s === 'ok' ? '' : s === 'warn' ? '▲' : '')
 
-export function TopBar({ step, steps, right }: { step: number; steps: string[]; right?: ReactNode }) {
+// onJump: si viene, los pasos anteriores que devuelva canJump se pueden clickear para volver.
+export function TopBar({ step, steps, right, canJump, onJump }: {
+  step: number; steps: string[]; right?: ReactNode; canJump?: (k: number) => boolean; onJump?: (k: number) => void
+}) {
   return (
     <header className="topbar">
       <div className="brand">MISSION <b>ARCHITECT</b></div>
       <ol className="steps">
-        {steps.map((s, k) => <li key={s} title={s} aria-current={k === step ? 'step' : undefined} className={k === step ? 'cur' : k < step ? 'past' : ''}><span>{k + 1}</span><em className="lbl">{s}</em></li>)}
+        {steps.map((s, k) => {
+          const jump = k < step && !!onJump && (canJump?.(k) ?? true)
+          return <li key={s} title={jump ? `Back to ${s}` : s} aria-current={k === step ? 'step' : undefined}
+            className={(k === step ? 'cur' : k < step ? 'past' : '') + (jump ? ' jump' : '')}
+            onClick={jump ? () => onJump!(k) : undefined}><span>{k + 1}</span><em className="lbl">{s}</em></li>
+        })}
       </ol>
       <div className="topbar-right">{right}</div>
     </header>

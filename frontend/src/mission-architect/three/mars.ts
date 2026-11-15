@@ -177,14 +177,15 @@ vec3 triNormal(vec3 p, vec3 n, vec3 w) {
   return normalize(tx.zyx * w.x + ty.xzy * w.y + tz.xyz * w.z);
 }`
 
-/** Carga diff/normal/orm de `base` (tools/mars/build_mars.py --rock) y parcha el material a triplanar. Hasta que
- *  cargan, el material se queda con su color liso. */
-export function triplanarRock(mats: THREE.MeshStandardMaterial[], base: string, aniso: number): void {
+/** Carga diff/normal/orm de `base` (tools/mars/build_mars.py --rock) y parcha cada material a triplanar. Hasta que
+ *  cargan, el material se queda con su color liso. Por material: `grain` = solo la luminancia de la textura (el color
+ *  lo pone otro, p. ej. el tipo de roca de RockField). Con `flatShading` se conserva la normal facetada. */
+export function triplanarRock(mats: (readonly [THREE.MeshStandardMaterial, boolean])[], base: string, aniso: number): void {
   const loader = new THREE.TextureLoader()
   const get = (f: string) => loader.loadAsync(base + f).then((t) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = aniso; return t })
   void Promise.all([get('diff.jpg'), get('normal.jpg'), get('orm.jpg')]).then(([diff, nor, orm]) => {
     diff.colorSpace = THREE.SRGBColorSpace
-    for (const mat of mats) {
+    for (const [mat, grain] of mats) {
       mat.onBeforeCompile = (sh) => {
         Object.assign(sh.uniforms, { uTriDiff: { value: diff }, uTriNor: { value: nor }, uTriOrm: { value: orm } })
         sh.vertexShader = 'varying vec3 vTriPos, vTriN;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
@@ -201,9 +202,10 @@ export function triplanarRock(mats: THREE.MeshStandardMaterial[], base: string, 
         f('#include <common>', '#include <common>\n' + TRI_GLSL)
         f('#include <map_fragment>', `vec3 triN0 = normalize(vTriN), triWt = triW3(triN0);
           vec4 triOrm = triTex(uTriOrm, vTriPos, triWt);
-          diffuseColor.rgb *= triTex(uTriDiff, vTriPos, triWt).rgb * mix(1.0, triOrm.r, 0.8);`)
+          vec3 triC = triTex(uTriDiff, vTriPos, triWt).rgb;
+          diffuseColor.rgb *= ${grain ? 'vec3(dot(triC, vec3(0.2126, 0.7152, 0.0722)) / 0.15)' : 'triC'} * mix(1.0, triOrm.r, 0.8);`)
         f('#include <roughnessmap_fragment>', 'float roughnessFactor = roughness * triOrm.g;')
-        f('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(triNormal(vTriPos, triN0, triWt), 0.0)).xyz);')
+        if (!mat.flatShading) f('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(triNormal(vTriPos, triN0, triWt), 0.0)).xyz);')
       }
       mat.needsUpdate = true
     }
