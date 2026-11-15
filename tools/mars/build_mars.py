@@ -40,6 +40,11 @@ SITES = {
     "olympus": (18.56, 226.69, 100, 2),  # caldera de Olympus Mons (el Gazetteer da el centro del volcán: corrido a la caldera)
     "melas": (-10.52, 287.46, 150, 2),  # Melas Chasma, en Valles Marineris
     "hellas": (-42.43, 70.50, 100, 3),  # piso de Hellas, la cuenca más profunda
+    # Misión de rocas (planeta Marte en el juego): sitios reales de rovers. Ventana centrada donde manejó el rover.
+    "jezero": (18.44, 77.45, 60, 3),  # Jezero: delta del antiguo lago, aterrizaje de Perseverance (2021)
+    "gale": (-4.72, 137.40, 50, 2),  # Gale: llanura de Curiosity al pie del monte Sharp (2012)
+    "gusev": (-14.57, 175.48, 40, 6),  # Gusev: Columbia Hills, donde Spirit halló sílice y carbonatos
+    "elysium": (4.50, 135.62, 30, 12),  # Elysium Planitia: la llanura lisa de InSight (2018)
 }
 N = 201  # = vértices por lado de la malla de Rover3D
 
@@ -167,11 +172,15 @@ def main() -> None:
         return regolith(Path(sys.argv[2]))
     if len(sys.argv) == 3 and sys.argv[1] == "--rock":
         return rock(Path(sys.argv[2]))
+    # --sites a,b: solo esos sitios (sin rehacer el globo ni los demás).
+    only = sys.argv[2].split(",") if len(sys.argv) == 3 and sys.argv[1] == "--sites" else None
     (OUT / "sites").mkdir(parents=True, exist_ok=True)
     with rasterio.open(DEM) as ds:
-        globe(ds)
+        if only is None:
+            globe(ds)
         for sid, args in SITES.items():
-            site(ds, sid, *args)
+            if only is None or sid in only:
+                site(ds, sid, *args)
     total = sum(p.stat().st_size for p in OUT.rglob("*") if p.is_file())
     print(f"total {total / 1e6:.1f} MB en {OUT}")
 

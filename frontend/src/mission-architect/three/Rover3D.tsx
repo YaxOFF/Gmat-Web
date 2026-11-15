@@ -4,16 +4,20 @@ import type { Crater } from '../data/types'
 import { clamp, mulberry32, type Rng } from '../engine/rng'
 import { buildLander } from './spacecraft'
 import { loadCuriosity, meshHeight, type CuriosityRig, type HeightFn } from './curiosity'
-import { at, mountStage, stars } from './stage'
+import { at, earthMesh, mountStage, stars } from './stage'
 import { MOON, type RoverSite, type World } from './world'
 import { DUST, dust, dustWall, footprint, outcropGeometry, skyDome, triplanarRock } from './mars'
 import type { Rock, RockKind } from './rocks'
 import { makeXray } from './xray'
+import { CoreSample } from './CoreSample'
+import { ROCKS as ROCK_INFO, type RockKind as CoreKind } from '../data/samples'
 
 export type RoverEnding = 'return' | 'last' | 'frozen' | 'dead'
 export interface RoverResult {
   samples: number; wet: number; waterG: number; lostG: number; bestPct: number; points: number
   ending: RoverEnding; seed: number; minTemp: number; confirmed: number; live: boolean; extended: boolean
+  /** Marte: núcleos sellados en tubos, que van al laboratorio (tipo y semilla del modelo). */
+  cores: { kind: CoreKind; seed: number; pct: number }[]
 }
 /** Lo que llega del aterrizaje y del Rover Bay del hangar. */
 export interface RoverStart {
@@ -22,6 +26,10 @@ export interface RoverStart {
 }
 export const DEFAULT_ROVER: RoverStart = { batteryPct: 100, sciMul: 1, integrity: 100, batteryKWh: 6, mesh: false, deep: true, massSpec: true, autonav: true, canExtend: true }
 
+const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyL', 'KeyC', 'KeyH', 'KeyR', 'KeyT', 'KeyP', 'KeyF', 'KeyG'])
+const TUBES = 3 // tubos de muestra del rover (Marte)
+/** Roca del campo (rocks.ts) → núcleo del laboratorio (data/samples.ts). Conglomerado y meteorito no dan polvo limpio: sin núcleo. */
+const CORE_OF: Record<string, CoreKind> = { basalt: 'basalt', mudstone: 'mudstone', sulfate: 'sulfate', hematite: 'hematite' }
 const SIZE = 240, RIM = 92, SEG = 200 // × world.scale dentro del componente (Marte usa un área más grande)
 const REACH = 1.7 // m del centro del Curiosity a su rueda más lejana: radio con que chocan los afloramientos (Marte)
 /** Perforación manual: s con SPACE sostenido y la broca adentro, según la profundidad (m). */
@@ -216,6 +224,8 @@ interface Hud {
   drilling: boolean; laser: number; inRange: boolean; kinds: number; kindsAll: number; scanned: number
   /** Espectro LIBS: k = avance del análisis (1 = roca identificada). */
   libs: null | { kind: RockKind; k: number; isNew: boolean; pts: number; lab: boolean }
+  /** Marte: paneles limpios 0..1 y tubos sellados. stuckHint = lleva rato sin poder avanzar. */
+  clean: number; tubes: number; stuckHint: boolean
 }
 type Final = null | { kind: 'choice' } | { kind: 'terminal'; ending: RoverEnding; lines: string[] }
 
@@ -230,11 +240,15 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
   const [hud, setHud] = useState<Hud | null>(null)
   const [final, setFinal] = useState<Final>(null)
   const [typed, setTyped] = useState(0)
-  const result = useRef<RoverResult>({ samples: 0, wet: 0, waterG: 0, lostG: 0, bestPct: 0, points: 0, ending: 'dead', seed, minTemp: 20, confirmed: 0, live: false, extended: false })
-  const api = useRef<{ lastDrill: () => void; transmitAll: () => void; finish: (e: RoverEnding) => void; extend: () => void; storm: (on: boolean) => void } | null>(null)
+  const result = useRef<RoverResult>({ samples: 0, wet: 0, waterG: 0, lostG: 0, bestPct: 0, points: 0, ending: 'dead', seed, minTemp: 20, confirmed: 0, live: false, extended: false, cores: [] })
+  const api = useRef<{ lastDrill: () => void; transmitAll: () => void; finish: (e: RoverEnding) => void; extend: () => void; storm: (on: boolean) => void
+    seal: () => void; discard: () => void; reset: () => void; clean: () => void } | null>(null)
   const doneRef = useRef(onDone)
   useEffect(() => { doneRef.current = onDone }, [onDone])
   const [sound, setSound] = useState(true)
+  // Núcleo recién perforado (Marte): pending = espera que el jugador lo selle en un tubo o lo descarte.
+  const [core, setCore] = useState<{ kind: CoreKind; seed: number; n: number; conf: boolean; lab?: string; state: 'pending' | 'sealed' | 'discarded' } | null>(null)
+  useEffect(() => { if (!core || core.state === 'pending') return; const id = setTimeout(() => setCore(null), 2500); return () => clearTimeout(id) }, [core])
   const soundRef = useRef(sound)
   useEffect(() => { soundRef.current = sound }, [sound])
   const [loaded, setLoaded] = useState<{ id: string; dem: Dem | null } | null>(null)
@@ -288,7 +302,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     scene.add(sun)
     const sky = world.storms ? skyDome(sun.position) : null // atardecer de Marte con halo azul; la niebla toma el color del horizonte
     if (sky) scene.add(sky)
-    const earth = new THREE.Mesh(new THREE.SphereGeometry(18, 32, 16), new THREE.MeshBasicMaterial({ color: 0x3d7bff }))
+    const earth = earthMesh(18) // ~2° vista desde la Luna (como se ve de verdad desde el polo sur)
     earth.position.set(-500, 40, -900); if (world.shadow) scene.add(earth)
 
     // Terreno: borde iluminado al sur, piso en sombra; velo azul = hidrógeno que vio el orbitador.
@@ -423,6 +437,12 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     let jamT = 0, top = false, steer = 0, toast = '', toastT = 0, hudT = 0, beepT = 0, t = 0
     let paused = false, trapped = false, entered = false, anomaly = false, link = false
     let integ = start.integrity, stuck = false, freeT = 0
+    // Marte: polvo en los paneles (0 limpio … 0.65 tope), tubos sellados y núcleo que espera decisión.
+    let panelDust = 0, coreN = 0, pending: { pct: number; kind: CoreKind; seed: number } | null = null
+    const tubes: { pct: number; kind: CoreKind; seed: number }[] = []
+    // Reinicio: posiciones seguras de los últimos segundos; stuckT = tiempo acelerando sin avanzar.
+    const trail: { x: number; z: number; yaw: number }[] = []
+    let trailT = 0, stuckT = 0, resetCd = 0, cleanCd = 0
     // Tormenta: calma → aviso → activa → calma. `storm` (0..1) suaviza la fase para cielo, polvo, niebla y Sol.
     let phase: 'calm' | 'warn' | 'on' = 'calm', stormT = FORCE_STORM ? 3 : STORM.calm, storm = 0, wind = 0, sheltered = false, forceNext = FORCE_STORM
     let endless = false // tormenta de prueba: dura hasta apagar el interruptor
@@ -438,7 +458,9 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     const visible = () => el.getClientRects().length > 0
     const down = (e: KeyboardEvent) => {
       if (!visible() || paused || (e.target as HTMLElement).closest?.('input,textarea')) return
-      keys.add(e.code); if (['Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault()
+      // Teclas del juego: no deben llegar a ningún otro control (p. ej. el editor de GMAT debajo).
+      if (GAME_KEYS.has(e.code)) { e.preventDefault(); e.stopPropagation() }
+      keys.add(e.code)
       if (e.code === 'KeyL') lamp.visible = !lamp.visible
       if (e.code === 'KeyC') top = !top
       if (e.code === 'KeyG' && !e.repeat) {
@@ -450,17 +472,21 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       if (e.code === 'KeyF' && !e.repeat && laserT === 0 && scanT === 0 && !drilling) {
         if (Math.abs(speed) > 0.8) say(iceHunt ? 'Stop first: the scan needs the rover still.' : 'Stop first: the laser needs a steady mast.', 2)
         else if (iceHunt) { scanT = SCAN_T; bat -= 1 * kB }
+        else if (pending) say('Seal or discard the core first.', 2) // el espectro y el núcleo usan el mismo panel
         else if (!cand) say(`No unscanned rock within ${LASER_MAX} m. Drive closer to one.`, 2)
         else { laserRock = cand; hit.copy(candHit); laserT = LASER_T; aimed = false; aimT = 0; zapT = 0; libsT = 0; bat -= 0.5 * kB }
       }
+      if (e.code === 'KeyT') api.current?.reset()
+      if (e.code === 'KeyP') api.current?.clean()
       if (e.code === 'KeyR' && stuck && freeT <= 0) {
         freeT = 1.5; bat -= 2 * kB
         if (rng() < (start.mesh ? 0.85 : 0.5)) { stuck = false; say(start.mesh ? 'The mesh wheels "walk" out of the soft regolith!' : 'Free! The wheels bite again.') }
         else say('Still stuck. Try again (R): each attempt costs battery.')
       }
     }
-    const up = (e: KeyboardEvent) => keys.delete(e.code)
-    addEventListener('keydown', down); addEventListener('keyup', up)
+    const up = (e: KeyboardEvent) => { keys.delete(e.code); if (GAME_KEYS.has(e.code) && visible()) { e.preventDefault(); e.stopPropagation() } }
+    ;(document.activeElement as HTMLElement | null)?.blur?.()
+    addEventListener('keydown', down, true); addEventListener('keyup', up, true)
 
     let audio: AudioContext | null = null
     const beep = (f: number) => {
@@ -473,7 +499,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
 
     const drain = () => (0.1 + (heaters && z > LIGHT_Z ? 0.16 : 0) + (lamp.visible ? 0.05 : 0)) * (temp < -10 ? 1.25 : 1)
     // Batería para volver en línea recta a la luz a 3.5 m/s, más 3 % de margen.
-    const needToReturn = () => { const d = Math.max(0, z - LIGHT_Z), v = !start.autonav || integ < 30 ? 2.2 : 3.5; return d ? (d / v) * (drain() + v * 0.07) * kB + 3 : 0 }
+    const needToReturn = () => { if (!world.shadow) return 0; const d = Math.max(0, z - LIGHT_Z), v = !start.autonav || integ < 30 ? 2.2 : 3.5; return d ? (d / v) * (drain() + v * 0.07) * kB + 3 : 0 }
     const sampleAt = (mul: number) => {
       const best = deposits.filter((d) => !d.taken).map((d) => ({ d, k: Math.hypot(d.x - x, d.z - z) })).sort((a, b) => a.k - b.k)[0]
       if (!best || best.k >= 6) return { pct: 0, dep: null as Dep | null }
@@ -531,6 +557,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         const { pct, dep } = sampleAt(DEPTHS[depth].mul)
         if (dep) dep.taken = true
         lose(); record(pct)
+        if (!iceHunt && pending) api.current?.seal() // Marte: el último núcleo va al tubo que quede
         downlink()
         terminal('last', [`[BUSCADOR] FINAL CORE: ${pct ? `${pct}% WATER BY WEIGHT` : 'DRY'}.`, `[BUSCADOR] BATTERY 2%. TEMPERATURE ${Math.round(Math.min(temp, -52))}°C. TRANSMITTING...`, '', '— signal lost —'])
       },
@@ -539,6 +566,31 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         terminal('last', [`[BUSCADOR] SENDING ${k} STORED SAMPLE${k === 1 ? '' : 'S'}... DONE.`, `[BUSCADOR] BATTERY 2%. TEMPERATURE ${Math.round(Math.min(temp, -52))}°C. TRANSMITTING...`, '', '— signal lost —'])
       },
       finish: (e) => { if (e === 'return') downlink(); st.ending = e; doneRef.current({ ...st }) },
+      // Sellar: el núcleo entra a un tubo y va al laboratorio (los puntos ya se sumaron al perforar).
+      seal: () => {
+        if (!pending) return
+        if (tubes.length >= TUBES) { say('All tubes are full.'); return }
+        tubes.push(pending); st.cores.push({ ...pending })
+        setCore((c) => (c ? { ...c, state: 'sealed' } : c)); pending = null
+        say(tubes.length >= TUBES ? 'Tube 3 of 3 sealed. The rack is full: end the mission and take them to the lab.' : `Sealed in tube ${tubes.length} of ${TUBES}.`, 4)
+      },
+      discard: () => { if (!pending) return; pending = null; setCore((c) => (c ? { ...c, state: 'discarded' } : c)); say('Core discarded. The tube stays free for a better rock.', 3) },
+      // Limpiar paneles: vibrarlos suelta parte del polvo (con la tormenta encima el viento los vuelve a cubrir).
+      clean: () => {
+        if (!world.storms || paused) return
+        if (cleanCd > 0) { say(`The panel motors are cooling down: ${Math.ceil(cleanCd)} s.`, 2); return }
+        if (Math.abs(speed) > 0.8) { say('Stop the rover first to shake the panels.', 2); return }
+        const before = panelDust
+        panelDust *= storm > 0.5 ? 0.8 : 0.45; bat -= 3 * kB; cleanCd = 20
+        say(`Panels vibrated: ${Math.round((before - panelDust) * 100)}% of the dust is gone (−3% battery).${storm > 0.5 ? ' The storm keeps coating them, though.' : ''}`, 4)
+      },
+      // Reiniciar: vuelve a donde estuvo hace unos segundos (o al lander), a cambio de batería.
+      reset: () => {
+        if (paused || resetCd > 0) return
+        const back = trail.length > 5 ? trail.splice(trail.length - 5)[0] : trail.shift() ?? { x: 0, z: -74, yaw: 0 }
+        x = back.x; z = back.z; yaw = back.yaw; speed = 0; stuck = false; stuckT = 0; resetCd = 3
+        bat -= 6 * kB; say('Rover reset to a safe spot a few metres back (−6% battery).', 3)
+      },
       extend: () => {
         st.extended = true; entered = false; downlink(); st.points += 20
         for (let i = 0; i < 3; i++) { const a = rng() * Math.PI, r = 30 + rng() * 40; deposits.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, rich: crater.ice * (0.6 + rng()) * 1.5, taken: false }) }
@@ -550,7 +602,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     const up3 = new THREE.Vector3(0, 1, 0), nrm = new THREE.Vector3(), qy = new THREE.Quaternion(), camT = new THREE.Vector3(), off = new THREE.Vector3()
     camera.position.set(0, 8, -86)
     // Cámara de perforación (POV junto a la broca) + corte de rayos X + luz de trabajo de la torreta.
-    const xray = makeXray(); scene.add(xray.group)
+    const xray = makeXray(iceHunt ? undefined : 0xffd36a); scene.add(xray.group)
     const work = new THREE.PointLight(0xfff1dc, 0, 4, 1.4); scene.add(work)
     const chase = camera.position.clone(), chaseLook = new THREE.Vector3(0, 0, -74)
     const dp = new THREE.Vector3(), povPos = new THREE.Vector3(), povLook = new THREE.Vector3(), look = new THREE.Vector3()
@@ -766,9 +818,19 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         }
         if (dark && !entered) { entered = true; say('Entering permanent shadow. No sunlight, no charging. Watch the red return marker.', 5) }
 
+        // Rastro para reiniciar: una posición por segundo mientras avanza bien.
+        trailT += dt; if (resetCd > 0) resetCd -= dt; if (cleanCd > 0) cleanCd -= dt
+        if (trailT > 1 && Math.abs(speed) > 0.8 && !stuck) { trailT = 0; trail.push({ x, z, yaw }); if (trail.length > 40) trail.shift() }
+        stuckT = (keys.has('KeyW') || keys.has('KeyS') || keys.has('ArrowUp') || keys.has('ArrowDown')) && Math.abs(speed) < 0.3 && !drilling ? stuckT + dt : 0
+        // Marte: el polvo se asienta en los paneles (más con tormenta) y recorta la carga; un remolino a veces los limpia.
+        if (world.storms) {
+          panelDust = Math.min(0.65, panelDust + dt * (0.0035 + storm * 0.006))
+          if (panelDust > 0.25 && rng() < dt / 80) { panelDust *= 0.4; say('A dust devil swept the solar panels clean! Spirit got lucky like this in 2005.', 5) }
+        }
+
         // Energía y temperatura.
         bat -= dt * (drain() + Math.abs(speed) * 0.07) * kB
-        if (!dark && storm < 0.3) bat = Math.min(100, bat + dt * 1.4 * kB) // el polvo tapa los paneles
+        if (!dark && storm < 0.3) bat = Math.min(100, bat + dt * 1.4 * (1 - panelDust) * kB) // el polvo tapa los paneles
         if (world.storms) {
           stormT -= dt
           if (phase === 'calm' && stormT <= 0 && (forceNext || rng() < dt / STORM.every)) {
@@ -806,7 +868,8 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
             if (!dark && world.shadow) { want = false; if (quiet) say('Nothing to find on the sunlit rim: drive into the shadow first.') }
           } else {
             drillRock = field.under(dp.x, dp.z, DRILL_R)
-            if (!drillRock) { want = false; if (quiet) say('No rock under the drill. Park with a rock right in front of the arm.', 2.5) }
+            if (pending) { want = false; if (quiet) say('Seal or discard the last core first.', 2.5) }
+            else if (!drillRock) { want = false; if (quiet) say('No rock under the drill. Park with a rock right in front of the arm.', 2.5) }
             else if (drillRock.drilled) { want = false; if (quiet) say('This rock is already sampled. Find another one.', 2.5) }
           }
         }
@@ -832,9 +895,17 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
               if (!rock.scanned) { rock.scanned = true; scannedN++; found.set(kind.id, (found.get(kind.id) ?? 0) + 1); cand = null }
               const flag = flags.get(rock); if (flag) { scene.remove(flag); flags.delete(rock) }
               mark(!!kind.target)
-              libs = { kind, k: 1, isNew: false, pts, lab: true }; libsT = 16
               beep(kind.target ? 1400 : 1000)
-              say(`${kind.name} sampled: the powder goes to the onboard lab. +${pts} science.`)
+              // Con tubo libre y roca que da polvo limpio, el núcleo espera: sellarlo (va al laboratorio) o descartarlo.
+              const ck = CORE_OF[kind.id]
+              if (ck && tubes.length < TUBES) {
+                pending = { pct: kind.core ?? 5, kind: ck, seed: Math.floor(rng() * 1e6) }; coreN++
+                setCore({ kind: ck, seed: pending.seed, n: coreN, conf: start.massSpec, lab: kind.lab, state: 'pending' })
+                say(`${kind.name} sampled. +${pts} science. Seal it in a tube, or discard it?`, 6)
+              } else {
+                libs = { kind, k: 1, isNew: false, pts, lab: true }; libsT = 16
+                say(`${kind.name} sampled: the powder goes to the onboard lab. +${pts} science.`)
+              }
             }
             else if (temp < -30 && rng() < 0.35) say('Instrument fault from the cold — sample lost. Turn the heaters on.')
             else {
@@ -905,7 +976,12 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         if (beacon) beacon.visible = deposits.some((d) => d.spike && !d.taken)
         if (temp < -40) terminal('frozen', [`[BUSCADOR] TEMPERATURE ${Math.round(temp)}°C.`, '[BUSCADOR] ELECTRONICS FAILURE...', '', '— signal lost —'])
         else if (trapped && bat <= 8) { paused = true; setFinal({ kind: 'choice' }) }
-        else if (bat <= 0) { bat = 0; lose(); terminal('dead', ['[BUSCADOR] BATTERY 0%.', '[BUSCADOR] ENTERING SURVIVAL MODE...', '', '— signal lost —']) }
+        else if (bat <= 0) {
+          bat = 0; lose()
+          terminal('dead', world.storms
+            ? ['[BUSCADOR] TAU 10.8. SOLAR ARRAY OUTPUT 0.', '[BUSCADOR] BATTERY 0%. ENTERING SURVIVAL MODE...', '', '— signal lost —', '', 'Like Opportunity in 2018: "My battery is low and it\'s getting dark."']
+            : ['[BUSCADOR] BATTERY 0%.', '[BUSCADOR] ENTERING SURVIVAL MODE...', '', '— signal lost —'])
+        }
 
         if (!rig) for (const w of wheels) w.rotation.x += (speed * dt) / 0.32
         sig = clamp(signalAt(x, z) + (rng() - 0.5) * 0.3 * (1 - quality), 0, 1)
@@ -927,11 +1003,15 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
           const goal = phase === 'warn' ? `DUST STORM approaching from the ${fromDir} in ${Math.ceil(stormT)} s: put a rock between you and the storm marker on the compass.`
             : phase === 'on' ? (sheltered ? `Sheltered from the storm (${fromDir}). Stay here until it passes.` : `DUST STORM from the ${fromDir}! You are exposed: get behind a rock, on the side away from the compass marker.`)
             : trapped ? 'No way back to the light. Make the remaining power count.'
-            : stuck ? 'Stuck! Press R to rock the wheels free.'
+            : stuck ? 'Stuck! Press R to rock the wheels free, or T to reset the rover.'
+            : stuckT > 2.5 ? 'Not moving? Press T to reset the rover a few metres back.'
+            : pending ? 'Look at the core: seal it in a tube, or discard it.'
             : !iceHunt ? (drilling ? 'Keep holding SPACE until the drill finishes.'
               : canDrill && Math.abs(speed) < 0.8 ? `${below!.scanned ? below!.kind.name : 'Rock'} under the arm: hold SPACE to drill it.`
               : cand ? 'Rock in laser range (green ring): stop and press F to analyze it.'
               : nav && next ? `Follow the green route on the grid: ${flags.has(next) ? 'drill target' : 'rock to scan'} ${Math.hypot(next.x - x, next.z - z).toFixed(0)} m away. Red cells are hazards.`
+              : panelDust > 0.45 ? 'The panels are dusty and barely charge: stop and press P to shake them clean.'
+              : tubes.length >= TUBES ? 'All 3 tubes are full. End the mission and take them to the lab.'
               : flags.size ? 'Drill target marked with a green diamond: park with that rock right in front of the arm.'
               : 'Press G for the navigation cameras: they tag the rocks, show hazards and suggest a safe route.')
             : !dark && !entered ? 'Drive north (W) across the orange line. The ice is in the permanent shadow.'
@@ -947,12 +1027,13 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
             bat, need, temp, heaters, sig, speed, slope, samples: st.samples, stored: stored.length, sent: st.waterG,
             drill: prog, drilling, depth, jam: Math.max(0, jamT), relay: inWin ? 0 : relay.period - relay.dur - ph, link,
             spike: spike ? Math.hypot(spike.x - x, spike.z - z) : -1, shadow: dark, trapped,
-            canReturn: !dark && entered && st.wet > 0, toast: toastT > 0 ? toast : '',
+            canReturn: iceHunt ? !dark && entered && st.wet > 0 : tubes.length > 0, toast: toastT > 0 ? toast : '',
             integ, stuck, teleop: !start.autonav && !link, extended: st.extended,
             lcam: lpov > 0.5, pov: pov > 0.5, xray: xOn, xcm: +(clamp(prog, 0, 1) * cur().cm).toFixed(1), xmax: cur().cm, xice: xSeen,
             under, canDrill, cores,
             nav, seen: seenN, nextD: next ? Math.hypot(next.x - x, next.z - z) : -1, nextDrill: !!next && flags.has(next),
             laser: scanT > 0 ? 1 - scanT / SCAN_T : laserT > 0 ? (aimed ? 1 - laserT / LASER_T : 0) : -1, inRange: !!cand,
+            clean: 1 - panelDust, tubes: tubes.length, stuckHint: stuckT > 2.5 || stuck,
             kinds: found.size, kindsAll: field.kinds.length, scanned: scannedN, libs: libsT > 0 ? libs : null,
             storm: !world.storms ? '' : phase === 'warn' ? `in ${Math.ceil(stormT)} s` : phase === 'on' ? (sheltered ? 'sheltered' : 'EXPOSED') : 'calm',
             heading: bearing(Math.sin(yaw), Math.cos(yaw)), from: bearing(fromX(), fromZ()), // IMU (giroscopio) y origen de la tormenta
@@ -1072,7 +1153,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         sky.material.uniforms.uFrom.value.set(fromX(), fromZ())
       }
     }
-    return Object.assign(tick, { cleanup: () => { gone = true; labBox?.replaceChildren(); removeEventListener('keydown', down); removeEventListener('keyup', up); void audio?.close() } })
+    return Object.assign(tick, { cleanup: () => { gone = true; labBox?.replaceChildren(); removeEventListener('keydown', down, true); removeEventListener('keyup', up, true); void audio?.close() } })
   }), [crater, world, iceHunt, quality, seed, orbitId, start, dem])
 
   const h = hud
@@ -1128,7 +1209,12 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
             <i style={{ width: `${h.bat}%`, background: h.trapped || h.bat < h.need + 5 ? 'var(--red)' : undefined }} />
             {h.need > 0 && <em style={{ left: `${Math.min(h.need, 100)}%` }} title="Battery needed to return to the light" />}
           </div>
-          <div className="rv-row"><span>Needed to return</span><b className={h.trapped ? 'bad' : ''}>{h.trapped ? 'NO RETURN' : `${h.need.toFixed(0)}%`}</b></div>
+          {world.storms
+            ? <>
+              <div className="rv-row"><span>Solar panels <kbd>P</kbd> clean</span><b className={h.clean < 0.55 ? 'bad' : ''}>{Math.round(h.clean * 100)}% clean</b></div>
+              <div className="rv-row"><span>Sample tubes</span><b>{'●'.repeat(h.tubes)}<i className="rv-tube-empty">{'○'.repeat(Math.max(0, TUBES - h.tubes))}</i> {h.tubes}/{TUBES}</b></div>
+            </>
+            : <div className="rv-row"><span>Needed to return</span><b className={h.trapped ? 'bad' : ''}>{h.trapped ? 'NO RETURN' : `${h.need.toFixed(0)}%`}</b></div>}
           <div className="rv-row"><span>Temperature · heaters <kbd>H</kbd></span><b className={h.temp < -10 ? 'bad' : ''}>{h.temp.toFixed(0)}°C · {h.heaters ? 'on' : 'off'}</b></div>
           <div className="rv-row"><span>Wheels</span><b className={h.integ < 30 ? 'bad' : ''}>{h.stuck ? 'STUCK: press R' : `${h.integ}%`}{h.teleop ? ' · teleop (slow)' : ''}</b></div>
           {h.storm && <div className="rv-row"><span>Dust storm · from {h.storm !== 'calm' && <b className="rv-wind" style={{ transform: `rotate(${h.from - h.heading}deg)` }} title="Where the storm comes from, relative to the rover">↑</b>}</span><b className={h.storm === 'EXPOSED' ? 'bad' : h.storm === 'sheltered' ? 'good' : ''}>{h.storm}</b></div>}
@@ -1171,8 +1257,10 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       )}
       <div className="rv-keys">
         <div><kbd>W A S D</kbd> drive · hold <kbd>SPACE</kbd> drill · <kbd>F</kbd> {iceHunt ? 'scan' : 'laser'}</div>
-        <div><kbd>L</kbd> lights · <kbd>C</kbd> top view · <kbd>G</kbd> nav view · <kbd>R</kbd> unstick</div>
-        <button className="btn small ghost" onClick={() => setSound(!sound)}>{sound ? 'Sound on' : 'Sound off'}</button>
+        <div><kbd>L</kbd> lights · <kbd>C</kbd> top view · <kbd>G</kbd> nav view · <kbd>R</kbd> unstick · <kbd>T</kbd> reset</div>
+        <button className="btn small ghost" onClick={() => setSound(!sound)}>{sound ? 'Sound on' : 'Sound off'}</button>{' '}
+        {world.storms && <><button className={`btn small ${h && h.clean < 0.55 ? 'warn' : 'ghost'}`} title="Vibrate the solar panels to shake dust off (−3% battery)." onClick={() => api.current?.clean()}>Clean panels</button>{' '}</>}
+        <button className={`btn small ${h?.stuckHint ? 'warn' : 'ghost'}`} title="Stuck in a hole or on a rock? Put the rover back a few metres (−6% battery)." onClick={() => api.current?.reset()}>Reset rover</button>
         {/* shortcut: interruptor temporal para probar tormentas; quitarlo junto con api.storm. */}
         {world.storms && h && (
           <label className="rv-test">
@@ -1186,9 +1274,31 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       {h?.toast && !final && <div className="rv-toast">{h.toast}</div>}
       {h?.canReturn && !final && (
         <div className="rv-end">
-          <button className="btn big" onClick={() => api.current?.finish('return')}>Back in the light — end mission </button>
+          <button className="btn big" onClick={() => api.current?.finish('return')}>{iceHunt ? 'Back in the light — end mission' : 'Leave the tubes for pickup — end mission'}</button>
           {start.canExtend && !h.extended && <button className="btn big ghost" onClick={() => api.current?.extend()}>Request extended mission (+4 cycles)</button>}
         </div>
+      )}
+      {!iceHunt && (
+        // Siempre montado (oculto sin núcleo): el visor 3D se crea una vez y no da tirones al perforar o sellar.
+        <aside className={`rv-core ${core?.state ?? ''}`} hidden={!core || !!final}>
+          {core && <>
+            <small>CORE #{core.n} · {ROCK_CORE.label} deep{core.state === 'sealed' ? ' · SEALED' : core.state === 'discarded' ? ' · DISCARDED' : ''}</small>
+            <h4>{ROCK_INFO[core.kind].name}</h4>
+          </>}
+          <CoreSample kind={core?.kind ?? null} seed={core?.seed ?? 0} sealed={core?.state === 'sealed'} />
+          {core && <>
+            {core.lab && <p>{core.lab}</p>}
+            <p className="real">Real case: <b>{ROCK_INFO[core.kind].real}</b><br /><span>{ROCK_INFO[core.kind].where}</span></p>
+            <p>{ROCK_INFO[core.kind].story}</p>
+            {ROCK_INFO[core.kind].bio > 0 && <p className={`bio b${ROCK_INFO[core.kind].bio}`}>{core.conf ? ['', 'Could preserve traces of life', 'Good place to look for ancient life', 'POTENTIAL BIOSIGNATURE'][ROCK_INFO[core.kind].bio] : 'No organics spectrometer on board: chemistry unknown'}</p>}
+            {core.state === 'pending' && (
+              <div className="rv-core-actions">
+                <button className="btn small" disabled={(hud?.tubes ?? 0) >= TUBES} onClick={() => api.current?.seal()}>Seal in tube {Math.min(TUBES, (hud?.tubes ?? 0) + 1)}/{TUBES}</button>
+                <button className="btn small ghost" onClick={() => api.current?.discard()}>Discard</button>
+              </div>
+            )}
+          </>}
+        </aside>
       )}
       {final?.kind === 'choice' && (
         <div className="rv-final">

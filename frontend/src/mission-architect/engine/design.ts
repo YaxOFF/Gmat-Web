@@ -2,9 +2,10 @@ import {
   BUDGET_M, DSN_WINDOWS_PER_CYCLE, ITERATION_COST_M, LAUNCHER, ORBIT, PART,
   OPTIONAL_SINGLE, REQUIRED_SINGLE, GROUP_LABEL, MODE_BUDGET_M, ROVER_GROUPS, ROVER_REQUIRED,
 } from '../data/catalog'
-import { BASE_DECK } from '../data/cards'
+import { BASE_DECK, PLANET_DECK } from '../data/cards'
 import type { Check, Design, Group, Layer, Part } from '../data/types'
 import { money, pct } from './rng'
+import { LAYER_LABEL } from './observe'
 
 export interface Stats {
   parts: Part[]
@@ -104,7 +105,7 @@ export function computeStats(d: Design, iterations = 0): Stats {
     for (const g of ROVER_REQUIRED) if (!parts.some((p) => p.group === g)) errors.push(`Mission ${d.mode ?? 'B'} needs a rover part: ${GROUP_LABEL[g]}.`)
   } else if (parts.some((p) => ROVER_GROUPS.includes(p.group))) errors.push('Mission A is orbiter only: remove the Rover Bay parts.')
   if (d.mode === 'C' && !has(d, 'drill_deep')) errors.push('Mission C needs the deep drill (2 m).')
-  if (d.mode === 'C' && !has(d, 'radar')) errors.push('Mission C needs the SAR radar to see how deep the ice goes.')
+  if (d.mode === 'C' && !has(d, 'radar')) errors.push(`Mission C needs the ${PART.radar.name} to see what is buried under the surface.`)
   if (slotsUsed > slotsMax && bus) errors.push(`The ${bus.name.toLowerCase()} only has ${slotsMax} instrument slots.`)
   if (has(d, 'radar') && (!has(d, 'panel_gaas') || !has(d, 'bat_2')))
     errors.push('The radar draws 150 W: it needs the GaAs array AND the 2 kWh battery.')
@@ -128,9 +129,9 @@ export function computeStats(d: Design, iterations = 0): Stats {
       why: 'Surprises cost money. Real programs hold back at least 10%.',
     },
     {
-      id: 'science', label: 'Science traceability', value: layers.includes('hydrogen') ? 'Hydrogen instrument ' : 'No hydrogen instrument',
+      id: 'science', label: 'Science traceability', value: layers.includes('hydrogen') ? `${PART.neutron.name} on board` : `No ${PART.neutron.name.toLowerCase()}`,
       status: layers.includes('hydrogen') ? (layers.includes('terrain') ? 'ok' : 'warn') : 'fail',
-      why: 'The mission asks "where is the hydrogen?". Only the neutron spectrometer answers that. Without a camera you cannot judge landing terrain.',
+      why: `The whole mission is about ${LAYER_LABEL.hydrogen.toLowerCase()}, and only the ${PART.neutron.name.toLowerCase()} can map it. Without a camera you cannot judge landing terrain.`,
     },
     {
       id: 'data', label: 'Data vs downlink', value: `${dataGbPerTarget} Gb/target · ${downlinkGbCycle} Gb/cycle down`,
@@ -158,6 +159,7 @@ export function buildDeck(d: Design, stats: Stats): DeckEntry[] {
   const hasSeu = deck.some((e) => e.cardId === 'seu')
   if (!has(d, 'shield') && !hasSeu) deck.push({ cardId: 'seu', because: 'You skipped the radiation shielding' })
   if (stats.powerMargin < 0.3) deck.push({ cardId: 'battery_overheat', because: 'Your power margin is thin' })
+  for (const cardId of PLANET_DECK) deck.push({ cardId, because: 'Mars itself: weather, dust and distance' })
   return deck
 }
 
@@ -192,7 +194,7 @@ export function reviewDesign(stats: Stats): ReviewItem[] {
     { id: 'budget', reviewer: 'priya', label: 'Budget reserve ≥ 10%', pass: ok('budget'),
       say: ok('budget') ? `Reserve is ${c.budget.value}. Healthy.` : `Reserve is ${c.budget.value}. ${c.budget.why}` },
     { id: 'science', reviewer: 'priya', label: 'Science traceability', pass: ok('science', true) || c.science.status === 'warn',
-      say: c.science.status === 'fail' ? `${c.science.value}. ${c.science.why}` : c.science.status === 'warn' ? `The neutron spectrometer is there, but with no camera you will be picking a landing site half-blind. I will allow it.` : 'The instruments answer the science question.' },
+      say: c.science.status === 'fail' ? `${c.science.value}. ${c.science.why}` : c.science.status === 'warn' ? `The ${PART.neutron.name.toLowerCase()} is there, but with no camera you will be picking a landing site half-blind. I will allow it.` : 'The instruments answer the science question.' },
   ]
 }
 

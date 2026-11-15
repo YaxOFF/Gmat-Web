@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { mulberry32 } from '../engine/rng'
 import { buildSpacecraft } from './spacecraft'
-import { mountStage, moonTexture, stars } from './stage'
+import { earthMesh, mountStage, moonTexture, stars } from './stage'
 
 export type FinaleKind = 'return' | 'planb'
 export interface FinaleResult { choice: 'impact' | 'relay'; success: boolean; points: number; title: string; text: string }
@@ -37,7 +37,7 @@ export function Finale3D({ kind, crater, seed, partIds, onDone }: {
     const sun = new THREE.DirectionalLight(0xffffff, 2.4); sun.position.set(5, 0.5, 2); scene.add(sun)
     const moon = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), new THREE.MeshStandardMaterial({ map: moonTexture(rng), roughness: 1 }))
     scene.add(moon)
-    const earth = new THREE.Mesh(new THREE.SphereGeometry(0.4, 32, 16), new THREE.MeshStandardMaterial({ color: 0x3d7bff, emissive: 0x0a1a40 }))
+    const earth = earthMesh(0.4)
     earth.position.set(-9, 1.5, -14); scene.add(earth)
     const sc = buildSpacecraft(partIds.filter((id) => id !== 'lander')); sc.scale.setScalar(0.02)
     scene.add(sc)
@@ -93,10 +93,10 @@ export function Finale3D({ kind, crater, seed, partIds, onDone }: {
       {!res && (
         <div className="end-text">
           {kind === 'return'
-            ? <><h2>SELENE IS OUT OF FUEL</h2><p>The rover is safe in the sunlight. Your orbiter has a few m/s left. How does her story end?</p>
+            ? <><h2>SELENE IS OUT OF FUEL</h2><p>Selene mapped the pole and carried every message from Buscador. Now her tank is almost empty and she has one manoeuvre left. Crash her into the crater for one more water measurement, or lift her high and keep her alive as a radio relay for the astronauts who come next.</p>
               <div className="actions">
-                <button className="btn" onClick={() => choose('impact')}>Controlled impact into {crater}<small style={{ display: 'block' }}>LCROSS-style plume · +science (70% chance)</small></button>
-                <button className="btn ghost" onClick={() => choose('relay')}>Park as a relay for Artemis<small style={{ display: 'block' }}>+confidence · safe</small></button>
+                <button className="btn" onClick={() => choose('impact')}>Controlled impact into {crater}<small style={{ display: 'block' }}>The impact throws up a plume that the telescopes can read · more science · works 70% of the time</small></button>
+                <button className="btn ghost" onClick={() => choose('relay')}>Park as a relay for Artemis<small style={{ display: 'block' }}>Future crews talk to Earth through her · safe · more NASA confidence</small></button>
               </div></>
             : <><h2>PLAN B</h2><p>No rover. Selene can still try what LCROSS did in 2009: crash into {crater} and read the plume from orbit.</p>
               <div className="actions"><button className="btn big" onClick={() => choose('impact')}>Commit to impact</button></div></>}

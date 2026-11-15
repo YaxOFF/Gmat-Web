@@ -29,7 +29,8 @@ function strataTexture() {
   return t
 }
 
-export function makeXray(): Xray {
+/** `crystal` = color de las motas (hielo cian en la Luna; vetas minerales en Marte). */
+export function makeXray(crystal = 0x38e1ff): Xray {
   const group = new THREE.Group(); group.visible = false
   const over = (color: number, opacity: number, extra: Partial<THREE.MeshBasicMaterialParameters> = {}) =>
     new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false, ...extra })
@@ -57,7 +58,7 @@ export function makeXray(): Xray {
   // Hielo: puntos ordenados por profundidad; el drawRange muestra solo los que la broca ya alcanzó.
   const icePos = new Float32Array(ICE_MAX * 3), iceDepth = new Float32Array(ICE_MAX)
   const iceGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(icePos, 3))
-  const iceMat = new THREE.PointsMaterial({ color: 0x38e1ff, size: 0.04, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending })
+  const iceMat = new THREE.PointsMaterial({ color: crystal, size: 0.04, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending })
   const ice = new THREE.Points(iceGeo, iceMat)
 
   // Polvo: partículas balísticas con la gravedad lunar, sí ocultas por el terreno.

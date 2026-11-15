@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react'
-import { CRATER, defaultDesign, starterFor, MAX_ITERATIONS, MODE_MULT, ORBIT } from './data/catalog'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { CRATER, defaultDesign, starterFor, MAX_ITERATIONS, MODE_MULT, ORBIT, SPECIAL } from './data/catalog'
 import { judge, ROLES, soloTeam, type Team } from './engine/roles'
 import { Launch3D } from './three/Launch3D'
 import { MissionPatch } from './ui/Patch'
@@ -16,21 +16,29 @@ import {
   type EndingId, type LaunchOutcome, type Mission, type ScoreBreakdown,
 } from './engine/mission'
 import { clamp, money, mulberry32, type Rng } from './engine/rng'
-import { INTRO, endingLines } from './story/scripts'
+import { INTRO, endingLines, moonEpilogue } from './story/scripts'
 import { Dialogue } from './ui/Dialogue'
 import { STEP_NAMES, TopBar } from './ui/Hud'
 import { Mapping } from './ui/Mapping'
 import { Hangar, OrbitPick, Review, Title } from './ui/screens1'
 import { Report, Site } from './ui/screens2'
 import { MarsTest } from './ui/MarsTest'
+import { PLANET, setPlanet, type PlanetId } from './data/planet'
+import { MARS, MOON } from './three/world'
+import { preloadBody } from './three/stage'
+import { MARS_INTRO, marsEndingLines, marsEpilogue } from './story/mars'
+import { CoreThumb } from './three/CoreSample'
+import { ROCKS } from './data/samples'
+import { Lab } from './ui/Lab'
+import type { LabResult } from './data/lab'
 
 type Phase =
   | 'title' | 'intro' | 'setup' | 'orbit' | 'hangar' | 'review'
-  | 'launch' | 'mapping' | 'site' | 'ending' | 'descent' | 'rover' | 'finale' | 'report' | 'mars'
+  | 'launch' | 'mapping' | 'site' | 'ending' | 'descent' | 'rover' | 'finale' | 'epilogue' | 'lab' | 'report' | 'mars'
 
 const STEP_OF: Record<Phase, number> = {
   title: 0, intro: 0, setup: 0, orbit: 1, hangar: 2, review: 3,
-  launch: 4, mapping: 5, site: 6, ending: 6, descent: 7, rover: 8, finale: 9, report: 10, mars: 0,
+  launch: 4, mapping: 5, site: 6, ending: 6, descent: 7, rover: 8, finale: 9, epilogue: 9, lab: 9, report: 10, mars: 0,
 }
 // Pantalla anterior del botón "← Back". Solo antes del lanzamiento: después la partida ya tiró dados.
 const PREV: Partial<Record<Phase, Phase>> = { intro: 'title', setup: 'title', orbit: 'setup', hangar: 'orbit', review: 'hangar' }
@@ -38,6 +46,9 @@ const PREV: Partial<Record<Phase, Phase>> = { intro: 'title', setup: 'title', or
 const STEP_PHASE: Partial<Record<number, Phase>> = { 0: 'setup', 1: 'orbit', 2: 'hangar', 3: 'review' }
 
 const urlSeed = () => Number(new URLSearchParams(location.search).get('seed')) || 0
+// ?planet=mars elige Marte antes de leer los atajos (así ?rover=jezero&planet=mars encuentra el sitio).
+const URL_PLANET: PlanetId = new URLSearchParams(location.search).get('planet') === 'mars' ? 'mars' : 'moon'
+setPlanet(URL_PLANET)
 // Atajos de prueba: ?rover=cabeus o ?landing=cabeus (y opcional &seed=123); ?screen=mars abre la prueba de Marte
 const q = (k: string) => { const v = new URLSearchParams(location.search).get(k); return v && CRATER[v] ? v : null }
 const urlRover = () => q('rover') ?? q('landing')
@@ -58,6 +69,9 @@ const demoMission = () => {
 const ROVER_END: Record<RoverEnding, string> = {
   return: 'The Return — back in the light', last: 'The Last Message', frozen: 'Frozen in the dark', dead: 'Battery depleted',
 }
+const MARS_END: Record<RoverEnding, string> = {
+  return: 'Cores sealed before the storm', last: 'The Last Message', frozen: 'Frozen in the storm', dead: 'Buried by the dust storm',
+}
 const newSeed = () => Math.floor(Math.random() * 1e6)
 
 export default function MissionArchitect({ onInspect, onExit }: {
@@ -65,13 +79,20 @@ export default function MissionArchitect({ onInspect, onExit }: {
   onExit: () => void
 }) {
   const [seed, setSeed] = useState(() => urlSeed() || newSeed())
+  const [planet, setPlanetState] = useState<PlanetId>(URL_PLANET)
+  const mars = planet === 'mars'
+  const choosePlanet = (p: PlanetId) => { setPlanet(p); setPlanetState(p); preloadBody(p) }
+  useEffect(() => { preloadBody(URL_PLANET) }, [])
   const rng = useRef<Rng>(mulberry32(seed))
-  const [rover, setRover] = useState<RoverResult | null>(null)
+  // ?screen=lab&planet=mars: laboratorio con tres tubos de ejemplo.
+  const [rover, setRover] = useState<RoverResult | null>(() => SCREEN === 'lab' ? { samples: 3, wet: 3, waterG: 0, lostG: 0, bestPct: 4, points: 0, ending: 'return', seed: 1, minTemp: 0, confirmed: 0, live: false, extended: false,
+    cores: [{ kind: 'basalt', seed: 11, pct: 3 }, { kind: 'leopard', seed: 22, pct: 6 }, { kind: 'sulfate', seed: 33, pct: 4 }] } : null)
   const [team, setTeam] = useState<Team>(soloTeam)
   const minBat = useRef(100)
   const [landing, setLanding] = useState<Landing | null>(null)
   const [finale, setFinale] = useState<FinaleResult | null>(null)
-  const [phase, setPhase] = useState<Phase>(() => (q('rover') ? 'rover' : q('landing') ? 'descent' : SCREEN === 'setup' ? 'setup' : SCREEN === 'launch' ? 'launch' : SCREEN === 'hangar' ? 'hangar' : SCREEN === 'orbit' ? 'orbit' : SCREEN === 'mars' ? 'mars' : DEMO ? SCREEN as Phase : 'title'))
+  const [lab, setLab] = useState<LabResult | null>(null)
+  const [phase, setPhase] = useState<Phase>(() => (q('rover') ? 'rover' : q('landing') ? 'descent' : SCREEN === 'setup' ? 'setup' : SCREEN === 'launch' ? 'launch' : SCREEN === 'hangar' ? 'hangar' : SCREEN === 'orbit' ? 'orbit' : SCREEN === 'mars' ? 'mars' : SCREEN === 'lab' ? 'lab' : DEMO ? SCREEN as Phase : 'title'))
   const [design, setDesign] = useState<Design>(() => (DEMO ? demoDesign() : defaultDesign()))
   const [iterations, setIterations] = useState(0)
   const [forced, setForced] = useState(false)
@@ -79,9 +100,9 @@ export default function MissionArchitect({ onInspect, onExit }: {
   const [mission, setMissionRaw] = useState<Mission | null>(() => (DEMO && SCREEN !== 'review' ? demoMission() : null))
   // Systems: "Nobody Freezes" mira la batería mínima del orbitador en todo el mapeo.
   const setMission = (m: Mission | null) => { if (m) minBat.current = Math.min(minBat.current, m.batteryPct); setMissionRaw(m) }
-  const [site, setSite] = useState<string | null>(() => urlRover() ?? (SCREEN === 'report' ? 'cabeus' : null))
+  const [site, setSite] = useState<string | null>(() => urlRover() ?? (SCREEN === 'report' || SCREEN === 'lab' ? SPECIAL.site : null))
   const [ending, setEnding] = useState<EndingId>('lead')
-  const [score, setScore] = useState<ScoreBreakdown | null>(() => (SCREEN === 'report' ? scoreMission(demoMission(), 'cabeus') : null))
+  const [score, setScore] = useState<ScoreBreakdown | null>(() => (SCREEN === 'report' ? scoreMission(demoMission(), SPECIAL.site) : null))
 
   const stats = useMemo(() => computeStats(design, iterations), [design, iterations])
   const ctx = useMemo(() => ({ design, stats }), [design, stats])
@@ -89,7 +110,7 @@ export default function MissionArchitect({ onInspect, onExit }: {
   const reset = (keepDesign: boolean) => {
     const s = newSeed(); setSeed(s); rng.current = mulberry32(s)
     minBat.current = 100
-    setIterations(0); setForced(false); setLaunch(null); setMission(null); setSite(null); setScore(null); setRover(null); setLanding(null); setFinale(null)
+    setIterations(0); setForced(false); setLaunch(null); setMission(null); setSite(null); setScore(null); setRover(null); setLanding(null); setFinale(null); setLab(null)
     if (!keepDesign) setDesign(defaultDesign())
     setPhase(keepDesign ? 'hangar' : 'title')
   }
@@ -135,7 +156,7 @@ export default function MissionArchitect({ onInspect, onExit }: {
     autonav: design.partIds.includes('autonav'),
     canExtend: (mission?.budgetLeftM ?? 0) >= 20 && 100 - (mission?.stress ?? 0) >= 30,
   }, [landing, design.partIds, mission])
-  const roverBonus = (rover?.points ?? 0) + (rover?.ending === 'return' ? 40 : 0) + (finale?.points ?? 0)
+  const roverBonus = (rover?.points ?? 0) + (rover?.ending === 'return' ? 40 : 0) + (finale?.points ?? 0) + (lab?.points ?? 0)
   const confidence = Math.round(clamp(100 - stress / 2 + (rover?.confirmed ?? 0) * 10 + (rover?.ending === 'return' ? 15 : 0)
     + (finale ? (finale.choice === 'relay' ? 20 : finale.success ? 10 : 0) : 0), 0, 200))
   const verdicts = judge({
@@ -149,19 +170,21 @@ export default function MissionArchitect({ onInspect, onExit }: {
   const summary: ReactNode[] = []
   if (landing) summary.push(<div key="l">{landing.label}</div>)
   if (rover?.extended) summary.push(<div key="x">⏱ Extended mission flown (+4 cycles)</div>)
-  if (rover) summary.push(<div key="r">{ROVER_END[rover.ending]}: {rover.samples} cores, {rover.wet} with ice, {rover.waterG} g of water sent{rover.lostG ? `, ${rover.lostG} g lost in the dark` : ''} (best {rover.bestPct}%) · seed {rover.seed}</div>)
+  if (rover && mars) summary.push(<div key="r">{MARS_END[rover.ending]}: {rover.samples} cores drilled, {rover.cores.length} sent home{rover.lostG ? `, ${rover.lostG} lost in the storm` : ''} · seed {rover.seed}</div>)
+  else if (rover) summary.push(<div key="r">{ROVER_END[rover.ending]}: {rover.samples} cores, {rover.wet} with ice, {rover.waterG} g of water sent{rover.lostG ? `, ${rover.lostG} g lost in the dark` : ''} (best {rover.bestPct}%) · seed {rover.seed}</div>)
   if (finale) summary.push(<div key="f">{finale.title}</div>)
+  if (lab) summary.push(<div key="lab">Lab: {lab.title.toLowerCase()} ({lab.runs} tests, +{lab.points} pts)</div>)
 
   return (
     <div className="ma app">
       {phase === 'title' && <button className="btn small ghost ma-exit" onClick={onExit}>← Back to GMAT</button>}
       {phase !== 'title' && phase !== 'mars' && (
-        <TopBar step={STEP_OF[phase]} steps={STEP_NAMES}
-          canJump={(k) => !!PREV[phase] && !!STEP_PHASE[k]} onJump={(k) => setPhase(STEP_PHASE[k]!)} right={<><span className="hint">{money(budgetLeft)} left</span><span className="seed" title="Same seed = same craters and ice. Share it to replay this game.">seed {seed}</span>{PREV[phase] && <button className="btn small ghost ma-exit" onClick={() => setPhase(PREV[phase]!)}>← Back</button>}<button className="btn small ghost ma-exit" onClick={onExit}>← GMAT</button></>} />
+        <TopBar step={STEP_OF[phase]} steps={mars ? STEP_NAMES.map((n) => (n === 'Finale' ? 'Lab' : n)) : STEP_NAMES}
+          canJump={(k) => !!PREV[phase] && !!STEP_PHASE[k]} onJump={(k) => setPhase(STEP_PHASE[k]!)} right={<><span className="hint">{money(budgetLeft)} left</span><span className="seed" title="Same seed = same sites and finds. Share it to replay this game.">seed {seed}</span>{PREV[phase] && <button className="btn small ghost ma-exit" onClick={() => setPhase(PREV[phase]!)}>← Back</button>}<button className="btn small ghost ma-exit" onClick={onExit}>← GMAT</button></>} />
       )}
-      {phase === 'title' && <Title onStart={() => setPhase('intro')} onMars={() => setPhase('mars')} />}
+      {phase === 'title' && <Title onStart={(p) => { choosePlanet(p); setPhase('intro') }} />}
       {phase === 'mars' && <MarsTest onExit={() => setPhase('title')} />}
-      {phase === 'intro' && <Dialogue lines={INTRO} startScene="void" onDone={() => setPhase('setup')} />}
+      {phase === 'intro' && <Dialogue lines={mars ? MARS_INTRO : INTRO} startScene="void" onDone={() => setPhase('setup')} />}
       {phase === 'setup' && <Setup mode={design.mode} team={team} onDone={(mode, t) => { setTeam(t); setDesign({ ...design, mode, partIds: [] }); setPhase('orbit') }} />}
       {phase === 'orbit' && <OrbitPick design={design} onInspect={inspect} onPick={(orbitId) => { setDesign({ ...design, orbitId }); setPhase('hangar') }} />}
       {phase === 'hangar' && <Hangar design={design} setDesign={setDesign} iterations={iterations} onSubmit={() => setPhase('review')} />}
@@ -180,17 +203,21 @@ export default function MissionArchitect({ onInspect, onExit }: {
       )}
       {phase === 'site' && mission && <Site mission={mission} design={design} onPick={pickSite} />}
       {phase === 'ending' && mission && site && (
-        <Dialogue lines={endingLines(site, (mission.quality[site]?.hydrogen ?? 0) >= 0.4)} startScene="crater" onDone={() => setPhase(design.mode !== 'A' ? 'descent' : 'report')} />
+        <Dialogue lines={(mars ? marsEndingLines : endingLines)(site, (mission.quality[site]?.hydrogen ?? 0) >= 0.4)} startScene="crater" onDone={() => setPhase(design.mode !== 'A' ? 'descent' : 'report')} />
       )}
       {phase === 'descent' && site && (
         <Descent3D crater={CRATER[site]} stress={stress} mapped={has('altimeter')} seed={seed} names={team.players === 4 ? team.names : undefined}
-          onDone={(l) => { setLanding(l); setPhase(l.ok ? 'rover' : 'finale') }} />
+          onDone={(l) => { setLanding(l); setPhase(l.ok ? 'rover' : mars ? 'epilogue' : 'finale') }} />
       )}
       {phase === 'rover' && site && (
         <Rover3D crater={CRATER[site]} quality={mission ? mission.quality[site]?.hydrogen ?? 0 : 0.6} seed={seed}
-          orbitId={design.orbitId} start={roverStart}
-          onDone={(r) => { setRover(r); if (r.ending === 'return') setPhase('finale'); else afterAct() }} />
+          orbitId={design.orbitId} start={roverStart} world={mars ? MARS : MOON}
+          onDone={(r) => { setRover(r); setPhase('epilogue') }} />
       )}
+      {phase === 'epilogue' && (mars
+        ? <Dialogue lines={marsEpilogue(rover, !!landing?.ok)} startScene="control" onDone={() => (rover?.cores.length ? setPhase('lab') : afterAct())} />
+        : <Dialogue lines={moonEpilogue(rover, has('mass_spec'))} startScene="control" onDone={() => (rover?.ending === 'return' ? setPhase('finale') : afterAct())} />)}
+      {phase === 'lab' && rover && site && <Lab tubes={rover.cores} site={CRATER[site].name} onDone={(r) => { setLab(r); afterAct() }} />}
       {phase === 'finale' && site && (
         <Finale3D kind={landing && !landing.ok ? 'planb' : 'return'} crater={CRATER[site].name} seed={seed} partIds={design.partIds}
           onDone={(f) => { setFinale(f); afterAct() }} />
@@ -200,25 +227,41 @@ export default function MissionArchitect({ onInspect, onExit }: {
           onRetry={() => reset(true)} onNew={() => reset(false)}
           extra={<>
             <div className="glance">
-              <div><span></span><b>{rover ? `${rover.waterG} g` : design.mode === 'A' ? 'Orbit only' : '—'}</b><small>water confirmed on Earth</small></div>
-              <div><span></span><b>{mission?.mapped.length ?? 0} / 5</b><small>craters mapped from orbit</small></div>
+              {mars
+                ? <div><span></span><b>{rover ? `${rover.cores.length} cores` : design.mode === 'A' ? 'Orbit only' : '—'}</b><small>rock cores sent home</small></div>
+                : <div><span></span><b>{rover ? `${rover.waterG} g` : design.mode === 'A' ? 'Orbit only' : '—'}</b><small>water confirmed on Earth</small></div>}
+              <div><span></span><b>{mission?.mapped.length ?? 0} / 5</b><small>{PLANET.siteNoun}s mapped from orbit</small></div>
               <div><span></span><b>{money(budgetLeft)}</b><small>money left over</small></div>
               <div><span></span><b>{confidence}%</b><small>NASA confidence</small></div>
             </div>
             <ol className="journey">
               {[
-                ['', 'Launch', launch ? launch.status === 'ok' ? 'Reached the Moon' : launch.status === 'lost' ? 'Lost in space' : 'Failed on the pad' : '—', launch?.status === 'ok'],
-                ['', 'Mapping', mission ? `${mission.mapped.length} craters scanned` : 'Not reached', !!mission?.mapped.length],
+                ['', 'Launch', launch ? launch.status === 'ok' ? `Reached ${PLANET.body}` : launch.status === 'lost' ? 'Lost in space' : 'Failed on the pad' : '—', launch?.status === 'ok'],
+                ['', 'Mapping', mission ? `${mission.mapped.length} ${PLANET.siteNoun}s scanned` : 'Not reached', !!mission?.mapped.length],
                 ['', 'Site', site ? CRATER[site].name : 'Not chosen', !!site],
                 ...(design.mode === 'A' ? [] : [
                   ['', 'Landing', landing ? landing.ok ? 'Touchdown' : 'Failed' : 'Not reached', !!landing?.ok],
-                  ['', 'Rover', rover ? ROVER_END[rover.ending] : 'Not reached', rover?.ending === 'return'],
+                  ['', 'Rover', rover ? (mars ? MARS_END : ROVER_END)[rover.ending] : 'Not reached', rover?.ending === 'return'],
                 ]),
                 ...(finale ? [['', 'Selene\'s end', finale.title.toLowerCase(), finale.success]] : []),
+                ...(lab ? [['', 'Lab', lab.title.toLowerCase(), lab.points >= 120]] : []),
               ].map(([, step, what, good], i) => (
                 <li key={i} className={good ? 'good' : 'meh'}><span>{String(i + 1).padStart(2, '0')}</span><b>{step as string}</b><small>{what as string}</small></li>
               ))}
             </ol>
+            {mars && !!rover?.cores.length && (
+              <div className="core-cache">
+                <h3>Sealed sample tubes <small>waiting on Mars for a sample-return mission</small></h3>
+                <ul>
+                  {rover.cores.map((c, i) => (
+                    <li key={i} className={`bio${ROCKS[c.kind].bio}`}>
+                      <CoreThumb kind={c.kind} seed={c.seed} />
+                      <b>{ROCKS[c.kind].name}</b><small>like {ROCKS[c.kind].real}</small>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="team-row">
               <MissionPatch mode={design.mode} size={150} />
               <div className="roles-report">
@@ -232,7 +275,7 @@ export default function MissionArchitect({ onInspect, onExit }: {
               </div>
             </div>
             {summary.length > 0 && <details className="goals"><summary>Surface details (+{roverBonus} pts · mission ×{MODE_MULT[design.mode]})</summary><div className="report-summary">{summary}</div></details>}
-            <div className="actions"><button className="btn small ghost" onClick={() => inspect(design.orbitId)}>See Selene's real orbit in GMAT</button></div>
+            <div className="actions"><button className="btn small ghost" onClick={() => inspect(design.orbitId)}>See {PLANET.ship}'s real orbit in GMAT</button></div>
           </>} />
       )}
     </div>

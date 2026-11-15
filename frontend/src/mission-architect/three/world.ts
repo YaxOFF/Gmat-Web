@@ -6,7 +6,7 @@ import { MarsRocks, MoonRocks, type RockFieldClass } from './rocks'
  *  `rocks` = clase del campo de rocas (hereda de RockField: mismo choque, aspecto propio).
  *  `science` = qué hace el rover, como en las misiones reales: 'ice' busca hielo de agua bajo el suelo (Luna, tipo
  *  VIPER: mapa de hidrógeno, escaneo de neutrones y taladro en el regolito); 'rocks' analiza rocas (Marte, tipo
- *  Curiosity: láser ChemCam y taladro sobre la roca).
+ *  Curiosity: láser ChemCam y taladro sobre la roca, antes de que llegue la tormenta de polvo).
  *  `scale` agranda el área jugable; `storms` = tormentas de polvo y afloramientos; `rockTex` = textura triplanar de
  *  rocas y afloramientos (Marte, three/mars.ts). */
 export interface World {

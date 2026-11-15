@@ -20,8 +20,8 @@ export function observe(c: Crater, layer: Layer, q: number | undefined): Obs {
   switch (layer) {
     case 'hydrogen':
       return known === 'exact'
-        ? { known, text: `${f1(c.h)} wt%` }
-        : { known, text: `${f1(Math.max(0, c.h - w))}–${f1(c.h + w)} wt%` }
+        ? { known, text: `${f1(c.h)} ${UNIT.h}` }
+        : { known, text: `${f1(Math.max(0, c.h - w))}–${f1(c.h + w)} ${UNIT.h}` }
     case 'terrain':
       return known === 'exact'
         ? { known, text: c.terrain }
@@ -40,6 +40,9 @@ export function observe(c: Crater, layer: Layer, q: number | undefined): Obs {
         : { known, text: `${f1(Math.max(0, c.ice - w))}–${f1(c.ice + w)} wt%` }
   }
 }
+
+/** Unidad de la capa 'hydrogen' (Luna: hidrógeno en wt%; Marte: minerales hidratados). La cambia data/planet.ts. */
+export const UNIT = { h: 'wt%' }
 
 export const LAYER_LABEL: Record<Layer, string> = {
   hydrogen: 'Hydrogen',

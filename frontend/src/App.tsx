@@ -133,6 +133,9 @@ export default function App() {
   const [tour, setTour] = useState(() => !tourSeen())
   const file = useRef<HTMLInputElement>(null)
   useEffect(() => { void checkEngine() }, [checkEngine])
+  // Con el juego abierto, la zona de trabajo queda inerte: el editor no recibe teclas ni foco.
+  const busy = game === 'on'
+  useEffect(() => { if (busy) (document.activeElement as HTMLElement | null)?.blur?.() }, [busy])
 
   const save = () => {
     const a = document.createElement('a')
@@ -188,7 +191,7 @@ export default function App() {
 
   return (
     <div className={s.app}>
-      <header className={s.toolbar}>
+      <header className={s.toolbar} inert={busy}>
         <h1 className={s.brand}>{es.appName}</h1>
         <div className={s.tools} role="toolbar" aria-label={es.toolbar.main}>
           <button className={s.btn} onClick={() => loadText('', 'mision.script')}>{es.toolbar.new}</button>
@@ -214,13 +217,13 @@ export default function App() {
         <button className={s.btn} title={es.toolbar.tour} aria-label={es.toolbar.tour} onClick={() => setTour(true)}>?</button>
         <EngineStatus />
       </header>
-      <aside className={s.left} data-tour="left" aria-label={`${es.left.resources} / ${es.left.mission}`}>
+      <aside className={s.left} inert={busy} data-tour="left" aria-label={`${es.left.resources} / ${es.left.mission}`}>
         <Tabs<LeftTab> label={`${es.left.resources} / ${es.left.mission}`} items={es.left} value={leftTab} onChange={setLeftTab} />
         {leftTab === 'resources'
           ? <Suspense fallback={null}><ResourceTree /></Suspense>
           : <Suspense fallback={null}><MissionTree /></Suspense>}
       </aside>
-      <main className={s.center} data-tour="center">
+      <main className={s.center} inert={busy} data-tour="center">
         <Tabs<CenterTab> label={es.center.editor} items={es.center} value={centerTab} onChange={setCenterTab} />
         {/* el editor queda montado (oculto) para no perder deshacer/cursor al cambiar de pestaña */}
         <div className={s.editorPane} hidden={centerTab !== 'editor'}>
@@ -244,7 +247,7 @@ export default function App() {
       )}
       {templates && <TemplateDialog initial={typeof templates === 'string' ? templates : undefined} onClose={() => setTemplates(false)} />}
       {palette && <Palette actions={actions} onClose={() => setPalette(false)} />}
-      {tour && <Tour onClose={() => setTour(false)} />}
+      {tour && !busy && <Tour onClose={() => setTour(false)} />}
     </div>
   )
 }
