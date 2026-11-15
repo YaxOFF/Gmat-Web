@@ -5,8 +5,9 @@ import { PLANET } from '../data/planet'
 export interface Stage { scene: THREE.Scene; camera: THREE.PerspectiveCamera; renderer: THREE.WebGLRenderer; el: HTMLElement }
 
 /** Monta un renderer en `el`; `setup` arma la escena y devuelve el tick por frame. Devuelve el limpiador. */
-export function mountStage(el: HTMLElement, setup: (s: Stage) => ((dt: number) => void) & { cleanup?: () => void }): () => void {
-  const renderer = new THREE.WebGLRenderer({ antialias: true })
+export function mountStage(el: HTMLElement, setup: (s: Stage) => ((dt: number) => void) & { cleanup?: () => void }, logDepth = false): () => void {
+  // logDepth: escenas de metros a cientos de miles de km (Tierra–Luna) sin z-fighting.
+  const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: logDepth })
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap

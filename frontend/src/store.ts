@@ -6,7 +6,7 @@ import type { Results, SolverEvent, SolverRun } from './model/results'
 import type { FieldSchema, ParamInfo, TypeInfo } from './model/schema'
 
 export type LeftTab = 'resources' | 'mission'
-export type CenterTab = 'editor' | 'resource' | 'command' | 'view3d' | 'results' | 'solver'
+export type CenterTab = 'editor' | 'resource' | 'command' | 'view3d' | 'journey' | 'results' | 'solver'
 type Engine = { state: 'checking' | 'ready' | 'error'; version?: string; detail?: string }
 export type LogLevel = 'info' | 'warning' | 'error' | 'system'
 export type LogEntry = { level: LogLevel; text: string; line?: number }
