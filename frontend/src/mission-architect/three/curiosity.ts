@@ -18,8 +18,9 @@ export interface CuriosityRig {
   /**
    * Brazo robótico: con `on` se despliega frente al rover, baja la broca vertical hasta `ground` (suelo o lomo de
    * roca, en mundo) y perfora girando; sin `on` la saca y vuelve a guardarse. Llamar después de `update`.
+   * `reach` (m) = distancia de la broca al pie del brazo; corto = brazo plegado como torre vertical junto al chasis.
    */
-  drill(dt: number, on: boolean, ground: HeightFn): void
+  drill(dt: number, on: boolean, ground: HeightFn, reach?: number): void
   /** Punto (mundo) donde la broca toca o tocaría el suelo ahora mismo. */
   drillPoint(out: THREE.Vector3): THREE.Vector3
   /** 0 = broca en el aire o guardada, 1 = apoyada (y girando si sigue perforando). */
@@ -155,7 +156,7 @@ export function rigCuriosity(model: THREE.Object3D): CuriosityRig {
         for (const w of s.wheels) w.rotation.x += spin
       }
     },
-    drill: (dt, on, ground) => arm.drill(dt, on, ground),
+    drill: (dt, on, ground, reach) => arm.drill(dt, on, ground, reach),
     drillPoint: (out) => arm.point(out),
     drillContact: () => arm.contact(),
     aim(dt, target) {
@@ -188,7 +189,7 @@ function armRig(model: THREE.Object3D) {
   const base = get('Brazo'), sh = get('Brazo_Superior'), el = get('Brazo_Antebrazo'), wr = get('Brazo_Muneca'), bit = get('Taladro')
   if (!base || !sh || !el || !wr || !bit) {
     const p = new THREE.Vector3()
-    return { drill: () => {}, point: (out: THREE.Vector3) => out.copy(model.getWorldPosition(p)), contact: () => 0 }
+    return { drill: (_dt: number, _on: boolean, _ground: HeightFn, _reach?: number) => {}, point: (out: THREE.Vector3) => out.copy(model.getWorldPosition(p)), contact: () => 0 }
   }
   model.updateMatrixWorld(true)
   // Geometría en reposo, en el marco de Brazo (plano z-y). Ángulo de cada eslabón: atan2(y, z).
@@ -213,15 +214,17 @@ function armRig(model: THREE.Object3D) {
   const toBase = new THREE.Quaternion()
   const ease = (x: number) => x * x * (3 - 2 * x)
 
+  let reach = ARM_REACH
   const aim = (ground: HeightFn) => {
-    target.set(tipX, 0, ARM_REACH); base.localToWorld(target)
+    target.set(tipX, 0, reach); base.localToWorld(target)
     target.y = ground(target.x, target.z)
     return target
   }
   return {
     point: (out: THREE.Vector3) => out.copy(target),
     contact: () => lower,
-    drill(dt: number, on: boolean, ground: HeightFn) {
+    drill(dt: number, on: boolean, ground: HeightFn, armReach = ARM_REACH) {
+      reach = armReach
       // Fases: desplegar → bajar → perforar; al terminar, subir → guardar.
       if (on) { deploy = Math.min(1, deploy + dt / 0.9); if (deploy >= 1) lower = Math.min(1, lower + dt / 0.5) }
       else { lower = Math.max(0, lower - dt / 0.35); if (lower <= 0) deploy = Math.max(0, deploy - dt / 0.9) }

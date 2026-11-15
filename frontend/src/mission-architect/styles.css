@@ -708,3 +708,21 @@
 .ma .rv-nav .n-warn { background: #ffc828aa; border-color: #ffc828; }
 .ma .rv-nav .n-bad { background: #ff3c32cc; border-color: #ff3c32; }
 .ma .rv-nav .n-path { background: #c8f560; border-color: #c8f560; }
+/* Rover (Luna): tramos del taladro, calor de la broca y gases en vivo. */
+.ma .rv-hold-bar { position: relative; }
+.ma .rv-hold-bar em { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #0a0f1c; }
+.ma .rv-heat { margin-top: 8px; text-align: left; }
+.ma .rv-heat span { display: block; font-size: 9px; letter-spacing: .14em; color: var(--dim); margin-bottom: 3px; }
+.ma .rv-heat div { height: 5px; background: var(--panel2); border-radius: var(--r-pill); overflow: hidden; }
+.ma .rv-heat i { display: block; height: 100%; background: linear-gradient(90deg, #38e1ff, #ffc828); border-radius: var(--r-pill); transition: width .1s linear; }
+.ma .rv-heat.hot span { color: #ff8a7a; }
+.ma .rv-heat.hot i { background: #ff3c32; }
+.ma .rv-bites { list-style: none; margin: 8px 0 0; padding: 0; text-align: left; font-size: 11px; line-height: 1.6; }
+.ma .rv-bites li::before { content: "▪ "; }
+.ma .rv-bites .k0 { color: var(--dim); }
+.ma .rv-bites .k1 { color: #ffd35a; }
+.ma .rv-bites .k2 { color: #38e1ff; }
+.ma .rv-libs.gas { border-color: #38e1ff; width: 230px; }
+.ma .rv-libs.gas small { color: #9ffcff; }
+.ma .rv-libs.gas .rv-spec { height: 56px; }
+.ma .rv-libs.gas .rv-spec i { background: linear-gradient(#c8f6ff, #38e1ff); }
