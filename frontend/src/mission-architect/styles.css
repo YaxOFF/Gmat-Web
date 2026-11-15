@@ -928,3 +928,179 @@
 .ma .rv-libs.gas .rv-spec i { background: linear-gradient(#c8f6ff, #38e1ff); }
 .ma .rv-libs.core { width: 260px; }
 .ma .rv-libs.core h4 { margin-top: 6px; }
+
+/* =====================================================================
+   Tema claro minimalista (PLAN-UI.md). Va al final a propósito: reemplaza lo anterior.
+   Gris cálido de fondo, tarjetas casi blancas muy redondeadas, una sola sombra suave,
+   botones píldora. Acentos: azul y rojo del logo NASA (solo el color, sin marca).
+   Las escenas 3D conservan su fondo espacial; lo que flota encima son tarjetas claras.
+   ===================================================================== */
+.ma {
+  --bg: #ecebe8; --panel: #f7f6f4; --panel2: #ffffff; --line: #e2e0dc; --line-2: #d3d1cc;
+  --text: #1a1a1a; --dim: #6f6d69;
+  --primary: #0b3d91; --primary-soft: #0b3d9114; --nasa-red: #fc3d21;
+  --lime: var(--primary); --cyan: #2d5fb8; --pink: var(--nasa-red);
+  --amber: #b7790f; --green: #2e8b57; --red: #d9301a;
+  --accent-hover: #0a3480; --accent-active: #082b6b; --focus: #0b3d9166;
+  --font: "Inter", system-ui, "Segoe UI", Roboto, sans-serif; --head: var(--font);
+  --r-sm: 10px; --r-md: 16px; --r-lg: 24px;
+  --shadow: 0 1px 2px #0000000a, 0 8px 24px #0000000d;
+  --glass: rgb(250 249 247 / .9);
+  background: var(--bg); color: var(--text);
+}
+.ma :is(h1, h2, h3, h4) { font-family: var(--font); text-transform: none; letter-spacing: -.01em; font-weight: 600; }
+.ma h2 small, .ma h3 small { font-family: var(--font); text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 400; color: var(--dim); }
+.ma :is(.meta2, .orbit-rows, .glance small, .journey li small, .journey li span, .flow li, .goals summary, .pick-icon, .tag2,
+  .how li, .how li span, .code, .seed, .topbar-right .hint, .dlg-name em, .checks2 .ic, .checks2 .mark, .orbit-explain b,
+  .steps li, .ds-option b, .ds-choice .ds-role, .pick b, .mode-head b, .journey li b, .dossier h4, .lab-result h4) {
+  font-family: var(--font); text-transform: none; letter-spacing: 0;
+}
+.ma :is(.lead, .sub, .spec, .part p, .choice .card p, .toggle, .ending p, .real, .verdict p, .checks2 small, .rv-core p,
+  .lab-intro p, .lab-result p, .lab-verdict p, .ds-choice p, .note, .hint) { color: var(--dim); }
+
+/* Botones: píldora azul sólida; secundario blanco con borde */
+.ma .btn { background: var(--primary); border: 1px solid var(--primary); color: #fff; font-family: var(--font); text-transform: none; letter-spacing: 0; font-weight: 600; }
+.ma .btn:hover:not(:disabled) { background: var(--accent-hover) !important; border-color: var(--accent-hover) !important; color: #fff !important; box-shadow: 0 4px 14px #0b3d9133; }
+.ma .btn:active:not(:disabled) { background: var(--accent-active) !important; border-color: var(--accent-active) !important; color: #fff !important; }
+.ma .btn.ghost { background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
+.ma .btn.ghost:hover:not(:disabled), .ma .btn.ghost:active:not(:disabled) { background: var(--panel2) !important; border-color: var(--line-2) !important; color: var(--text) !important; box-shadow: var(--shadow); }
+.ma .btn.warn { background: var(--nasa-red); border-color: var(--nasa-red); }
+.ma .btn.warn:hover:not(:disabled), .ma .btn.warn:active:not(:disabled) { background: #e2321a !important; border-color: #e2321a !important; box-shadow: 0 4px 14px #fc3d2133; }
+
+/* Barra superior: pasos como píldoras; el actual en blanco con sombra */
+.ma .topbar { background: var(--bg); border-bottom: 0; padding: 12px 20px; }
+.ma .brand { font-family: var(--font); letter-spacing: -.01em; font-weight: 700; }
+.ma .brand b { color: var(--primary); font-weight: 700; }
+.ma .steps { gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 4px; }
+.ma .steps li { border: 0 !important; border-radius: 999px; padding: 6px 12px; font-size: 12px; color: var(--dim); }
+.ma .steps li.cur { background: var(--panel2); color: var(--text); box-shadow: var(--shadow); font-weight: 600; }
+.ma .steps li.past { color: var(--primary); }
+.ma .steps li.jump:hover { color: var(--text); background: #ffffff99; }
+
+/* Tarjetas y superficies: borde fino + una sombra suave */
+.ma .card, .ma .pick, .ma .role, .ma .crew-card, .ma .roles-report div, .ma .checks2 li, .ma .ending, .ma .cards li,
+.ma .journey li, .ma .glance div, .ma .report-grid section, .ma .verdict, .ma .part, .ma .dossier, .ma .result,
+.ma .planet-pick .planet, .ma .lab-tool, .ma .lab-result, .ma .core-cache li, .ma .lab-verdict, .ma .ds-option {
+  background: var(--panel); border: 1px solid var(--line) !important; box-shadow: var(--shadow) !important; border-radius: var(--r-md);
+}
+.ma .card, .ma .report-grid section, .ma .ending, .ma .verdict { border-radius: var(--r-lg); }
+/* Barra vertical de color a la izquierda, como las tareas de la referencia */
+.ma .cards li, .ma .checks2 li, .ma .ending { border-left: 4px solid var(--primary) !important; }
+.ma .role, .ma .crew-card, .ma .roles-report div { border-left-width: 4px !important; }
+.ma .cards li.critical, .ma .checks2 li.fail, .ma .ending.end-launch_failure, .ma .ending.end-lost { border-left-color: var(--nasa-red) !important; }
+.ma .cards li.major, .ma .ending.end-bold { border-left-color: var(--amber) !important; }
+.ma .pick:hover, .ma .planet-pick .planet:hover, .ma .lab-tool:hover:not(:disabled), .ma .ds-option:hover:not(:disabled), .ma .part:hover { background: var(--panel2); border-color: var(--line-2) !important; }
+.ma .pick.sel, .ma .planet-pick .planet.sel, .ma .card.orbit.sel, .ma .card.mode.sel, .ma .part.on, .ma .lab-tool.done {
+  background: var(--panel2); border-color: var(--primary) !important; box-shadow: 0 0 0 3px var(--primary-soft), var(--shadow) !important;
+}
+.ma .tag2 { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+.ma .chip, .ma .tab, .ma .flow li, .ma .how li, .ma .report-stats span, .ma .revealed li { background: var(--panel2); border: 1px solid var(--line); color: var(--text); }
+.ma .chip.on, .ma .tab.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.ma .tab i { background: var(--nasa-red); color: #fff; border-radius: 999px; }
+.ma .flow li::before, .ma .how li span, .ma .setup2 .step h3 i, .ma .orbit-explain b, .ma .meta2 { color: var(--primary); }
+.ma .setup2 .step { border-top: 1px solid var(--line); }
+.ma input, .ma .role input, .ma .crew-card input { background: var(--panel2); border: 1px solid var(--line); color: var(--text); }
+.ma input:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ma :where(code), .ma kbd, .ma .rv-keys kbd, .ma .rv-hud kbd { background: var(--bg); color: var(--text); }
+.ma .verdict.ok { border-left: 4px solid var(--green) !important; } .ma .verdict.no { border-left: 4px solid var(--nasa-red) !important; }
+.ma .errors { background: #fdece9; border: 1px solid #f6c2b8; color: var(--red); border-radius: var(--r-md); }
+
+/* Barras y medidores sobre fondo claro */
+.ma .meter-bar, .ma .mini, .ma .rv-bar, .ma .rv-drill, .ma .rv-hold-bar, .ma .lab-gauge, .ma .lab-hbar i.used, .ma .passes i { background: var(--line); }
+.ma .meter-bar { transform: none; border-radius: 999px; height: 8px; }
+.ma .meter-bar i { border-radius: 999px; }
+.ma .dots i { color: var(--line-2); }
+.ma .dots.good { color: var(--primary); } .ma .dots.cost { color: var(--nasa-red); }
+
+/* Tablas */
+.ma .matrix, .ma .site-page .table-wrap, .ma .site-page .matrix thead th { background: var(--panel); }
+.ma .table-wrap { border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow); }
+.ma .matrix tbody tr:hover { background: var(--panel2); }
+.ma .matrix tr.sel { background: var(--primary-soft); outline: 0; box-shadow: inset 4px 0 0 var(--primary); }
+.ma .matrix td.none, .ma .dossier tr.none td:last-child { color: var(--dim); }
+
+/* Páginas con columnas (hangar, mapeo, laboratorio, Marte) */
+.ma .col, .ma .mars-side, .ma .lab-side { background: var(--bg); border-color: var(--line); }
+.ma .col.center { background: var(--bg); }
+.ma .ship-wrap { border: 1px solid var(--line); border-radius: var(--r-lg); }
+.ma .mapping .console { background: var(--panel2); color: var(--dim); border-top: 1px solid var(--line); }
+.ma .console .k-bad, .ma .causes li.k-bad { color: var(--red); }
+.ma .console .k-good { color: var(--green); }
+.ma .lab-intro { background: var(--bg); }
+.ma .lab-intro > div { background: var(--panel); border-radius: var(--r-lg); box-shadow: var(--shadow); }
+.ma .lab-eye { box-shadow: 0 0 0 4px var(--panel2), 0 0 0 5px var(--line); }
+.ma .napkin { box-shadow: var(--shadow); }
+.ma .patch { filter: drop-shadow(0 6px 14px #0000001f); }
+
+/* Visores 3D: tarjetas grandes redondeadas; las etiquetas encima son píldoras claras */
+.ma .orbit-stage, .ma .orbit-stage.big, .ma .map3d, .ma .ship3d, .ma .site-globe { border: 0; border-radius: var(--r-lg); box-shadow: var(--shadow); }
+.ma .orbit-stage .tagline, .ma .map3d .tagline, .ma .ship3d-tag, .ma .globe-legend {
+  background: var(--glass); color: var(--dim); padding: 4px 10px; border-radius: 999px; backdrop-filter: blur(8px);
+}
+.ma .ship3d-empty { color: #c9c7c2; }
+
+/* Todo lo que flota sobre escenas 3D: tarjeta clara translúcida */
+.ma .rv-hud, .ma .ds-hud, .ma .rv-keys, .ma .rv-goal, .ma .rv-compass, .ma .rv-map, .ma .rv-nav, .ma .rv-libs, .ma .rv-hold,
+.ma .rv-core, .ma .ds-panel, .ma .ds-panel.ds-choice, .ma .end-text, .ma .lab-tab, .ma .site-label, .ma .rv-lab, .ma .rv-toast, .ma .dlg-cap {
+  background: var(--glass); color: var(--text); border: 1px solid #ffffffb3; box-shadow: var(--shadow); backdrop-filter: blur(12px);
+}
+.ma .rv-hud, .ma .ds-hud, .ma .rv-keys, .ma .rv-map, .ma .rv-libs, .ma .rv-core, .ma .ds-panel, .ma .end-text, .ma .rv-hold, .ma .dlg-cap, .ma .rv-toast { border-radius: var(--r-lg); }
+.ma .rv-hud h3, .ma .ds-panel h3, .ma .rv-core h4, .ma .end-text h2 { font-family: var(--font); }
+.ma .ds-hud b, .ma .end-text h2, .ma .rv-libs p.pts { color: var(--primary); }
+.ma .rv-goal { border-left: 4px solid var(--primary); border-radius: var(--r-md); }
+.ma .rv-goal small, .ma .rv-map small, .ma .rv-nav b, .ma .rv-hold.scan small, .ma .rv-core small { color: var(--primary); }
+.ma .rv-hold, .ma .rv-libs { border-left: 4px solid var(--nasa-red); }
+.ma .rv-hold small, .ma .rv-libs small, .ma .rv-hold.laser small { color: var(--nasa-red); }
+.ma .rv-libs h4 em, .ma .rv-lab.next { background: var(--primary); color: #fff; border-color: var(--primary); }
+.ma .rv-lab, .ma .rv-lab.known, .ma .rv-lab.done { color: var(--dim); }
+.ma .rv-lab.scan { color: var(--amber); border-color: var(--amber); }
+.ma .rv-lab.target { color: var(--primary); border-color: var(--primary); }
+.ma .rv-core.sealed { border-color: var(--green); box-shadow: 0 0 0 3px #2e8b5726, var(--shadow); }
+.ma .ds-panel.ds-choice { border-top: 4px solid var(--c, var(--primary)); }
+.ma .site-label:hover, .ma .site-label.focus { background: var(--panel2); }
+.ma .site-label.sel { border-color: var(--nasa-red); box-shadow: 0 0 0 3px #fc3d2133; }
+.ma .lab-tab.sel { background: var(--panel2); border-color: var(--primary); }
+.ma .rv-final { background: rgb(236 235 232 / .92); backdrop-filter: blur(10px); }
+.ma .rv-final h2 { font-family: var(--font); color: var(--text); }
+.ma .rv-final.term { background: #0a0f1c; color: #e8ecf6; }
+.ma .edl-loading { background: var(--bg); }
+.ma .edl-loading b { color: var(--primary); }
+
+/* Diálogo: la escena sigue oscura; el texto va en una tarjeta clara abajo */
+.ma .dlg-box { background: var(--glass); color: var(--text); border: 1px solid #ffffffb3 !important; border-radius: var(--r-lg); box-shadow: 0 12px 40px #0000004d !important; backdrop-filter: blur(14px); padding: 22px 30px 18px 34px; }
+.ma .dlg-box::before { display: block; left: 16px; top: 22px; bottom: 22px; height: auto; width: 4px; border-radius: 4px; }
+.ma .dlg-name { background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 14px; box-shadow: var(--shadow); }
+.ma .dlg-name b { font-family: var(--font); text-transform: none; letter-spacing: 0; font-size: 15px; font-weight: 600; color: var(--text); }
+.ma .dlg-name em { color: var(--dim); font-size: 12px; font-weight: 400; }
+.ma .dlg-box .next { color: var(--primary); }
+.ma .dlg-cap { transform: none; font-weight: 500; border-left: 4px solid var(--nasa-red); }
+.ma .dlg-cap::before { content: none; }
+.ma .dlg-tele { background: var(--glass); color: var(--text); border: 1px solid #ffffffb3; border-left: 4px solid var(--green); border-radius: var(--r-lg); backdrop-filter: blur(14px); }
+.ma .dlg-title { background: rgb(236 235 232 / .9); backdrop-filter: blur(10px); }
+.ma .t-main { font-family: var(--font); font-weight: 700; letter-spacing: -.02em; color: var(--text); text-shadow: none; }
+.ma .t-sub { color: var(--dim); letter-spacing: .02em; text-transform: none; }
+.ma .dlg-count { color: #ffffffb3; }
+.ma .strip-bubble { background: var(--panel2); border: 1px solid var(--line); border-left: 4px solid var(--c); border-radius: var(--r-md); clip-path: none; }
+.ma .strip-bubble b { color: var(--text); text-transform: none; letter-spacing: 0; font-size: 13px; }
+.ma .strip-face { background: var(--bg); }
+
+/* Portada: escena espacial de fondo, texto en tarjeta clara a la izquierda */
+.ma .title-screen.home .home-shade { background: linear-gradient(90deg, #05070f80 0%, #05070f00 55%); }
+.ma .title-screen.home .title-inner { background: var(--glass); backdrop-filter: blur(16px); border: 1px solid #ffffffb3; border-radius: 28px;
+  box-shadow: 0 20px 60px #00000040; padding: 32px 34px; color: var(--text); }
+.ma .title-inner h1 { color: var(--text); font-weight: 700; letter-spacing: -.03em; }
+.ma .title-inner h1 b { color: var(--primary); font-weight: 700; }
+.ma .title-inner .kicker { font-family: var(--font); color: var(--nasa-red); letter-spacing: .04em; font-weight: 600; }
+.ma .tag { color: var(--text); font-family: var(--font); text-transform: none; letter-spacing: 0; }
+.ma .title-screen.home .planet-pick .planet { background: var(--panel2); backdrop-filter: none; }
+.ma .planet-pick b { font-family: var(--font); font-weight: 600; letter-spacing: 0; }
+@media (max-width: 760px) { .ma .title-screen.home .home-shade { background: #05070f66; } }
+.ma .title-screen.home .title-inner h1 { font-size: clamp(40px, 4.6vw, 68px); line-height: .95; }
+.ma .title-screen.home .title-inner { background: #f7f6f4f5; }
+.ma :is(.tab, .meter-top, .card-head span, .res-grid small, .matrix thead th, .strip-bubble b, .rank small) { text-transform: none; letter-spacing: 0; }
+.ma .tab { font-size: 12px; padding: 5px 11px; }
+.ma .checks li, .ma .deck li { background: var(--panel2); border-radius: var(--r-sm); box-shadow: var(--shadow); }
+/* Rótulos grandes sobre la escena: rectos, sin inclinar */
+.ma .dlg-sfx span { transform: none; animation: sfx-in .35s cubic-bezier(.2, .9, .3, 1); font-weight: 700; letter-spacing: -.03em; color: #fff; text-shadow: 0 6px 30px #0009; }
+.ma .dlg-sfx.good span { color: #fff; } .ma .dlg-sfx.bad span { color: var(--nasa-red); }
+@keyframes sfx-in { from { transform: scale(1.3); opacity: 0; } to { transform: none; opacity: 1; } }

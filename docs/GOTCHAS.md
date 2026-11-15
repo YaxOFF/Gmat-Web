@@ -1,4 +1,4 @@
-<!-- fuente: backend/app/engine, backend/app/script, backend/app/main.py, frontend/src/store.ts, frontend/src/model/refs.ts, frontend/src/resources, dev.ps1 | rev: 7b35a0e -->
+<!-- fuente: backend/app/engine, backend/app/script, backend/app/main.py, frontend/src/store.ts, frontend/src/model/refs.ts, frontend/src/resources, dev.ps1 | rev: e76b7b9 -->
 # Gotchas
 
 Read from the code and checked with the real engine where it says "(verified)".
@@ -76,6 +76,7 @@ Read from the code and checked with the real engine where it says "(verified)".
 - **`issues` only locates lines in the resource zone** (`Obj.Field = ...` or `Create`). An error in the sequence shows up in the indicator and in Monaco, not in the Mission tree. Translation is by patterns (`es.issues.known`); the rest is shown in English, just as GMAT writes it.
 - **Draft (`gmatweb.draft` in localStorage).** It is saved 0.5 s after each change and restored when the page loads, with a notice in the console. New (empty text) deletes it. There is one per browser: two tabs overwrite each other. Without localStorage there is no draft and no error.
 - **Global shortcuts** (`App.tsx`) in the capture phase: Ctrl+S, F5, Ctrl+K. Without capture, Monaco keeps Ctrl+K (chord) and the browser keeps Ctrl+S and F5. F5 no longer reloads the page (Ctrl+R does).
+- **The game covers the workspace and makes it `inert`** (`App.tsx`, `busy = game === 'on'`): toolbar, trees and editor get no keys or focus, the guided tour does not open, and the focused element is blurred. To test the editor in a browser, close the game first. `'hidden'` keeps the game state while the workspace is visible.
 - **Running and validating use `doc.text`,** not the model; both clear the console (maximum 5000 lines).
 - **`parseError` almost never appears:** the parser does not reject scripts; only 413 or a network failure. On error the last good model remains.
 - **The model lags ~400 ms behind the text** (debounce). Exception: `loadText('')` (Nuevo) clears the model instantly.
