@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { Crater } from '../data/types'
 import { clamp, mulberry32, type Rng } from '../engine/rng'
+import { loadCuriosity, meshHeight, type CuriosityRig, type HeightFn } from './curiosity'
 import { at, mountStage, stars } from './stage'
 
 export type RoverEnding = 'return' | 'last' | 'frozen' | 'dead'
@@ -16,7 +17,9 @@ export interface RoverStart {
 }
 export const DEFAULT_ROVER: RoverStart = { batteryPct: 100, sciMul: 1, integrity: 100, batteryKWh: 6, mesh: false, deep: true, massSpec: true, autonav: true, canExtend: true }
 
-const SIZE = 240, HALF = SIZE / 2, RIM = 92
+const SIZE = 240, HALF = SIZE / 2, RIM = 92, SEG = 200
+const REACH = 1.7 // m del centro del Curiosity a su rueda más lejana: las rocas chocan ahí, no dentro del chasis
+const CLIMB = 0.5 // m: una roca que sobresale hasta aquí se pasa por encima (el rocker-bogie la trepa); más alta, es obstáculo
 const LIGHT_Z = -58 // al sur de esta línea el borde recibe sol; al norte, sombra permanente
 const STEEP: Record<Crater['terrain'], number> = { soft: 0.6, rocky: 1, steep: 1.6, 'very steep': 2.2 }
 const ROCKS: Record<Crater['terrain'], number> = { soft: 50, rocky: 260, steep: 130, 'very steep': 170 }
@@ -112,7 +115,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
     earth.position.set(-500, 40, -900); scene.add(earth)
 
     // Terreno: borde iluminado al sur, piso en sombra; velo azul = hidrógeno que vio el orbitador.
-    const geo = new THREE.PlaneGeometry(SIZE, SIZE, 200, 200); geo.rotateX(-Math.PI / 2)
+    const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG); geo.rotateX(-Math.PI / 2)
     const pos = geo.attributes.position, col = new Float32Array(pos.count * 3)
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), z = pos.getZ(i); pos.setY(i, height(x, z))
@@ -123,6 +126,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals()
     const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }))
     ground.receiveShadow = true; scene.add(ground)
+    const floor = meshHeight(geo, SIZE, SEG) // la malla que se ve, no el ruido analítico
     // Muro invisible sobre la línea de sombra: con el Sol a 4° proyecta la sombra permanente sobre el piso.
     const wall = new THREE.Mesh(new THREE.BoxGeometry(320, 16, 0.5), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }))
     wall.position.set(0, 9, LIGHT_Z - 1); wall.castShadow = true; scene.add(wall)
@@ -131,16 +135,27 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
     scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(edge), new THREE.LineDashedMaterial({ color: 0xffb020, dashSize: 1.2, gapSize: 0.8 })).computeLineDistances())
 
     // Rocas.
-    const rockN = ROCKS[crater.terrain], rocks: { x: number; z: number; r: number }[] = []
+    const rockN = ROCKS[crater.terrain], rocks: { x: number; z: number; r: number; h: number }[] = []
     const rockMesh = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0x77777f, roughness: 1, flatShading: true }), rockN)
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3()
     for (let i = 0; i < rockN; i++) {
       const a = rng() * Math.PI * 2, r = 8 + rng() * (RIM - 12), x = Math.cos(a) * r, z = Math.sin(a) * r
       if (Math.hypot(x, z + 76) < 8) continue // despeja la zona de aterrizaje
       const s = 0.3 + Math.pow(rng(), 3) * 2.6
-      rocks.push({ x, z, r: s })
       q.setFromEuler(new THREE.Euler(rng() * 3, rng() * 3, rng() * 3))
-      rockMesh.setMatrixAt(i, m4.compose(v.set(x, height(x, z) + s * 0.3, z), q, new THREE.Vector3(s, s * (0.6 + rng() * 0.5), s)))
+      const sy = s * (0.6 + rng() * 0.5)
+      rocks.push({ x, z, r: s, h: s * 0.3 + sy * 0.85 }) // h: cuánto sobresale del suelo
+      rockMesh.setMatrixAt(i, m4.compose(v.set(x, height(x, z) + s * 0.3, z), q, new THREE.Vector3(s, sy, s)))
+    }
+    // Lo que pisan las ruedas: el suelo más el lomo de las rocas chicas, redondeado con el ancho de la rueda.
+    const pebbles = rocks.filter((r) => r.h <= CLIMB), blocks = rocks.filter((r) => r.h > CLIMB)
+    const surface: HeightFn = (px, pz) => {
+      let bump = 0
+      for (const r of pebbles) {
+        const reach = r.r * 0.85 + 0.3, dx = px - r.x, dz = pz - r.z, d2 = dx * dx + dz * dz
+        if (d2 < reach * reach) bump = Math.max(bump, r.h * 0.5 * (1 + Math.cos((Math.PI * Math.sqrt(d2)) / reach)))
+      }
+      return floor(px, pz) + bump
     }
     rockMesh.castShadow = true; rockMesh.receiveShadow = true; scene.add(rockMesh)
 
@@ -154,22 +169,25 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
     }
     lander.position.set(9, height(9, -70), -70); scene.add(lander)
 
-    const rover = new THREE.Group(), metal = new THREE.MeshStandardMaterial({ color: 0xdedfe6, metalness: 0.5, roughness: 0.4 })
-    rover.add(at(new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 2.4), metal), 0, 0.55, 0))
-    rover.add(at(new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.05, 1.6), new THREE.MeshStandardMaterial({ color: 0x1b2f8f, metalness: 0.7, roughness: 0.25 })), 0, 0.85, 0))
-    rover.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.1), metal), 0, 1.3, 0.8))
-    rover.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 0.25), new THREE.MeshStandardMaterial({ color: 0x222222 })), 0, 1.9, 0.85))
+    // Rover: caja provisional hasta que carga el Curiosity articulado (public/models/curiosity_rover.glb).
+    const rover = new THREE.Group(), proxy = new THREE.Group(), metal = new THREE.MeshStandardMaterial({ color: 0xdedfe6, metalness: 0.5, roughness: 0.4 })
+    proxy.add(at(new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 2.4), metal), 0, 0.55, 0))
+    proxy.add(at(new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.05, 1.6), new THREE.MeshStandardMaterial({ color: 0x1b2f8f, metalness: 0.7, roughness: 0.25 })), 0, 0.85, 0))
+    proxy.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.1), metal), 0, 1.3, 0.8))
+    proxy.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 0.25), new THREE.MeshStandardMaterial({ color: 0x222222 })), 0, 1.9, 0.85))
     const wheels: THREE.Mesh[] = []
     for (const sx of [-1, 1]) for (const sz of [-0.9, 0, 0.9]) {
       const w = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.3, 14), new THREE.MeshStandardMaterial({ color: 0x333338 }))
-      w.rotation.z = Math.PI / 2; w.position.set(sx * 0.95, 0.32, sz); rover.add(w); wheels.push(w)
+      w.rotation.z = Math.PI / 2; w.position.set(sx * 0.95, 0.32, sz); proxy.add(w); wheels.push(w)
     }
     const drill = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.02, 0.8), new THREE.MeshStandardMaterial({ color: 0xff3d81 }))
-    drill.position.set(0, 0.2, -1.1); rover.add(drill)
+    drill.position.set(0, 0.2, -1.1); proxy.add(drill); rover.add(proxy)
     const lamp = new THREE.SpotLight(0xe8f4ff, 60, 45, 0.55, 0.5, 1.4); lamp.position.set(0, 1.9, 1); lamp.castShadow = true
     lamp.target.position.set(0, -1, 12); rover.add(lamp, lamp.target)
     rover.traverse((o) => { o.castShadow = true })
     scene.add(rover)
+    let rig: CuriosityRig | null = null, gone = false
+    loadCuriosity().then((r) => { if (gone) return; rig = r; rover.remove(proxy); rover.add(r.model) }).catch((err) => console.error(err))
 
     // Orbitador cruzando el cielo durante cada ventana de relevo.
     const orb = new THREE.Mesh(new THREE.SphereGeometry(3, 12, 8), new THREE.MeshBasicMaterial({ color: 0xd7ff3a }))
@@ -178,7 +196,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
     let beacon: THREE.Mesh | null = null
 
     let x = 0, z = -74, yaw = 0, speed = 0, bat = start.batteryPct, temp = 20, heaters = true, depth = 1
-    let drillT = 0, jamT = 0, top = false, toast = '', toastT = 0, hudT = 0, beepT = 0, t = 0
+    let drillT = 0, jamT = 0, top = false, steer = 0, toast = '', toastT = 0, hudT = 0, beepT = 0, t = 0
     let paused = false, trapped = false, entered = false, anomaly = false, link = false
     let integ = start.integrity, stuck = false, freeT = 0
     const kB = 6 / start.batteryKWh // una batería de 3 kWh se vacía (y se llena) el doble de rápido en %
@@ -284,6 +302,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
         const teleop = !start.autonav && !link
         const vmax = integ <= 0 || stuck ? 0 : integ < 30 || teleop ? 2.5 : 6
         if (freeT > 0) freeT -= dt
+        steer = turn
         if (drillT > 0 || vmax === 0) speed *= 0.8
         else {
           speed += (thr * 4.5 - uphill * 6 * Math.sign(speed || thr)) * dt
@@ -292,7 +311,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
           yaw += turn * dt * 1.6 * (speed >= 0 ? 1 : -1) * clamp(Math.abs(speed) / 2 + 0.3, 0, 1)
         }
         let nx = x + fx * speed * dt, nz = z + fz * speed * dt
-        if (rocks.some((r) => Math.hypot(r.x - nx, r.z - nz) < r.r + 1.1)) {
+        if (blocks.some((r) => Math.hypot(r.x - nx, r.z - nz) < r.r + (rig ? REACH : 1.1))) {
           if (Math.abs(speed) > 2) {
             const dmg = start.mesh ? 5 : 10
             integ = Math.max(0, integ - dmg); bat -= 2 * kB
@@ -364,7 +383,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
         else if (trapped && bat <= 8) { paused = true; setFinal({ kind: 'choice' }) }
         else if (bat <= 0) { bat = 0; lose(); terminal('dead', ['[BUSCADOR] BATTERY 0%.', '[BUSCADOR] ENTERING SURVIVAL MODE...', '', '— signal lost —']) }
 
-        for (const w of wheels) w.rotation.x += (speed * dt) / 0.32
+        if (!rig) for (const w of wheels) w.rotation.x += (speed * dt) / 0.32
         sig = clamp(signalAt(x, z) + (rng() - 0.5) * 0.3 * (1 - quality), 0, 1)
         beepT -= dt
         if (beepT <= 0 && sig > 0.05) { beep(500 + sig * 900); beepT = 1.2 - sig * 1.1 }
@@ -382,15 +401,21 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
         }
       }
       if (beacon) (beacon.material as THREE.MeshBasicMaterial).opacity = 0.18 + Math.sin(performance.now() / 300) * 0.08
-      nrm.set(-gx, 1, -gz).normalize()
-      rover.position.set(x, height(x, z), z)
-      rover.quaternion.setFromUnitVectors(up3, nrm).multiply(qy.setFromAxisAngle(up3, yaw))
+      if (rig) {
+        // Suspensión procedural: cada rueda busca el suelo y el chasis queda en el promedio de los rockers.
+        rig.update(dt, rover, x, z, yaw, paused ? 0 : speed, paused ? 0 : steer, surface)
+        rig.drill(dt, drillT > 0)
+      } else {
+        nrm.set(-gx, 1, -gz).normalize()
+        rover.position.set(x, height(x, z), z)
+        rover.quaternion.setFromUnitVectors(up3, nrm).multiply(qy.setFromAxisAngle(up3, yaw))
+      }
       if (top) off.set(0, 45, -0.1); else off.set(-Math.sin(yaw) * 10, 5.5, -Math.cos(yaw) * 10)
       camT.set(x, height(x, z), z)
       camera.position.lerp(off.add(camT), 1 - Math.exp(-dt * 4))
       camera.lookAt(camT.x, camT.y + 1.2, camT.z)
     }
-    return Object.assign(tick, { cleanup: () => { removeEventListener('keydown', down); removeEventListener('keyup', up); void audio?.close() } })
+    return Object.assign(tick, { cleanup: () => { gone = true; removeEventListener('keydown', down); removeEventListener('keyup', up); void audio?.close() } })
   }), [crater, quality, seed, orbitId, start])
 
   const h = hud
