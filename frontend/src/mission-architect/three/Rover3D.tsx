@@ -7,7 +7,7 @@ import { buildLander } from './spacecraft'
 import { loadCuriosity, meshHeight, type CuriosityRig, type HeightFn } from './curiosity'
 import { at, mountStage, stars } from './stage'
 import { MOON, type RoverSite, type World } from './world'
-import { DUST, dust, outcropGeometry, skyDome, triplanarRock } from './mars'
+import { DUST, dust, dustWall, footprint, outcropGeometry, skyDome, triplanarRock } from './mars'
 
 export type RoverEnding = 'return' | 'last' | 'frozen' | 'dead'
 export interface RoverResult {
@@ -110,8 +110,18 @@ function loadDem(dir: string, id: string): Promise<Dem | null> {
 }
 // Tormentas de polvo (world.storms): calma mínima, promedio entre tormentas, aviso y duración (s); descarga (%/s) y
 // fracción que queda al resguardo de un afloramiento.
-const STORM = { calm: 25, every: 35, warn: 8, dur: [20, 32], drain: 1.1, shelter: 0.15 }
+const STORM = { calm: 25, every: 35, warn: 15, dur: [20, 32], drain: 1.1, shelter: 0.15 }
 const FORCE_STORM = new URLSearchParams(location.search).has('storm') // ?storm: la primera tormenta avisa a los 3 s (prueba)
+/** Obstáculo: círculo de radio r, o la huella real `fp` (afloramientos: alargados, con lóbulos y girados). */
+type Obstacle = { x: number; z: number; r: number; h: number; fp?: (dx: number, dz: number) => number }
+const inside = (o: Obstacle, px: number, pz: number, reach: number) => {
+  const dx = px - o.x, dz = pz - o.z
+  return Math.hypot(dx, dz) < (o.fp ? o.fp(dx, dz) : o.r) + reach
+}
+/** Rumbo (° desde el norte, horario) de un vector en el plano: norte = −z (fila 0 del DEM), este = +x. */
+const bearing = (vx: number, vz: number) => ((Math.atan2(vx, -vz) * 180) / Math.PI + 360) % 360
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+const dirName = (b: number) => COMPASS[Math.round(b / 45) % 8]
 const LIGHT_Z = -58 // al sur de esta línea el borde recibe sol; al norte, sombra permanente
 const STEEP: Record<Crater['terrain'], number> = { soft: 0.6, rocky: 1, steep: 1.6, 'very steep': 2.2 }
 const ROCKS: Record<Crater['terrain'], number> = { soft: 50, rocky: 260, steep: 130, 'very steep': 170 }
@@ -157,7 +167,7 @@ function demHeight(dem: Dem, n: (x: number, y: number) => number, size: number) 
 interface Hud {
   bat: number; need: number; temp: number; heaters: boolean; sig: number; speed: number; slope: number
   samples: number; stored: number; sent: number; drill: number; depth: number; jam: number
-  integ: number; stuck: boolean; teleop: boolean; extended: boolean; goal: string; storm: string; wind: number
+  integ: number; stuck: boolean; teleop: boolean; extended: boolean; goal: string; storm: string; heading: number; from: number
   relay: number; link: boolean; spike: number; shadow: boolean; trapped: boolean; canReturn: boolean; toast: string
 }
 type Final = null | { kind: 'choice' } | { kind: 'terminal'; ending: RoverEnding; lines: string[] }
@@ -255,7 +265,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     if (world.shadow) scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(edge), new THREE.LineDashedMaterial({ color: 0xffb020, dashSize: 1.2, gapSize: 0.8 })).computeLineDistances())
 
     // Rocas: las bajas se trepan; las altas chocan y frenan al rover.
-    const rockN = Math.round(ROCKS[crater.terrain] * world.scale ** 2), rocks: { x: number; z: number; r: number; h: number }[] = []
+    const rockN = Math.round(ROCKS[crater.terrain] * world.scale ** 2), rocks: Obstacle[] = []
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), v0 = new THREE.Vector3(), tint = new THREE.Color()
     // Roca irregular: icosaedro subdividido deformado con el mismo ruido; tono medio del regolito (sin gain).
     const rockGeo = mergeVertices(new THREE.IcosahedronGeometry(1, 2).deleteAttribute('normal').deleteAttribute('uv'))
@@ -273,13 +283,14 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       const s = 0.3 + Math.pow(rng(), 3) * 2.6
       q.setFromEuler(new THREE.Euler((rng() - 0.5) * 0.6, rng() * 6.3, (rng() - 0.5) * 0.6)) // apoyada: poco ladeo
       const sy = s * (0.5 + rng() * 0.4), bury = 0.25 + rng() * 0.15 // semienterrada
-      rocks.push({ x, z, r: s, h: sy * (0.9 - bury) }) // h: cuánto sobresale del suelo
-      rockMesh.setMatrixAt(i, m4.compose(v.set(x, height(x, z) - sy * bury, z), q, new THREE.Vector3(s * (0.8 + rng() * 0.4), sy, s * (0.8 + rng() * 0.4))))
+      const kx = 0.8 + rng() * 0.4, kz = 0.8 + rng() * 0.4
+      rocks.push({ x, z, r: s * Math.max(kx, kz) * 0.95, h: sy * (0.9 - bury) }) // r: el semieje mayor; h: cuánto sobresale
+      rockMesh.setMatrixAt(i, m4.compose(v.set(x, height(x, z) - sy * bury, z), q, new THREE.Vector3(s * kx, sy, s * kz)))
       rockMesh.setColorAt(i, tint.setScalar(0.85 + rng() * 0.25))
     }
     // Afloramientos (Marte): rocas claras de 4-9 m de alto que frenan al rover y lo resguardan de las tormentas.
     // Cada una tiene su propia forma, sacada del rng sembrado: la misma semilla da las mismas estructuras.
-    const outcrops: { x: number; z: number; r: number; h: number }[] = []
+    const outcrops: Obstacle[] = []
     const outMat = world.storms ? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }) : null
     if (outMat) {
       const want = Math.round(12 * world.scale ** 2)
@@ -288,13 +299,13 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         // Proporciones de la semilla: agujas altas y angostas o lomos anchos. Alto visible 4-9, semiejes ~3-17.
         const sy = 4 + rng() * 5, sx = sy * (0.7 + rng() * 1.2), sz = sx * (0.5 + rng() * 0.6)
         if (Math.hypot(x, z + 74) < 22 || outcrops.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + Math.min(sx, sz) + 10)) continue
-        const o = { x, z, r: Math.min(sx, sz) * 0.85, h: sy }
-        outcrops.push(o); rocks.push(o) // h > CLIMB: entra a `blocks`
         // La geometría va de y = -0.3 a 0.7: escalada a sy/0.7 sobre el punto más bajo del suelo, la cima queda a sy.
         const g0 = Math.min(height(x, z), height(x + sx, z), height(x - sx, z), height(x, z + sz), height(x, z - sz))
         const mesh = new THREE.Mesh(outcropGeometry(n, rng), outMat)
         mesh.position.set(x, g0, z); mesh.rotation.set((rng() - 0.5) * 0.24, rng() * 6.3, (rng() - 0.5) * 0.24); mesh.scale.set(sx, sy / 0.7, sz)
         mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh)
+        const o: Obstacle = { x, z, r: Math.min(sx, sz) * 0.85, h: sy, fp: footprint(mesh, height) } // choque y resguardo con su forma real
+        outcrops.push(o); rocks.push(o) // h > CLIMB: entra a `blocks`
       }
     }
     if (world.rockTex) triplanarRock(outMat ? [rockMat, outMat] : [rockMat], `${import.meta.env.BASE_URL}${world.rockTex}`, renderer.capabilities.getMaxAnisotropy())
@@ -357,8 +368,10 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     let integ = start.integrity, stuck = false, freeT = 0
     // Tormenta: calma → aviso → activa → calma. `storm` (0..1) suaviza la fase para cielo, polvo, niebla y Sol.
     let phase: 'calm' | 'warn' | 'on' = 'calm', stormT = FORCE_STORM ? 3 : STORM.calm, storm = 0, wind = 0, sheltered = false, forceNext = FORCE_STORM
-    const dustFx = world.storms ? dust() : null
-    if (dustFx) scene.add(dustFx.points)
+    let endless = false // tormenta de prueba: dura hasta apagar el interruptor
+    const dustFx = world.storms ? dust() : null, wallFx = world.storms ? dustWall() : null
+    if (dustFx && wallFx) scene.add(dustFx.points, wallFx.wall)
+    const fromX = () => -Math.cos(wind), fromZ = () => -Math.sin(wind) // hacia donde está la tormenta (contra el viento)
     const fogBase = new THREE.Color(world.sky ?? 0), fogDust = new THREE.Color(DUST), sunI = sun.intensity
     const kB = 6 / start.batteryKWh // una batería de 3 kWh se vacía (y se llena) el doble de rápido en %
     const stored: { pct: number; conf: boolean }[] = [] // muestras aún sin bajar a la Tierra
@@ -430,9 +443,9 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     api.current = {
       // shortcut: control de prueba para forzar/terminar la tormenta; quitarlo cuando las tormentas estén balanceadas.
       storm: (on) => {
-        phase = on ? 'on' : 'calm'; stormT = on ? Infinity : STORM.calm
-        if (on) wind = rng() * Math.PI * 2
-        say(on ? 'Test: dust storm started (lasts until you turn it off).' : 'Test: dust storm stopped.')
+        endless = on
+        if (on) { forceNext = true; stormT = 0; phase = 'calm' } // el próximo tick arranca el aviso completo
+        else { phase = 'calm'; stormT = STORM.calm; say('Test: dust storm stopped.') }
       },
       lastDrill: () => {
         const { pct, dep } = sampleAt(DEPTHS[depth].mul)
@@ -479,14 +492,23 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
           yaw += turn * dt * 1.6 * (speed >= 0 ? 1 : -1) * clamp(Math.abs(speed) / 2 + 0.3, 0, 1)
         }
         let nx = x + fx * speed * dt, nz = z + fz * speed * dt
-        if (blocks.some((r) => Math.hypot(r.x - nx, r.z - nz) < r.r + (rig ? REACH : 1.1))) {
-          if (Math.abs(speed) > 2) {
+        const reach = rig ? REACH : 1.1
+        // Si ya estaba encimado (p. ej. tras girar), se permite alejarse: no queda atrapado.
+        const hit = blocks.find((o) => inside(o, nx, nz, reach) && !(inside(o, x, z, reach) && Math.hypot(nx - o.x, nz - o.z) > Math.hypot(x - o.x, z - o.z)))
+        if (hit) {
+          let ex = nx - hit.x, ez = nz - hit.z; const el = Math.hypot(ex, ez) || 1; ex /= el; ez /= el // normal hacia afuera
+          const mx = nx - x, mz = nz - z, ml = Math.hypot(mx, mz) || 1, into = mx * ex + mz * ez
+          const head = -into / ml // 1 = de frente
+          if (Math.abs(speed) > 2 && head > 0.7) {
             const dmg = start.mesh ? 5 : 10
             integ = Math.max(0, integ - dmg); bat -= 2 * kB
             say(integ <= 0 ? 'Wheels destroyed. Buscador is immobilized, but it can still drill here.'
               : `Bump! Wheels −${dmg}% (now ${integ}%).` + (integ < 30 ? ' Below 30%: slow driving only.' : ''))
           }
-          speed *= -0.3; nx = x; nz = z
+          // Roce en ángulo: se quita la parte que entra a la roca y el rover se desliza por el costado.
+          const sx2 = x + mx - ex * Math.min(into, 0), sz2 = z + mz - ez * Math.min(into, 0)
+          if (head <= 0.7 && !blocks.some((o) => inside(o, sx2, sz2, reach))) { nx = sx2; nz = sz2; speed *= 1 - dt * 2 }
+          else { speed *= -0.3; nx = x; nz = z }
         }
         if (Math.hypot(nx, nz) > half - 8 || (slope > 34 && uphill * speed > 0)) { say('Too steep — the wheels slip.'); speed *= -0.2; nx = x; nz = z }
         x = nx; z = nz
@@ -504,15 +526,17 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
           stormT -= dt
           if (phase === 'calm' && stormT <= 0 && (forceNext || rng() < dt / STORM.every)) {
             forceNext = false; phase = 'warn'; stormT = STORM.warn; wind = rng() * Math.PI * 2
-            say(`DUST STORM in ${STORM.warn} s! Put a rock outcrop between you and the wind (arrow in the panel).`, 6)
-          } else if (phase === 'warn' && stormT <= 0) { phase = 'on'; stormT = STORM.dur[0] + rng() * (STORM.dur[1] - STORM.dur[0]) }
+            say(`ALERT: a dust storm is approaching from the ${dirName(bearing(fromX(), fromZ()))}, arriving in ${STORM.warn} s. Watch the compass and hide behind a rock.`, 7)
+          } else if (phase === 'warn' && stormT <= 0) { phase = 'on'; stormT = endless ? Infinity : STORM.dur[0] + rng() * (STORM.dur[1] - STORM.dur[0]) }
           else if (phase === 'on' && stormT <= 0) { phase = 'calm'; stormT = STORM.calm; say('The storm has passed. The solar panels charge again.') }
           storm += ((phase === 'on' ? 1 : 0) - storm) * (1 - Math.exp(-dt * 0.8))
-          // Resguardo: un afloramiento a barlovento, con el rover dentro de su "sombra" de viento.
-          const ux = -Math.cos(wind), uz = -Math.sin(wind)
+          // Resguardo: hay roca hacia donde viene la tormenta, a menos de 2.5 × su alto (un rayo de 1 m en 1 m con su huella).
+          const ux = fromX(), uz = fromZ()
           sheltered = outcrops.some((o) => {
-            const dx = o.x - x, dz = o.z - z, along = dx * ux + dz * uz
-            return along > 0 && along < o.r + o.h * 2.5 && Math.abs(dx * uz - dz * ux) < o.r * 0.9
+            const L = o.h * 2.5
+            if (Math.hypot(o.x - x, o.z - z) > L + 25) return false
+            for (let d = 1; d <= L; d++) if (inside(o, x + ux * d, z + uz * d, 0)) return true
+            return false
           })
           if (phase === 'on') bat -= dt * STORM.drain * (sheltered ? STORM.shelter : 1) * kB
         }
@@ -575,8 +599,9 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         if (hudT <= 0) {
           hudT = 0.1
           const spike = deposits.find((d) => d.spike && !d.taken)
-          const goal = phase === 'warn' ? `Dust storm in ${Math.ceil(stormT)} s! Get behind a rock outcrop: the wind blows the way the arrow points.`
-            : phase === 'on' ? (sheltered ? 'Sheltered from the storm. Stay here until it passes.' : 'DUST STORM! You are exposed and losing power: hide on the downwind side of an outcrop.')
+          const fromDir = dirName(bearing(fromX(), fromZ()))
+          const goal = phase === 'warn' ? `DUST STORM approaching from the ${fromDir} in ${Math.ceil(stormT)} s: put a rock between you and the storm marker on the compass.`
+            : phase === 'on' ? (sheltered ? `Sheltered from the storm (${fromDir}). Stay here until it passes.` : `DUST STORM from the ${fromDir}! You are exposed: get behind a rock, on the side away from the compass marker.`)
             : trapped ? 'No way back to the light. Make the remaining power count.'
             : stuck ? 'Stuck! Press R to rock the wheels free.'
             : !world.shadow ? (sig > 0.2 ? 'Strong signal! Stop (S) and press SPACE to drill here.' : 'Free drive: follow the neutron signal and drill anywhere.')
@@ -595,8 +620,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
             canReturn: !dark && entered && st.wet > 0, toast: toastT > 0 ? toast : '',
             integ, stuck, teleop: !start.autonav && !link, extended: st.extended,
             storm: !world.storms ? '' : phase === 'warn' ? `in ${Math.ceil(stormT)} s` : phase === 'on' ? (sheltered ? 'sheltered' : 'EXPOSED') : 'calm',
-            // Viento relativo a la cámara (detrás del rover): 0° = hacia adelante en pantalla.
-            wind: (Math.atan2(-Math.cos(wind) * Math.cos(yaw) + Math.sin(wind) * Math.sin(yaw), Math.cos(wind) * Math.sin(yaw) + Math.sin(wind) * Math.cos(yaw)) * 180) / Math.PI,
+            heading: bearing(Math.sin(yaw), Math.cos(yaw)), from: bearing(fromX(), fromZ()), // IMU (giroscopio) y origen de la tormenta
           })
         }
       }
@@ -620,6 +644,11 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         const fog = scene.fog as THREE.FogExp2
         fog.density = 0.0045 + storm * 0.03; fog.color.copy(fogBase).lerp(fogDust, storm)
         sky.material.uniforms.uStorm.value = storm; sun.intensity = sunI * (1 - 0.65 * storm)
+        // Aviso: el frente de polvo se acerca desde donde viene la tormenta y el cielo se ensucia de ese lado.
+        const warnP = phase === 'warn' ? 1 - stormT / STORM.warn : phase === 'on' ? 1 : 0
+        wallFx?.update(rover.position, fromX(), fromZ(), warnP, storm)
+        sky.material.uniforms.uWarn.value = phase === 'calm' ? 0 : warnP
+        sky.material.uniforms.uFrom.value.set(fromX(), fromZ())
       }
     }
     return Object.assign(tick, { cleanup: () => { gone = true; removeEventListener('keydown', down); removeEventListener('keyup', up); void audio?.close() } })
@@ -642,7 +671,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
           <div className="rv-row"><span>Needed to return</span><b className={h.trapped ? 'bad' : ''}>{h.trapped ? 'NO RETURN' : `${h.need.toFixed(0)}%`}</b></div>
           <div className="rv-row"><span>Temperature · heaters <kbd>H</kbd></span><b className={h.temp < -10 ? 'bad' : ''}>{h.temp.toFixed(0)}°C · {h.heaters ? 'on' : 'off'}</b></div>
           <div className="rv-row"><span>Wheels</span><b className={h.integ < 30 ? 'bad' : ''}>{h.stuck ? 'STUCK: press R' : `${h.integ}%`}{h.teleop ? ' · teleop (slow)' : ''}</b></div>
-          {h.storm && <div className="rv-row"><span>Dust storm · wind <b className="rv-wind" style={{ transform: `rotate(${h.wind}deg)` }}>↑</b></span><b className={h.storm === 'EXPOSED' ? 'bad' : h.storm === 'sheltered' ? 'good' : ''}>{h.storm}</b></div>}
+          {h.storm && <div className="rv-row"><span>Dust storm · from {h.storm !== 'calm' && <b className="rv-wind" style={{ transform: `rotate(${h.from - h.heading}deg)` }} title="Where the storm comes from, relative to the rover">↑</b>}</span><b className={h.storm === 'EXPOSED' ? 'bad' : h.storm === 'sheltered' ? 'good' : ''}>{h.storm}</b></div>}
           <div className="rv-row"><span>Neutron signal (H)</span><b>{Math.round(h.sig * 100)}</b></div>
           <div className="rv-bar sig"><i style={{ width: `${h.sig * 100}%` }} /></div>
           <div className="rv-row"><span>Drill depth <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd>{start.deep && <kbd>4</kbd>}</span><b>{h.jam > 0 ? `JAMMED ${h.jam.toFixed(0)}s` : DEPTHS[h.depth].label}</b></div>
@@ -660,12 +689,13 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         {/* shortcut: interruptor temporal para probar tormentas; quitarlo junto con api.storm. */}
         {world.storms && h && (
           <label className="rv-test">
-            <input type="checkbox" checked={h.storm === 'EXPOSED' || h.storm === 'sheltered'}
+            <input type="checkbox" checked={h.storm !== 'calm'}
               onChange={(e) => { api.current?.storm(e.target.checked); e.target.blur() }} /> Dust storm (test)
           </label>
         )}
       </div>
       {h && !final && <div className="rv-goal" role="status"><small>WHAT TO DO</small>{h.goal}</div>}
+      {h && !final && world.storms && <Compass heading={h.heading} storm={h.storm !== 'calm' ? h.from : null} />}
       {h?.toast && !final && <div className="rv-toast">{h.toast}</div>}
       {h?.canReturn && !final && (
         <div className="rv-end">
@@ -689,6 +719,29 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
           {typedAll && <button className="btn" onClick={() => onDone({ ...result.current })}>Continue →</button>}
         </div>
       )}
+    </div>
+  )
+}
+
+/** Brújula de la IMU (giroscopio del rover): rumbo actual al centro, ±75° a cada lado, y el origen de la tormenta.
+ *  Si la tormenta queda fuera de la ventana, una flecha en el borde dice hacia dónde girar. */
+function Compass({ heading, storm }: { heading: number; storm: number | null }) {
+  const W = 320, SPAN = 75, k = W / (2 * SPAN)
+  const rel = (b: number) => ((b - heading + 540) % 360) - 180 // -180..180, positivo = a la derecha
+  const ticks: { x: number; label: string }[] = []
+  for (let b = Math.ceil((heading - SPAN) / 15) * 15; b <= heading + SPAN; b += 15) {
+    const deg = ((b % 360) + 360) % 360
+    ticks.push({ x: W / 2 + rel(deg) * k, label: deg % 45 === 0 ? COMPASS[deg / 45] : '' })
+  }
+  const s = storm === null ? null : rel(storm)
+  return (
+    <div className="rv-compass" aria-label={`Heading ${Math.round(heading)}°`}>
+      <small>IMU HEADING {String(Math.round(heading)).padStart(3, '0')}°</small>
+      {ticks.map((t, i) => <span key={i} className={t.label ? 'lbl' : 'tick'} style={{ left: t.x }}>{t.label || '|'}</span>)}
+      <i className="needle" />
+      {s !== null && (Math.abs(s) <= SPAN
+        ? <b className="storm" style={{ left: W / 2 + s * k }} title="Dust storm">▼ STORM</b>
+        : <b className={`storm edge ${s > 0 ? 'right' : 'left'}`}>{s > 0 ? 'STORM ▶' : '◀ STORM'}</b>)}
     </div>
   )
 }

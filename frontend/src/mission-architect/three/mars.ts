@@ -12,7 +12,7 @@ export function skyDome(sunDir: THREE.Vector3): THREE.Mesh<THREE.SphereGeometry,
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
     uniforms: {
-      uSun: { value: sunDir.clone().normalize() }, uStorm: { value: 0 },
+      uSun: { value: sunDir.clone().normalize() }, uStorm: { value: 0 }, uWarn: { value: 0 }, uFrom: { value: new THREE.Vector2(0, 1) },
       uZen: { value: c(0x96786f) }, uHor: { value: c(0xbe968c) }, uSide: { value: c(0xe1a082) },
       uHalo: { value: c(0x8cc8f0) }, uLav: { value: c(0x9696c8) }, uDust: { value: c(DUST) },
     },
@@ -21,7 +21,8 @@ export function skyDome(sunDir: THREE.Vector3): THREE.Mesh<THREE.SphereGeometry,
       void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: /* glsl */ `
       uniform vec3 uSun, uZen, uHor, uSide, uHalo, uLav, uDust;
-      uniform float uStorm;
+      uniform float uStorm, uWarn;
+      uniform vec2 uFrom;
       varying vec3 vDir;
       void main() {
         vec3 d = normalize(vDir);
@@ -31,6 +32,8 @@ export function skyDome(sunDir: THREE.Vector3): THREE.Mesh<THREE.SphereGeometry,
         col = mix(col, uSide, away * (1.0 - h) * 0.55);
         col = mix(col, uLav, pow(c, 3.0) * 0.45);
         col = mix(col, uHalo, clamp(pow(c, 14.0) * 1.1, 0.0, 0.92));
+        // Aviso: el cielo se llena de polvo del lado de donde viene la tormenta (uFrom = dirección xz).
+        col = mix(col, uDust, uWarn * smoothstep(0.2, 1.0, dot(normalize(d.xz + 1e-5), uFrom)) * (1.0 - h * 0.6) * 0.85);
         col = mix(col, uDust, uStorm);
         col += vec3(0.9, 0.97, 1.0) * smoothstep(0.99985, 0.99995, c) * (1.0 - uStorm) * 2.0; // disco del Sol
         gl_FragColor = vec4(col, 1.0);
@@ -38,6 +41,59 @@ export function skyDome(sunDir: THREE.Vector3): THREE.Mesh<THREE.SphereGeometry,
       }`,
   })
   return new THREE.Mesh(new THREE.SphereGeometry(3000, 48, 24), mat)
+}
+
+/** Frente de polvo que se ve venir durante el aviso: un tramo de cilindro abierto (110°) del color del polvo,
+ *  más oscuro que el cielo, opaco abajo, con el borde de arriba ondulado y los laterales difuminados. `update` lo centra en el rover, lo gira hacia `(fx, fz)` (de
+ *  dónde viene la tormenta) y lo acerca de 300 a 25 m con `p` (0 → 1). */
+export function dustWall() {
+  const S = 128, cv = document.createElement('canvas'); cv.width = cv.height = S
+  const g = cv.getContext('2d')!, img = g.createImageData(S, S)
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    // alphaMap lee el canal verde: gris = opacidad. Borde superior ondulado (nubes de polvo) y laterales difuminados.
+    const up = 1 - y / (S - 1), top = 0.5 + 0.24 * Math.abs(Math.sin(x * 0.075)) + 0.12 * Math.abs(Math.sin(x * 0.19 + 0.7)) // lomos redondos
+    const a = 255 * THREE.MathUtils.clamp((top - up) / 0.12, 0, 1) * Math.sin((Math.PI * x) / (S - 1)) ** 0.6
+    img.data.set([a, a, a, 255], (y * S + x) * 4)
+  }
+  g.putImageData(img, 0, 0)
+  // Más oscuro que el polvo del cielo: si no, el frente se pierde contra el horizonte ya empolvado.
+  const mat = new THREE.MeshBasicMaterial({ color: 0x6e4129, transparent: true, opacity: 0, alphaMap: new THREE.CanvasTexture(cv), depthWrite: false, side: THREE.DoubleSide, fog: false })
+  const wall = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 48, 1, true, -0.96, 1.92), mat)
+  wall.visible = false; wall.frustumCulled = false
+  return {
+    wall,
+    update(at: THREE.Vector3, fx: number, fz: number, p: number, fade: number) {
+      const op = 0.92 * THREE.MathUtils.smoothstep(p, 0, 0.12) * (1 - fade)
+      wall.visible = op > 0.01
+      if (!wall.visible) return
+      mat.opacity = op
+      const R = 300 - 275 * p
+      wall.scale.set(R, 70, R); wall.position.set(at.x, at.y + 30, at.z); wall.rotation.y = Math.atan2(fx, fz)
+    },
+  }
+}
+
+/** Huella real de un objeto en el suelo: radio horizontal máximo en 32 sectores, con los vértices que quedan entre
+ *  0.2 m bajo el suelo y `top` m sobre él (lo más alto no toca al rover). Devuelve (dx, dz) desde su centro → radio. */
+export function footprint(mesh: THREE.Mesh, ground: (x: number, z: number) => number, top = 2.5): (dx: number, dz: number) => number {
+  const B = 32, bins = new Float32Array(B), p = mesh.geometry.attributes.position, v = new THREE.Vector3()
+  mesh.updateMatrix()
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i).applyMatrix4(mesh.matrix)
+    const up = v.y - ground(v.x, v.z)
+    if (up < -0.2 || up > top) continue
+    const dx = v.x - mesh.position.x, dz = v.z - mesh.position.z
+    const b = Math.floor(((Math.atan2(dz, dx) / (2 * Math.PI)) + 1) * B) % B
+    bins[b] = Math.max(bins[b], Math.hypot(dx, dz))
+  }
+  // Sectores sin vértices: el menor radio conocido. Luego cada sector toma el máximo con sus vecinos (sin huecos).
+  const known = Array.from(bins).filter((r) => r > 0), lo = known.length ? Math.min(...known) : 0
+  const r0 = Array.from(bins, (r) => r || lo)
+  const r = r0.map((x, i) => Math.max(x, r0[(i + 1) % B], r0[(i + B - 1) % B]))
+  return (dx, dz) => {
+    const f = ((Math.atan2(dz, dx) / (2 * Math.PI)) + 1) * B, i = Math.floor(f) % B, t = f - Math.floor(f)
+    return r[i] * (1 - t) + r[(i + 1) % B] * t
+  }
 }
 
 /** Polvo de tormenta: partículas en una caja alrededor de la cámara que el viento arrastra; opacidad = intensidad. */
