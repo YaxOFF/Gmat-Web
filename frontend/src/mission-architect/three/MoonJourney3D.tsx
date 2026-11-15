@@ -52,7 +52,7 @@ export function MoonJourney3D({ launch, orbitId, onDone }: { launch: LaunchOutco
   useEffect(() => { done.current = onDone })
   useEffect(() => {
     if (!ok || !hud.done) return
-    const id = setTimeout(() => done.current(), 2500)
+    const id = setTimeout(() => done.current(), 1500)
     return () => clearTimeout(id)
   }, [ok, hud.done])
 
