@@ -24,6 +24,8 @@ import { Hangar, OrbitPick, Review, Title } from './ui/screens1'
 import { Report, Site } from './ui/screens2'
 import { MarsTest } from './ui/MarsTest'
 import { EdlStatic } from './three/EdlStatic'
+import { Edl3D } from './three/Edl3D'
+import { MARS_SITES } from './data/mars'
 
 type Phase =
   | 'title' | 'intro' | 'setup' | 'orbit' | 'hangar' | 'review'
@@ -39,7 +41,7 @@ const PREV: Partial<Record<Phase, Phase>> = { intro: 'title', setup: 'title', or
 const STEP_PHASE: Partial<Record<number, Phase>> = { 0: 'setup', 1: 'orbit', 2: 'hangar', 3: 'review' }
 
 const urlSeed = () => Number(new URLSearchParams(location.search).get('seed')) || 0
-// Atajos de prueba: ?rover=cabeus o ?landing=cabeus (y opcional &seed=123); ?screen=mars abre la prueba de Marte; ?screen=edl, los modelos del aterrizaje
+// Atajos de prueba: ?rover=cabeus o ?landing=cabeus (y opcional &seed=123); ?screen=mars abre la prueba de Marte; ?screen=edl, el aterrizaje en Marte (&site=<id>; &static=1, los modelos quietos)
 const q = (k: string) => { const v = new URLSearchParams(location.search).get(k); return v && CRATER[v] ? v : null }
 const urlRover = () => q('rover') ?? q('landing')
 const SCREEN = new URLSearchParams(location.search).get('screen')
@@ -50,6 +52,8 @@ const DEMO_LAUNCH: LaunchOutcome = { status: 'ok', panel: 'success', loi: 'succe
   { kind: 'roll', label: 'Lunar orbit insertion', p: 0.88, roll: 0.3, result: 'success', text: 'The engine must fire at exactly the right moment.' },
 ] }
 // Partida de ejemplo para revisar pantallas sueltas (?screen=review|mapping|site|report).
+const EDL_STATIC = new URLSearchParams(location.search).has('static')
+const EDL_SITE = MARS_SITES.find((s) => s.id === new URLSearchParams(location.search).get('site')) ?? MARS_SITES[0]
 const DEMO = ['review', 'mapping', 'site', 'report'].includes(SCREEN ?? '')
 const demoDesign = (): Design => ({ ...defaultDesign(), partIds: starterFor('B') })
 const demoMission = () => {
@@ -72,6 +76,7 @@ export default function MissionArchitect({ onInspect, onExit }: {
   const minBat = useRef(100)
   const [landing, setLanding] = useState<Landing | null>(null)
   const [finale, setFinale] = useState<FinaleResult | null>(null)
+  const [edlRun, setEdlRun] = useState(0)
   const [phase, setPhase] = useState<Phase>(() => (q('rover') ? 'rover' : q('landing') ? 'descent' : SCREEN === 'setup' ? 'setup' : SCREEN === 'launch' ? 'launch' : SCREEN === 'hangar' ? 'hangar' : SCREEN === 'orbit' ? 'orbit' : SCREEN === 'mars' ? 'mars' : SCREEN === 'edl' ? 'edl' : DEMO ? SCREEN as Phase : 'title'))
   const [design, setDesign] = useState<Design>(() => (DEMO ? demoDesign() : defaultDesign()))
   const [iterations, setIterations] = useState(0)
@@ -162,7 +167,7 @@ export default function MissionArchitect({ onInspect, onExit }: {
       )}
       {phase === 'title' && <Title onStart={() => setPhase('intro')} onMars={() => setPhase('mars')} />}
       {phase === 'mars' && <MarsTest onExit={() => setPhase('title')} />}
-      {phase === 'edl' && <EdlStatic />}
+      {phase === 'edl' && (EDL_STATIC ? <EdlStatic /> : <Edl3D key={edlRun} site={EDL_SITE} seed={7} onDone={() => setEdlRun((k) => k + 1)} />)}
       {phase === 'intro' && <Dialogue lines={INTRO} startScene="void" onDone={() => setPhase('setup')} />}
       {phase === 'setup' && <Setup mode={design.mode} team={team} onDone={(mode, t) => { setTeam(t); setDesign({ ...design, mode, partIds: [] }); setPhase('orbit') }} />}
       {phase === 'orbit' && <OrbitPick design={design} onInspect={inspect} onPick={(orbitId) => { setDesign({ ...design, orbitId }); setPhase('hangar') }} />}

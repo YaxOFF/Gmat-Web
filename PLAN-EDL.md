@@ -131,7 +131,7 @@ Meta: los tres modelos acoplados en una escena del juego, bien iluminados.
 Verificar: `cd frontend; npm run lint; npm run build`; abrir `?screen=edl`, sin errores en consola, nada
 atraviesa la pared de la cápsula al estar cerrada, las dos piezas se separan sin dejar huecos raros.
 
-### Fase E3 — Escena y línea de tiempo: de la entrada a la carcasa trasera
+### Fase E3 — Escena y línea de tiempo: de la entrada a la carcasa trasera ✅
 
 Meta: etapas 1 a 4 moviéndose, sin efectos todavía.
 
@@ -232,7 +232,7 @@ Verificar: lint y build; `sh docs/docs.sh stale` sin pendientes.
 - [x] Fase E0 — Preparar
 - [x] Fase E1 — Exportar los modelos
 - [x] Fase E2 — Módulo de carga y vista de prueba
-- [ ] Fase E3 — Escena y línea de tiempo: de la entrada a la carcasa trasera
+- [x] Fase E3 — Escena y línea de tiempo: de la entrada a la carcasa trasera
 - [ ] Fase E4 — Descenso propulsado, sky crane, contacto y escape
 - [ ] Fase E5 — Efectos
 - [ ] Fase E6 — Integración en "Try Mars"
@@ -254,3 +254,9 @@ Verificar: lint y build; `sh docs/docs.sh stale` sin pendientes.
   rover con `metalness` rebajado se ve bien: no hizo falta quitar el rebaje. Cápsula cerrada sin cruces; escudo y
   carcasa se separan limpios. Los cambios ajenos de `main` (`src/App.tsx` declara `game` dos veces) rompen lint y
   build: para verificar se apartaron con `git stash -u` por ruta y se devolvieron después.
+- **2026-11-15 · Fase E3** — `three/dem.ts` (se movieron `loadDem`, `demHeight`, `noise`, `SIZE`/`HALF`; `Rover3D` importa
+  de ahí y `untileMaterial` quedó exportado). `three/Edl3D.tsx`: mismo relieve y semilla que `Rover3D`, línea de tiempo
+  de 4 etapas (32 s), altura en pantalla real bajo 100 m y logarítmica arriba, cielo que oscurece con la altitud y niebla
+  más rala arriba (con la de `Rover3D` el suelo no se veía). Textos en inglés dentro del componente, como `Descent3D`.
+  `?screen=edl` corre la secuencia en bucle (`&site=<id>`); `&static=1` abre la vista de E2. Para verificar se volvieron
+  a apartar los cambios ajenos con `git stash -u` por ruta. Revisado en Chrome: 4 etapas, `?screen=mars` → Drive igual.
