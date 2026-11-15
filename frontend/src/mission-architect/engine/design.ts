@@ -105,7 +105,7 @@ export function computeStats(d: Design, iterations = 0): Stats {
     for (const g of ROVER_REQUIRED) if (!parts.some((p) => p.group === g)) errors.push(`Mission ${d.mode ?? 'B'} needs a rover part: ${GROUP_LABEL[g]}.`)
   } else if (parts.some((p) => ROVER_GROUPS.includes(p.group))) errors.push('Mission A is orbiter only: remove the Rover Bay parts.')
   if (d.mode === 'C' && !has(d, 'drill_deep')) errors.push('Mission C needs the deep drill (2 m).')
-  if (d.mode === 'C' && !has(d, 'radar')) errors.push('Mission C needs the SAR radar to see how deep the ice goes.')
+  if (d.mode === 'C' && !has(d, 'radar')) errors.push(`Mission C needs the ${PART.radar.name} to see what is buried under the surface.`)
   if (slotsUsed > slotsMax && bus) errors.push(`The ${bus.name.toLowerCase()} only has ${slotsMax} instrument slots.`)
   if (has(d, 'radar') && (!has(d, 'panel_gaas') || !has(d, 'bat_2')))
     errors.push('The radar draws 150 W: it needs the GaAs array AND the 2 kWh battery.')
@@ -193,7 +193,7 @@ export function reviewDesign(stats: Stats): ReviewItem[] {
     { id: 'budget', reviewer: 'priya', label: 'Budget reserve ≥ 10%', pass: ok('budget'),
       say: ok('budget') ? `Reserve is ${c.budget.value}. Healthy.` : `Reserve is ${c.budget.value}. ${c.budget.why}` },
     { id: 'science', reviewer: 'priya', label: 'Science traceability', pass: ok('science', true) || c.science.status === 'warn',
-      say: c.science.status === 'fail' ? `${c.science.value}. ${c.science.why}` : c.science.status === 'warn' ? `The neutron spectrometer is there, but with no camera you will be picking a landing site half-blind. I will allow it.` : 'The instruments answer the science question.' },
+      say: c.science.status === 'fail' ? `${c.science.value}. ${c.science.why}` : c.science.status === 'warn' ? `The ${PART.neutron.name.toLowerCase()} is there, but with no camera you will be picking a landing site half-blind. I will allow it.` : 'The instruments answer the science question.' },
   ]
 }
 

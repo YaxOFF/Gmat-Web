@@ -15,6 +15,11 @@ const HAZARDS = [
   { id: 'slope', name: 'Hidden slope', text: 'The site is tilted 18°. The legs are rated for 15°.' },
   { id: 'shadow', name: 'Unexpected shadow', text: 'A shadow hides the ground: the cameras cannot see what is there.' },
 ]
+const MARS_HAZARDS = [
+  { id: 'boulder', name: 'Boulder field', text: 'Terrain-relative navigation sees boulders the size of cars right under the target.' },
+  { id: 'slope', name: 'Delta cliff', text: 'The target sits next to a cliff edge. One gust and the stage drifts over it.' },
+  { id: 'shadow', name: 'Dust devil', text: 'A dust devil crosses the landing zone: the cameras lose the ground for a few seconds.' },
+]
 interface Choice { label: string; hint: string; go: () => void; off?: boolean }
 interface Step { role: string; title: string; text: string; color: string; choices: Choice[] }
 
@@ -32,7 +37,8 @@ export function Descent3D({ crater, stress, mapped, seed, names, onDone }: {
   const [bonus, setBonus] = useState(0)
   const [sciMul, setSciMul] = useState(1)
   const [log, setLog] = useState<string[]>([])
-  const [hazard] = useState(() => HAZARDS[Math.floor(rng.current() * HAZARDS.length)])
+  const [hazard] = useState(() => (PLANET.id === 'mars' ? MARS_HAZARDS : HAZARDS)[Math.floor(rng.current() * HAZARDS.length)])
+  const mars = PLANET.id === 'mars'
   const [result, setResult] = useState<Landing | null>(null)
 
   const descend = (to: number) => { if (to === 3) sim.current.hazard = false; sim.current.target = ALT[to]; setStage(to); setFalling(true) }
@@ -57,11 +63,11 @@ export function Descent3D({ crater, stress, mapped, seed, names, onDone }: {
     const { result: r } = engineeringRoll(rng.current, p)
     let landing: Landing
     if (r === 'success') landing = { ok: true, batteryPct: 100, integrity: 100, sciMul, label: 'Perfect landing. TILT 4°. ALL SYSTEMS NOMINAL.' }
-    else if (r === 'partial' && rng.current() < 0.5) landing = { ok: true, batteryPct: 100, integrity: 80, sciMul, label: 'Hard landing. The rover rolls out with bent wheels (−20% integrity).' }
+    else if (r === 'partial' && rng.current() < 0.5) landing = { ok: true, batteryPct: 100, integrity: 80, sciMul, label: mars ? 'Hard touchdown on the wheels (−20% integrity). The rover is down.' : 'Hard landing. The rover drives out with bent wheels (−20% integrity).' }
     else if (r === 'partial') {
       landing = rng.current() < 0.75
-        ? { ok: true, batteryPct: 100, integrity: 100, sciMul, label: 'Tilted landing: the ramp jammed, but the deployment roll worked. Rover out!' }
-          : { ok: false, batteryPct: 0, integrity: 0, sciMul, label: 'Tilted landing and the ramp stayed jammed. The rover never leaves the lander.' }
+        ? { ok: true, batteryPct: 100, integrity: 100, sciMul, label: mars ? 'A cable snagged on the sky crane, but the cutters fired in time. Rover down!' : 'Tilted landing: the ramp jammed, but the rover drove off anyway. Rover out!' }
+          : { ok: false, batteryPct: 0, integrity: 0, sciMul, label: mars ? 'The sky crane cables tangled. The rover never reached the ground.' : 'Tilted landing and the ramp stayed jammed. The rover never leaves the lander.' }
     } else landing = { ok: false, batteryPct: 0, integrity: 0, sciMul, label: 'Contact lost at 12 m. The lander is gone.' }
     sim.current.target = 0; sim.current.crash = !landing.ok && r === 'fail'
     setStage(4); setFalling(true)
@@ -74,26 +80,33 @@ export function Descent3D({ crater, stress, mapped, seed, names, onDone }: {
   }
 
   const steps: Step[] = [
-    { role: 'Systems', color: 'var(--cyan)', title: 'Deorbit burn · 15 km', text: 'Time to brake out of orbit. A long burn is gentle and safe; a short one saves fuel for later surprises.',
-      choices: [
-        { label: 'Long burn', hint: '−30% fuel · safer', go: () => { setFuel((f) => f - 30); setBonus((b) => b + 0.03); note('Long deorbit burn.'); descend(1) } },
-        { label: 'Short burn', hint: '−15% fuel · riskier', go: () => { setFuel((f) => f - 15); setBonus((b) => b - 0.08); note('Short deorbit burn.'); descend(1) } },
-      ] },
-    { role: 'Science', color: 'var(--pink)', title: 'Approach · 2 km', text: `LIDAR scans ${crater.name}. The planned site is closest to the ${PLANET.hint}; an alternate site nearby is flatter but poorer.`,
+    mars
+      ? { role: 'Systems', color: 'var(--cyan)', title: 'Parachute · 15 km', text: 'The heat shield is glowing and the air is thin. Open the parachute early for a gentle ride, or late to stay on target and save fuel for the sky crane.',
+        choices: [
+          { label: 'Open early', hint: '−30% fuel · safer', go: () => { setFuel((f) => f - 30); setBonus((b) => b + 0.03); note('Parachute opened early.'); descend(1) } },
+          { label: 'Open late', hint: '−15% fuel · riskier', go: () => { setFuel((f) => f - 15); setBonus((b) => b - 0.08); note('Parachute opened late.'); descend(1) } },
+        ] }
+      : { role: 'Systems', color: 'var(--cyan)', title: 'Deorbit burn · 15 km', text: 'Time to brake out of orbit. A long burn is gentle and safe; a short one saves fuel for later surprises.',
+        choices: [
+          { label: 'Long burn', hint: '−30% fuel · safer', go: () => { setFuel((f) => f - 30); setBonus((b) => b + 0.03); note('Long deorbit burn.'); descend(1) } },
+          { label: 'Short burn', hint: '−15% fuel · riskier', go: () => { setFuel((f) => f - 15); setBonus((b) => b - 0.08); note('Short deorbit burn.'); descend(1) } },
+        ] },
+    { role: 'Science', color: 'var(--pink)', title: 'Approach · 2 km', text: `${mars ? 'The cameras match the ground to Ares\'s maps' : 'LIDAR scans'} ${crater.name}. The planned site is closest to the ${PLANET.hint}; an alternate site nearby is flatter but poorer.`,
       choices: [
         { label: 'Trust the planned site', hint: 'full science', go: () => { note('Holding the planned site.'); descend(2) } },
-        { label: 'Divert to alternate', hint: 'safer · −30% ice', go: () => { setBonus((b) => b + 0.1); setSciMul(0.7); sim.current.shiftX = 10; note('Diverted to the alternate site.'); descend(2) } },
+        { label: 'Divert to alternate', hint: `safer · −30% ${mars ? 'rocks' : 'ice'}`, go: () => { setBonus((b) => b + 0.1); setSciMul(0.7); sim.current.shiftX = 10; note('Diverted to the alternate site.'); descend(2) } },
       ] },
     { role: 'Comms + Systems', color: 'var(--amber)', title: `HAZARD ALERT · 500 m · ${hazard.name}`, text: hazard.text,
       choices: [
         { label: 'Divert', hint: '−25% fuel', go: () => { setFuel((f) => f - 25); if (fuel - 25 < 10) setBonus((b) => b - 0.2); sim.current.shiftX += 9; note('Diverted around the hazard.'); descend(3) } },
-        { label: 'Hold course', hint: 'roll the dice', go: () => {
+        { label: 'Hold course', hint: 'no fuel · 60% it is fine', go: () => {
           const ok = rng.current() < 0.6; if (!ok) setBonus((b) => b - 0.15)
           note(ok ? 'Held course — the hazard was smaller than it looked.' : 'Held course — the legs will land on it.'); descend(3) } },
       ] },
-    { role: 'Director', color: 'var(--lime)', title: 'Touchdown · 50 m', text: `Fuel ${fuel}%. Everything comes down to this.`,
+    { role: 'Director', color: 'var(--lime)', title: mars ? 'Sky crane · 20 m' : 'Touchdown · 50 m',
+      text: mars ? `Fuel ${fuel}%. The descent stage hovers and lowers Buscador on cables. Everything comes down to this.` : `Fuel ${fuel}%. Everything comes down to this.`,
       choices: [
-        { label: 'Authorize touchdown', hint: 'final roll', go: touchdown },
+        { label: mars ? 'Lower the rover' : 'Authorize touchdown', hint: 'commit to landing', go: touchdown },
         { label: 'Abort and retry', hint: '−25% fuel · better odds', off: fuel < 25, go: () => { setFuel((f) => f - 25); setBonus((b) => b + 0.06); note('Abort! Climbing for another try.'); sim.current.alt = 400; descend(3) } },
       ] },
   ]
@@ -215,21 +228,25 @@ export function Descent3D({ crater, stress, mapped, seed, names, onDone }: {
         {log.map((l, i) => <div key={i} className="hint">› {l}</div>)}
       </div>
       {step && (
-        <div className="ds-panel" style={{ '--c': step.color } as CSSProperties}>
-          <h3>{step.title}<small>{step.role.split(' + ').map((r) => (names?.[r] ? `${r} (${names[r]})` : r)).join(' + ')} decides</small></h3>
+        <div className="ds-panel ds-choice" style={{ '--c': step.color } as CSSProperties}>
+          <div className="ds-meta">
+            <span className="ds-role">{step.role.split(' + ').map((r) => (names?.[r] ? `${r} (${names[r]})` : r)).join(' + ')} decides</span>
+            <span className="ds-steps">{steps.map((_, i) => <i key={i} className={i < stage ? 'done' : i === stage ? 'now' : ''} />)}</span>
+          </div>
+          <h3>{step.title}</h3>
           <p>{step.text}</p>
-          <div className="actions">
+          <div className="ds-options">
             {step.choices.map((c) => (
-              <button key={c.label} className="btn" disabled={c.off} onClick={c.go}>{c.label}<small>{c.hint}</small></button>
+              <button key={c.label} className="ds-option" disabled={c.off} onClick={c.go}><b>{c.label}</b><small>{c.hint}</small></button>
             ))}
           </div>
         </div>
       )}
       {result && (
-        <div className="ds-panel" style={{ '--c': result.ok ? 'var(--green)' : 'var(--red)' } as CSSProperties}>
+        <div className="ds-panel ds-choice" style={{ '--c': result.ok ? 'var(--green)' : 'var(--red)' } as CSSProperties}>
           <h3>{result.ok ? 'TOUCHDOWN CONFIRMED' : 'LANDING FAILED'}</h3>
           <p>{result.label}</p>
-          <div className="actions"><button className="btn big" onClick={() => onDone(result)}>{result.ok ? 'Deploy the rover →' : 'Plan B →'}</button></div>
+          <div className="actions"><button className="btn big" onClick={() => onDone(result)}>{result.ok ? 'Deploy the rover →' : mars ? 'What happens next →' : 'Plan B →'}</button></div>
         </div>
       )}
     </div>
