@@ -651,3 +651,6 @@
 .mars-drive > .rover { flex: 1; }
 .mars-back { position: absolute; left: 14px; bottom: 14px; z-index: 4; }
 @media (max-width: 760px) { .mars { grid-template-columns: 1fr; grid-template-rows: 45vh 1fr; } .mars-side { border-left: 0; border-top: 2px solid var(--line); } }
+
+.ma .steps li.jump { cursor: pointer; }
+.ma .steps li.jump:hover { color: var(--text); border-bottom-color: var(--dim); }
