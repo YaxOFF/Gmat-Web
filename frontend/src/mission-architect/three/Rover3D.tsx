@@ -4,7 +4,7 @@ import type { Crater } from '../data/types'
 import { clamp, mulberry32, type Rng } from '../engine/rng'
 import { buildLander } from './spacecraft'
 import { loadCuriosity, meshHeight, type CuriosityRig, type HeightFn } from './curiosity'
-import { at, mountStage, stars } from './stage'
+import { at, mountStage, realEarth, realSky } from './stage'
 import { MOON, type RoverSite, type World } from './world'
 import type { Rock, RockKind } from './rocks'
 import { makeXray } from './xray'
@@ -267,8 +267,11 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       clamp(deposits.reduce((s, d) => s + (d.taken ? 0 : d.rich * Math.exp(-((Math.hypot(d.x - x, d.z - z) / 13) ** 2))), 0) / 10, 0, 1)
 
     scene.background = new THREE.Color(world.sky ?? 0x000000)
-    if (world.sky === undefined) scene.add(stars(rng, 3000, 1500))
-    else scene.fog = new THREE.FogExp2(world.sky, 0.0045) // polvo en suspensión: el horizonte se pierde en el cielo
+    // Cielo sin atmósfera: estrellas reales (Tycho-2). Antes eran 3000 puntos al azar sembrados; se siguen sacando
+    // esos 6000 números del rng para que cada semilla dé las mismas rocas y depósitos que antes.
+    const sky = world.sky === undefined ? realSky() : null
+    if (sky) { for (let i = 0; i < 6000; i++) rng(); scene.add(sky) }
+    if (world.sky !== undefined) scene.fog = new THREE.FogExp2(world.sky, 0.0045) // polvo en suspensión: el horizonte se pierde en el cielo
     scene.add(world.sky === undefined ? new THREE.HemisphereLight(0x9aa6c8, 0x050505, 0.35) : new THREE.HemisphereLight(0xe0b48a, 0x3a2418, 0.9))
     const sun = new THREE.DirectionalLight(world.shadow ? 0xfff3dd : 0xffe2c4, world.shadow ? 3.6 : 2.8)
     if (world.shadow) sun.position.set(40, 30, -400); else sun.position.set(160, 220, -260)
@@ -276,8 +279,9 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     sun.shadow.mapSize.set(2048, 2048)
     Object.assign(sun.shadow.camera, { left: -150, right: 150, top: 150, bottom: -150, far: 900 })
     scene.add(sun)
-    const earth = new THREE.Mesh(new THREE.SphereGeometry(18, 32, 16), new THREE.MeshBasicMaterial({ color: 0x3d7bff }))
-    earth.position.set(-500, 40, -900); if (world.shadow) scene.add(earth)
+    // La Tierra, baja sobre el horizonte norte (se ve al entrar a la sombra) y casi llena con el Sol al sur.
+    const earth = realEarth(26)
+    earth.position.set(-760, 150, 900); if (world.shadow) scene.add(earth)
 
     // Terreno: borde iluminado al sur, piso en sombra; velo azul = hidrógeno que vio el orbitador.
     const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG); geo.rotateX(-Math.PI / 2)
@@ -924,6 +928,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
           })
         }
       }
+      ;(earth.userData.spin as (d: number) => void)(dt)
       if (beacon) (beacon.material as THREE.MeshBasicMaterial).opacity = 0.18 + Math.sin(performance.now() / 300) * 0.08
       if (paused) { drilling = false; laserT = 0; scanT = 0 }
       // Onda del escaneo: un anillo que se abre sobre el suelo hasta SCAN_R.
@@ -1020,7 +1025,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         }
       }
     }
-    return Object.assign(tick, { cleanup: () => { gone = true; labBox?.replaceChildren(); removeEventListener('keydown', down); removeEventListener('keyup', up); void audio?.close() } })
+    return Object.assign(tick, { cleanup: () => { gone = true; (sky?.userData.dispose as (() => void) | undefined)?.(); labBox?.replaceChildren(); removeEventListener('keydown', down); removeEventListener('keyup', up); void audio?.close() } })
   }), [crater, world, iceHunt, quality, seed, orbitId, start, dem])
 
   const h = hud
