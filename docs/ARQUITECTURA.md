@@ -1,4 +1,4 @@
-<!-- fuente: backend/app, frontend/src/store.ts | rev: e02ff0e -->
+<!-- fuente: backend/app, frontend/src/store.ts | rev: 1ee8d23 -->
 # Arquitectura
 
 ## Decisiones
@@ -20,6 +20,12 @@
 
 ## Flujo: validar sin correr
 `store.validate` → `POST /api/script/validate` → `sanitize` a una carpeta `val-*` → `_isolated(worker.validate_script)` (solo `LoadScript`) → se lee el log y se devuelven las líneas de nivel error/warning.
+
+## Flujo: validación en vivo
+Cada cambio de texto (`editText`, `loadText`, `setMission`) arma `checkLater` en `store.ts`: a los 1,2 s sin cambios pide `POST /api/script/validate` y guarda `issues` (`model/issues.ts`: une el mensaje de GMAT con la línea citada, lo ubica en recurso y campo, y lo traduce si está en `es.issues.known`). `issues` alimenta el indicador de la barra, los marcadores de Monaco, el aviso junto al campo (`Field.tsx`) y la marca en el árbol de recursos.
+
+## Flujo: deshacer
+El historial es el de Monaco. Un cambio hecho desde formularios o árboles entra al editor con `executeEdits` (`ScriptEditor.tsx`), así Deshacer lo revierte igual que al texto escrito; cargar otro documento (`doc.load`) usa `setValue` y reinicia el historial.
 
 ## Flujo: editar recursos
 Formulario/árbol → `setMission` (cambia el modelo ya) → `POST /api/script/serialize` → texto al editor. Editar texto → `editText` (debounce 400 ms) → `POST /api/script/parse` → modelo. Parse y serialize son Python puro: no usan el motor.

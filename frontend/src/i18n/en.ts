@@ -1,9 +1,15 @@
 // UI strings in English (active language). es.ts keeps the Spanish version with the same keys.
-export const en = {
+import type { es } from './es'
+
+// Same shape as es.ts: the build fails if a key is missing here.
+export const en: typeof es = {
   appName: 'GMAT Web',
   toolbar: {
     new: 'New', open: 'Open', samples: 'Samples', save: 'Save', validate: 'Validate', run: 'Run',
     stop: 'Stop', game: 'Mission Architect',
+    templates: 'Templates', undo: 'Undo', redo: 'Redo', palette: 'Commands', tour: 'Tour',
+    keys: { save: 'Ctrl+S', run: 'F5', undo: 'Ctrl+Z', redo: 'Ctrl+Y', palette: 'Ctrl+K' },
+    main: 'Document actions',
   },
   left: { resources: 'Resources', mission: 'Mission' },
   center: { editor: 'Editor', resource: 'Resource', command: 'Command', view3d: '3D', results: 'Results', solver: 'Solver' },
@@ -14,6 +20,76 @@ export const en = {
     error: 'Engine unavailable',
   },
   empty: 'Nothing here yet.',
+  draft: {
+    restored: (name: string) => `Recovered the draft of ${name} saved in this browser. New discards it; Save downloads it as a file.`,
+  },
+  issues: {
+    ok: 'No errors',
+    count: (n: number) => `${n} ${n === 1 ? 'error' : 'errors'}`,
+    okHelp: 'The engine loaded the script without errors (live validation).',
+    goto: 'Go to the first error in the Editor',
+    line: (n: number) => `Line ${n}`,
+    inResource: 'The engine rejected this resource:',
+    marker: (n: number) => `${n} engine ${n === 1 ? 'error' : 'errors'}`,
+    // GMAT already writes English; anything that does not match is shown as GMAT wrote it.
+    known: [
+      [/Non-ASCII character/, () => 'The script has non-ASCII characters (accents, symbols): GMAT does not accept them, not even in comments.'],
+    ] as [RegExp, (m: RegExpExecArray) => string][],
+  },
+  templates: {
+    title: 'Mission templates',
+    intro: 'Pick a mission, adjust its inputs and create it. It becomes a normal script: you can change everything afterwards.',
+    create: 'Create mission',
+    close: 'Close',
+    outOfRange: (min: number, max: number) => `Between ${min} and ${max}`,
+    badDate: 'Invalid date',
+    after: 'Then press Run (F5).',
+    items: {
+      luna: {
+        title: 'Trip to the Moon',
+        desc: 'Leaves a low Earth orbit, aims at the Moon with two Targets and brakes into lunar orbit. ' +
+          'When it finishes, open 3D and pick Center = Moon.',
+        params: { date: 'Departure date (UTC)', rp: 'Lunar orbit radius (km from center)', days: 'Days in lunar orbit', inc: 'Departure orbit inclination (°)' },
+      },
+      leo: {
+        title: 'LEO orbit',
+        desc: 'Satellite in low orbit with atmospheric drag and 4×4 gravity. The plot shows how the altitude changes.',
+        params: { alt: 'Altitude (km)', inc: 'Inclination (°)', days: 'Days to propagate' },
+      },
+      hohmann: {
+        title: 'Hohmann transfer to GEO',
+        desc: 'Two burns computed by a Target take the satellite from a low orbit to geostationary.',
+        params: { alt: 'Initial orbit altitude (km)' },
+      },
+      track: {
+        title: 'Satellite ground track',
+        desc: 'Where the satellite passes over Earth. When it finishes, open Results and pick the ground track.',
+        params: { alt: 'Altitude (km)', inc: 'Inclination (°)', days: 'Days to propagate' },
+      },
+    } as Record<string, { title: string; desc: string; params: Record<string, string> }>,
+  },
+  palette: {
+    title: 'Command palette',
+    filter: 'Type an action or a resource…',
+    none: 'Nothing matches.',
+    goTab: (tab: string) => `Go to ${tab}`,
+    goResource: (name: string, type: string) => `Open resource ${name} (${type})`,
+    template: (title: string) => `Template: ${title}`,
+    hint: '↑ ↓ to move · Enter to run · Esc to close',
+  },
+  tour: {
+    title: 'Tour',
+    next: 'Next', prev: 'Back', done: 'Finish', skip: 'Skip',
+    step: (i: number, n: number) => `${i} of ${n}`,
+    steps: [
+      { sel: 'templates', title: 'Start with a template', text: 'Templates builds a complete mission (for example, Trip to the Moon) from a few inputs. Samples opens the scripts that ship with GMAT.' },
+      { sel: 'left', title: 'Resources and Mission', text: 'Resources are the objects: spacecraft, propagators, burns, solvers. Mission is the sequence of steps, in order. Click one to open its form.' },
+      { sel: 'center', title: 'Editor and forms', text: 'The Editor shows the GMAT script. Forms and script are the same thing: changing one updates the other. Undo (Ctrl+Z) reverts both.' },
+      { sel: 'run', title: 'Run', text: 'Run (F5) sends the script to the real GMAT engine. As you type, the engine validates the script and errors appear next to the field.' },
+      { sel: 'console', title: 'Console', text: 'The live GMAT log shows up here. An underlined error jumps to its line in the Editor.' },
+      { sel: 'center', title: 'Results, 3D and Solver', text: 'When it finishes: Results (plots, tables, ground track), 3D (trajectory, with the Moon) and Solver (how each Target converged). Ctrl+K opens the command palette.' },
+    ],
+  },
   samples: {
     title: 'GMAT samples',
     filter: 'Search samples…',
@@ -78,6 +154,9 @@ export const en = {
     noFollow: 'None',
     inertial: 'Inertial camera (EarthMJ2000Eq)',
     hint: 'GMAT positions in EarthMJ2000Eq, Earth-centered; ▶ replays the run.',
+    hintMoon: 'GMAT positions relative to the Moon (MJ2000Eq axes), framed on the stretch near it; ▶ replays the run.',
+    center: 'Center',
+    bodies: { Earth: 'Earth', Luna: 'Moon' },
   },
   validate: {
     starting: 'Validating the script with the engine…',
@@ -118,6 +197,9 @@ export const en = {
     help: (type: string, def: unknown, unit?: string) =>
       `GMAT type: ${type}${unit ? ` · Units: ${unit}` : ''}${def !== null && def !== '' ? ` · Default: ${def}` : ''}`,
     invalid: 'Invalid value',
+    notNumber: 'Must be a number (e.g. 7000 or 1.5e-3).',
+    notInteger: 'Must be a whole number.',
+    issues: 'The engine found errors in this resource:',
   },
   mission: {
     cats: {

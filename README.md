@@ -23,6 +23,15 @@ La primera vez crean `backend/.venv` e instalan dependencias. Backend en `http:/
 
 Si `GMAT_HOME/bin/api_startup_file.txt` no existe, el backend genera uno equivalente en `backend/.cache/`.
 
+## Con Docker
+
+```sh
+cp .env.example .env   # opcional
+docker compose up -d --build
+```
+
+Abre `http://localhost:8080`. No hace falta tener GMAT instalado: el build descarga la versión de Ubuntu (400 MB) y verifica su sha256. Detalles en `docs/DEPLOY.md`.
+
 ## Pruebas
 
 ```sh

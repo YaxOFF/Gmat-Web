@@ -79,7 +79,7 @@ def test_cancel_run(client):
         ev = ws.receive_json()
         while ev["type"] not in ("done", "error"):
             ev = ws.receive_json()
-    assert ev == {"type": "error", "message": "Corrida detenida"}
+    assert ev == {"type": "error", "message": "Run stopped"}
 
 
 def test_prune_forgets_old_runs_and_folders(monkeypatch, tmp_path):

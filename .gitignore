@@ -11,3 +11,4 @@ runs/
 *.tsbuildinfo
 qa-capturas/
 .claude/settings.local.json
+*.log

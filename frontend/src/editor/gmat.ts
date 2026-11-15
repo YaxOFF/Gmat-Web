@@ -57,3 +57,6 @@ export function revealLine(line: number) {
   ed.setSelection(new monaco.Selection(line, 1, line, ed.getModel()?.getLineMaxColumn(line) ?? 1))
   ed.focus()
 }
+
+/** Deshacer/rehacer del documento: el historial es el de Monaco, que también recibe los cambios de formularios. */
+export const history = (what: 'undo' | 'redo') => editorRef.current?.trigger('app', what, null)

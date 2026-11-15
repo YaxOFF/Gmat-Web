@@ -15,7 +15,7 @@
     "solvers": null
   },
   "m2_geo_stationkeeping": {
-    "time": 0.7,
+    "time": 0.8,
     "report": {
       "Sat.A1ModJulian": 30682.50042863868,
       "Sat.X": 41922.28954406947,
@@ -47,7 +47,7 @@
     }
   },
   "m3_lunar_transfer": {
-    "time": 1.0,
+    "time": 1.2,
     "report": {
       "Sat.A1ModJulian": 26868.43338794704,
       "Sat.Luna.SMA": 7110.194995835672,
@@ -69,7 +69,7 @@
     }
   },
   "m4_finite_burn": {
-    "time": 0.8,
+    "time": 1.0,
     "report": {
       "Sat.A1ModJulian": 30676.53992005659,
       "Sat.X": -8005.323968813704,
@@ -110,7 +110,7 @@
     }
   },
   "m6_errors": {
-    "time": 0.6,
+    "time": 0.8,
     "error": {
       "exit": 2,
       "lines": [
@@ -123,6 +123,35 @@
         "2: D:\\YaxonFolder\\Github\\Gmat-Web\\backend\\tests\\missions\\m6_errors.script: **** ERROR **** Interpreter Exception:  Undefined function, object, or disallowed object field \"Sat2.ElapsedDays\" found in line:",
         "\"  13: Propagate Prop(Sat2) {Sat2.ElapsedDays = 1};\""
       ]
+    }
+  },
+  "m7_viaje_luna": {
+    "time": 3.2,
+    "report": {
+      "Nave.ElapsedDays": 7.819179991700366,
+      "Nave.Luna.SMA": 5051.082267187725,
+      "Nave.Luna.ECC": 0.009879359770262504,
+      "Nave.Luna.RMAG": 5003.080741168863,
+      "TLI.Element1": 3.129455785738915,
+      "LOI.Element1": -0.643890487647235
+    },
+    "solvers": {
+      "DC": {
+        "runs": 2,
+        "final": [
+          {
+            "Sonda.RAAN": -0.172196505356,
+            "Sonda.AOP": -100.335573149
+          },
+          {
+            "Nave.RAAN": 374.539234903,
+            "Nave.AOP": 249.840590246,
+            "TLI.Element1": 3.12945578574,
+            "LOI.Element1": -0.643890487647
+          }
+        ],
+        "status": "converged"
+      }
     }
   }
 }

@@ -153,7 +153,7 @@ async def _supervise(run: Run) -> None:
             run.proc.terminate()
             run.proc.join(5)
             await drain(final=True)
-            msg = "Corrida detenida" if run.cancelled else f"Tiempo límite ({config.RUN_TIMEOUT_S:.0f} s) agotado"
+            msg = "Run stopped" if run.cancelled else f"Time limit ({config.RUN_TIMEOUT_S:.0f} s) reached"
             await run.emit({"type": "error", "message": msg})
             return
         if int(elapsed) > last_tick:

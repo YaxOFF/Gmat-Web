@@ -86,7 +86,7 @@ async def run_web(text: str) -> dict:
     res = {"time": round(time.monotonic() - t0, 1), "events": evs, "solvers": solver_summary(evs)}
     if last["type"] == "done":
         return {**res, "state": "ok", "reason": ""}
-    if last["message"].startswith("Tiempo límite"):
+    if last["message"].startswith("Time limit"):
         return {**res, "state": "timeout", "reason": last["message"]}
     errors = [ERROR_PREFIX.sub("", e["text"].strip()) for e in evs
               if e.get("level") == "error" and "line" not in e]  # sin las líneas citadas del script

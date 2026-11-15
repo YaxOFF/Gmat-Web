@@ -1,10 +1,10 @@
-<!-- fuente: backend/app, frontend/src, backend/tests | rev: e02ff0e -->
+<!-- fuente: backend/app, frontend/src, backend/tests | rev: 1ee8d23 -->
 # Tareas
 
 ## Comandos
 Requieren `GMAT_HOME` (local: `C:\Users\Yaxon\Downloads\gmat-win-R2026a`).
 - Correr todo: `./dev.ps1` (Windows) o `./dev.sh`. Backend `:8000`, frontend `:5173`. Listo cuando `GET http://127.0.0.1:8000/api/health` da `status: "ok"`. Antes, confirmar que los dos puertos están libres (`docs/GOTCHAS.md`, Entorno de desarrollo).
-- Pruebas backend: `cd backend; .venv/Scripts/python -m pytest` (motor real, ~30 s). Esperado: `339 passed, 46 skipped, 3 deselected, 1 xfailed` (~75 s) y un aviso de Starlette. Las `slow` (web vs escritorio: Hohmann, Yukon, Mars B-plane) van aparte: `pytest -m slow` (~15 s).
+- Pruebas backend: `cd backend; .venv/Scripts/python -m pytest` (motor real, ~30 s). Esperado: `351 passed, 45 skipped, 11 deselected, 1 xfailed` (~85 s) y un aviso de Starlette. Las `slow` (web vs escritorio: Hohmann, Yukon, Mars B-plane, lote y las 7 misiones propias) van aparte: `pytest -m slow` (~70 s, `11 passed`).
 - Lote de samples: `cd backend; .venv/Scripts/python -m app.batch` (162 samples de raíz y subcarpetas, varios minutos, 4 en paralelo) reescribe `docs/COMPATIBILIDAD.md`. Correrlo tras tocar sanitize, results, solver o runner y revisar que no bajen los `ok` (7c2: 77 de 88 en raíz, 118 de 162 en total).
 - Frontend: `cd frontend; npm run lint; npm run build` (~2 s). Lint sin salida; build avisa de chunks mayores a 500 kB (Monaco y Cesium, ambos cargados en lazy). No hay runner de pruebas en el frontend. Solvers: `pytest tests/test_solver.py` (Hohmann converge, MaximumIterations bajo no converge, Yukon).
 - Backend a mano: `cd backend; .venv/Scripts/python -m uvicorn app.main:app --port 8000`.
@@ -30,6 +30,13 @@ Verificar: `pytest tests/test_script.py`.
 3. Componente en `FORMS` de `CommandForm.tsx`; textos en `es.mission`.
 
 Modelo: `PropagateForm`. Verificar: `pytest tests/test_script.py` y `npm run lint; npm run build`.
+
+## Plantilla de misión nueva
+1. Función que arma el script (ASCII) y entrada en `TEMPLATES` de `frontend/src/templates.ts`, con `min`/`max` por dato.
+2. Título, descripción y etiquetas en `es.templates.items`.
+3. Probar los valores por defecto y los extremos contra el motor antes de fijar los límites (procedimiento en `docs/QA.md`, Fase 8).
+
+Modelo: `luna` en `templates.ts`. Verificar: `npm run lint; npm run build` y crearla desde Plantillas en el navegador.
 
 ## Regla nueva de sanitize
 `backend/app/engine/sanitize.py` y caso en `backend/tests/test_sanitize.py` (no necesita motor).
