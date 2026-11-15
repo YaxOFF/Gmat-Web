@@ -1,9 +1,0 @@
-.venv
-.cache
-.pytest_cache
-**/__pycache__
-*.egg-info
-*.log
-tests
-Dockerfile
-.dockerignore

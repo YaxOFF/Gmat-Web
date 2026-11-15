@@ -1,4 +1,4 @@
-<!-- fuente: backend/app/engine, backend/app/script, backend/app/main.py, frontend/src/store.ts, frontend/src/model/refs.ts, frontend/src/resources, dev.ps1 | rev: e76b7b9 -->
+<!-- fuente: backend/app/engine, backend/app/script, backend/app/main.py, frontend/src/store.ts, frontend/src/model/refs.ts, frontend/src/resources, dev.ps1 | rev: 1a95f8e -->
 # Gotchas
 
 Read from the code and checked with the real engine where it says "(verified)".
