@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { mulberry32 } from '../engine/rng'
 import { buildSpacecraft } from './spacecraft'
-import { mountStage, moonTexture, stars } from './stage'
+import { earthMesh, mountStage, moonTexture, stars } from './stage'
 
 export type FinaleKind = 'return' | 'planb'
 export interface FinaleResult { choice: 'impact' | 'relay'; success: boolean; points: number; title: string; text: string }
@@ -37,7 +37,7 @@ export function Finale3D({ kind, crater, seed, partIds, onDone }: {
     const sun = new THREE.DirectionalLight(0xffffff, 2.4); sun.position.set(5, 0.5, 2); scene.add(sun)
     const moon = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), new THREE.MeshStandardMaterial({ map: moonTexture(rng), roughness: 1 }))
     scene.add(moon)
-    const earth = new THREE.Mesh(new THREE.SphereGeometry(0.4, 32, 16), new THREE.MeshStandardMaterial({ color: 0x3d7bff, emissive: 0x0a1a40 }))
+    const earth = earthMesh(0.4)
     earth.position.set(-9, 1.5, -14); scene.add(earth)
     const sc = buildSpacecraft(partIds.filter((id) => id !== 'lander')); sc.scale.setScalar(0.02)
     scene.add(sc)

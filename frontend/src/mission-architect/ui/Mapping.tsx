@@ -1,7 +1,7 @@
-import { Orbit3D } from '../three/Orbit3D'
+import { Orbit3D, type SiteMark } from '../three/Orbit3D'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CARD } from '../data/cards'
-import { CRATERS, CRATER, CYCLES, ORBIT } from '../data/catalog'
+import { CRATERS, CRATER, CYCLES, ORBIT, SPECIAL } from '../data/catalog'
 import type { Layer } from '../data/types'
 import {
   aggMods, baseQuality, beginCycle, respond, respondP, runCycle,
@@ -10,51 +10,20 @@ import {
 import { knownFromQuality, LAYER_LABEL, observe } from '../engine/observe'
 import { pct, type Rng } from '../engine/rng'
 import { ACT1_INTRO, COLD_SPOT_EVENT, ECLIPSE_EVENT, debrief } from '../story/scripts'
+import { MARS_ACT1_INTRO, MARS_ECLIPSE_EVENT, MARS_SPECIAL_EVENT } from '../story/mars'
+import { PLANET } from '../data/planet'
 import { Dialogue, Strip } from './Dialogue'
 import { Meter, StressMeter, Term } from './Hud'
 
 const LAYERS: Layer[] = ['hydrogen', 'terrain', 'slope', 'temperature', 'buriedIce']
 
-function PoleMap({ m, ctx, targets, focus, onToggle, onFocus, small }: {
-  small?: boolean
-  m: Mission
-  ctx: Ctx
-  targets: string[]
-  focus: string
-  onToggle: (id: string) => void
-  onFocus: (id: string) => void
-}) {
-  return (
-    <svg className={`polemap ${small ? 'small' : ''}`} viewBox="0 0 100 100">
-      <defs>
-        <radialGradient id="moonfill" cx="40%" cy="35%"><stop offset="0" stopColor="#c9ccd8" /><stop offset="1" stopColor="#5a5f73" /></radialGradient>
-        <clipPath id="poleclip"><circle cx="50" cy="50" r="47" /></clipPath>
-      </defs>
-      <circle cx="50" cy="50" r="47" fill="url(#moonfill)" />
-      {/* Relieve LOLA real (±POLE_MAP_DEG, tools/moon/build_moon.py); si no carga queda el degradado. */}
-      <image href={`${import.meta.env.BASE_URL}moon/southpole.png`} x="0" y="0" width="100" height="100" clipPath="url(#poleclip)" preserveAspectRatio="none" />
-      <circle cx="50" cy="50" r="47" fill="none" stroke="#26314f" strokeWidth="0.8" />
-      <circle cx="50" cy="50" r="30" fill="none" stroke="#ffffff30" strokeWidth="0.3" strokeDasharray="1 1.5" />
-      <circle cx="50" cy="50" r="15" fill="none" stroke="#ffffff30" strokeWidth="0.3" strokeDasharray="1 1.5" />
-      <text x="50" y="97" textAnchor="middle" fontSize="3" fill="#e8ecf6aa">SOUTH POLE · view from above</text>
-      {CRATERS.map((c) => {
-        const q = m.quality[c.id]?.hydrogen
-        const k = knownFromQuality(q)
-        const sel = targets.includes(c.id)
-        const color = k === 'exact' ? '#62d394' : k === 'range' ? '#ffa94d' : '#1a2033'
-        const hot = k !== 'none' && ctx.stats.layers.includes('hydrogen')
-        const size = k === 'none' ? 5 : 3.5 + Math.min(c.h, 6) * 0.6
-        return (
-          <g key={c.id} className="node" onClick={() => onToggle(c.id)} onMouseEnter={() => onFocus(c.id)} style={{ cursor: 'pointer' }}>
-            <circle cx={c.x} cy={c.y} r={size + 2.5} fill="none" stroke={sel ? '#ef6f6c' : focus === c.id ? '#fff' : 'transparent'} strokeWidth="1" strokeDasharray={sel ? '0' : '1.5 1'} />
-            <circle cx={c.x} cy={c.y} r={size} fill={color} opacity={hot ? 0.92 : 0.8} stroke="#000a" strokeWidth="0.5" />
-            <text x={c.x} y={c.y + size + 5} textAnchor="middle" fontSize="3.2" fill="#fff" fontWeight="700" paintOrder="stroke" stroke="#0a0f1c" strokeWidth="0.8">{c.name}</text>
-            {k === 'none' && <text x={c.x} y={c.y + 1.2} textAnchor="middle" fontSize="4" fill="#7b8099">?</text>}
-          </g>
-        )
-      })}
-    </svg>
-  )
+/** Color y texto de cada pin del globo según lo que el orbitador ya midió de la capa principal. */
+export function siteMarks(m: Mission): Record<string, SiteMark> {
+  return Object.fromEntries(CRATERS.map((c) => {
+    const k = knownFromQuality(m.quality[c.id]?.hydrogen)
+    const o = observe(c, 'hydrogen', m.quality[c.id]?.hydrogen)
+    return [c.id, { color: k === 'exact' ? '#62d394' : k === 'range' ? '#ffa94d' : '#9aa3bd', text: k === 'none' ? '? not mapped' : o.text }]
+  }))
 }
 
 function Dossier({ m, id }: { m: Mission; id: string }) {
@@ -87,7 +56,7 @@ export function Mapping({ ctx, mission, setMission, rng, onFinish }: {
   const m = mission
   const [event, setEvent] = useState<'intro' | 'none' | 'done'>(m.cycle === 1 ? 'intro' : 'none')
   const [plan, setPlan] = useState<CyclePlan>({ targets: [], calibrate: false, eclipseSave: false })
-  const [focus, setFocus] = useState('cabeus')
+  const [focus, setFocus] = useState(SPECIAL.site)
   const [report, setReport] = useState<CycleReport | null>(null)
   const cycle = Math.min(report ? report.cycle : m.cycle, CYCLES)
   const [eventDone, setEventDone] = useState<Record<number, boolean>>({})
@@ -101,12 +70,14 @@ export function Mapping({ ctx, mission, setMission, rng, onFinish }: {
   }, [m.cycle]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const mods = useMemo(() => aggMods(m), [m])
+  const marks = useMemo(() => siteMarks(m), [m])
   const toggle = (id: string) =>
     setPlan((p) => ({ ...p, targets: p.targets.includes(id) ? p.targets.filter((t) => t !== id) : p.targets.length >= 2 ? [p.targets[1], id] : [...p.targets, id] }))
 
-  if (m.cycle === 1 && event === 'intro') return <Dialogue lines={ACT1_INTRO} onDone={() => setEvent('done')} startScene="moonOrbit" />
-  if (!report && m.cycle === 3 && !eventDone[3]) return <Dialogue lines={ECLIPSE_EVENT} onDone={() => setEventDone({ ...eventDone, 3: true })} startScene="control" />
-  if (!report && m.cycle === 4 && !eventDone[4]) return <Dialogue lines={COLD_SPOT_EVENT} onDone={() => setEventDone({ ...eventDone, 4: true })} startScene="control" />
+  const mars = PLANET.id === 'mars'
+  if (m.cycle === 1 && event === 'intro') return <Dialogue lines={mars ? MARS_ACT1_INTRO : ACT1_INTRO} onDone={() => setEvent('done')} startScene="moonOrbit" />
+  if (!report && m.cycle === 3 && !eventDone[3]) return <Dialogue lines={mars ? MARS_ECLIPSE_EVENT : ECLIPSE_EVENT} onDone={() => setEventDone({ ...eventDone, 3: true })} startScene="control" />
+  if (!report && m.cycle === 4 && !eventDone[4]) return <Dialogue lines={mars ? MARS_SPECIAL_EVENT : COLD_SPOT_EVENT} onDone={() => setEventDone({ ...eventDone, 4: true })} startScene="control" />
 
   const doRespond = (uid: number) => setMission(respond(m, uid, rng).m)
   const run = () => {
@@ -149,14 +120,15 @@ export function Mapping({ ctx, mission, setMission, rng, onFinish }: {
       </aside>
 
       <main className="col center">
-        <PoleMap small={!!report} m={m} ctx={ctx} targets={plan.targets} focus={focus} onToggle={toggle} onFocus={setFocus} />
-        <div className="map3d">
-          <span className="tagline">Selene over the south pole · gold = craters you will scan · drag to rotate</span>
-          <Orbit3D orbitId={design.orbitId} highlight={focus} targets={plan.targets} partIds={design.partIds} />
+        <div className={`map3d globe-pick${report ? ' small' : ''}`}>
+          <span className="tagline">{PLANET.ship} over {PLANET.region} · click a {PLANET.siteNoun} to scan it (up to 2) · drag to rotate · scroll to zoom</span>
+          <Orbit3D orbitId={design.orbitId} highlight={focus} targets={plan.targets} partIds={design.partIds}
+            marks={marks} onPick={report ? undefined : toggle} onHover={setFocus} />
+          <div className="globe-legend"><span className="lg-exact">measured</span><span className="lg-range">rough</span><span className="lg-none">not mapped</span><span className="lg-sel">target</span></div>
         </div>
         {!report && <div className="plan">
           <div className="plan-row">
-            <b>Targets:</b> {plan.targets.length ? plan.targets.map((t) => CRATER[t].name).join(' + ') : 'click up to 2 craters'}
+            <b>Targets:</b> {plan.targets.length ? plan.targets.map((t) => CRATER[t].name).join(' + ') : `click up to 2 ${PLANET.siteNoun}s`}
             {plan.targets.length === 2 && <em> · split focus: quality −35%</em>}
           </div>
           <label className={`toggle ${m.cycle !== 1 ? 'disabled' : ''}`}>
@@ -167,7 +139,7 @@ export function Mapping({ ctx, mission, setMission, rng, onFinish }: {
             <input type="checkbox" checked={plan.eclipseSave} onChange={(e) => setPlan({ ...plan, eclipseSave: e.target.checked })} />
             Instruments off in eclipse (battery safer, quality −20%)
           </label>
-          <button className="btn big" disabled={!canRun} onClick={run}>Scan the selected craters ▶</button>
+          <button className="btn big" disabled={!canRun} onClick={run}>Scan the selected {PLANET.siteNoun}s ▶</button>
         </div>}
 
         {report && (

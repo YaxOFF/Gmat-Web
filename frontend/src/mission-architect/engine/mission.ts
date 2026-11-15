@@ -1,4 +1,4 @@
-import { CRATER, CRATERS, CYCLES, LAUNCHER, ORBIT, PART, DSN_WINDOWS_PER_CYCLE } from '../data/catalog'
+import { CRATER, CRATERS, CYCLES, LAUNCHER, ORBIT, PART, DSN_WINDOWS_PER_CYCLE, SPECIAL } from '../data/catalog'
 import { CARD, CRITICAL_POOL, type CardEffect, type Level } from '../data/cards'
 import type { Design, Layer } from '../data/types'
 import { buildDeck, hasLayer, initialStress, type Stats } from './design'
@@ -85,7 +85,7 @@ export function runLaunch(ctx: Ctx, stress: number, rng: Rng): LaunchOutcome {
   const lp = clamp((tank?.rel ?? 0.9) * (1 - stress / 200), 0, 1)
   const ins = engineeringRoll(rng, lp)
   loi = ins.result
-  events.push({ kind: 'roll', label: 'Lunar orbit insertion', p: lp, roll: ins.roll, result: loi, text: 'The engine must fire at exactly the right moment.' })
+  events.push({ kind: 'roll', label: INSERTION.label, p: lp, roll: ins.roll, result: loi, text: 'The engine must fire at exactly the right moment.' })
   return { events, status: loi === 'fail' ? 'lost' : 'ok', panel, loi }
 }
 
@@ -129,7 +129,7 @@ export function createMission(ctx: Ctx, launch: LaunchOutcome, forced: boolean, 
   if (launch.loi === 'partial') {
     m.qBonus -= 0.2
     m.dvLeft -= 100
-    m.log.push({ cycle: 0, kind: 'bad', text: 'Lunar orbit insertion: partial burn. Higher orbit (−20% map quality) and 100 m/s of fuel spent correcting.' })
+    m.log.push({ cycle: 0, kind: 'bad', text: `${INSERTION.label}: partial burn. Higher orbit (−20% map quality) and 100 m/s of fuel spent correcting.` })
   }
   return m
 }
@@ -328,8 +328,8 @@ export function runCycle(prev: Mission, ctx: Ctx, plan: CyclePlan, _rng: Rng): {
       }
     }
     // Evento fijo del ciclo 4: punto ultrafrío en Cabeus (el radiómetro lo ve completo)
-    if (m.cycle === 4 && hasLayer(stats, 'temperature') && targets.includes('cabeus')) {
-      const slot = (m.quality['cabeus'] ??= {})
+    if (m.cycle === 4 && hasLayer(stats, 'temperature') && targets.includes(SPECIAL.site)) {
+      const slot = (m.quality[SPECIAL.site] ??= {})
       if ((slot.temperature ?? 0) < 0.95) slot.temperature = 0.95
     }
   }
@@ -382,7 +382,12 @@ export const siteScore = (id: string) => {
   const c = CRATER[id]
   return c.h * (1 - 0.12 * c.risk)
 }
-export const BEST_SITE = CRATERS.reduce((a, c) => (siteScore(c.id) > siteScore(a.id) ? c : a)).id
+const best = () => CRATERS.reduce((a, c) => (siteScore(c.id) > siteScore(a.id) ? c : a)).id
+export let BEST_SITE = best()
+/** Lo llama setPlanet (data/planet.ts) al cambiar la lista de sitios. */
+export function refreshBestSite() { BEST_SITE = best() }
+/** Nombre de la inserción en órbita (lo cambia el planeta); launchLines y Launch3D comparan con endsWith('orbit insertion'). */
+export const INSERTION = { label: 'Lunar orbit insertion' }
 
 export type EndingId = 'launch_failure' | 'lost' | 'lead' | 'bold' | 'poor'
 

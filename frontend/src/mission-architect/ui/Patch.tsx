@@ -1,13 +1,17 @@
 import type { MissionMode } from '../data/types'
+import { PLANET } from '../data/planet'
 
 /** Parche de misión bordado (reemplaza a la servilleta): cambia según la misión elegida. */
 export function MissionPatch({ mode, size = 260 }: { mode: MissionMode; size?: number }) {
-  const ring = `SELENE · MISSION ${mode} · WATER ON THE MOON ·`
+  const mars = PLANET.id === 'mars'
+  const ring = mars ? `ARES · MISSION ${mode} · STONES OF MARS ·` : `SELENE · MISSION ${mode} · WATER ON THE MOON ·`
   return (
-    <svg className="patch" width={size} height={size} viewBox="0 0 240 240" role="img" aria-label={`Mission ${mode} patch`} key={mode}>
+    <svg className="patch" width={size} height={size} viewBox="0 0 240 240" role="img" aria-label={`Mission ${mode} patch`} key={mode + PLANET.id}>
       <defs>
         <radialGradient id="pt-sky" cx="50%" cy="35%"><stop offset="0" stopColor="#1f3566" /><stop offset="1" stopColor="#0a1228" /></radialGradient>
-        <radialGradient id="pt-moon" cx="38%" cy="30%"><stop offset="0" stopColor="#ece8dc" /><stop offset="1" stopColor="#7d7f8c" /></radialGradient>
+        <radialGradient id="pt-moon" cx="38%" cy="30%">{mars
+          ? <><stop offset="0" stopColor="#e8a476" /><stop offset="1" stopColor="#8a3f22" /></>
+          : <><stop offset="0" stopColor="#ece8dc" /><stop offset="1" stopColor="#7d7f8c" /></>}</radialGradient>
         <path id="pt-arc" d="M120 120 m-96 0 a96 96 0 1 1 192 0 a96 96 0 1 1 -192 0" />
         <clipPath id="pt-in"><circle cx="120" cy="120" r="82" /></clipPath>
       </defs>
@@ -24,7 +28,9 @@ export function MissionPatch({ mode, size = 260 }: { mode: MissionMode; size?: n
         <rect width="240" height="240" fill="url(#pt-sky)" />
         {[[70, 70], [160, 60], [176, 104], [88, 102], [140, 84], [64, 130]].map(([x, y], i) => <circle key={i} cx={x} cy={y} r={i % 2 ? 1.6 : 2.4} fill="#f4efe1" />)}
         <circle cx="120" cy="226" r="92" fill="url(#pt-moon)" />
-        <circle cx="96" cy="168" r="9" fill="#00000022" /><circle cx="148" cy="180" r="13" fill="#00000022" /><circle cx="122" cy="156" r="5" fill="#00000022" />
+        {mars
+          ? <>{/* capas de roca del delta y una piedra con núcleo */}<path d="M40 170 q40 -10 80 -4 t84 -2" stroke="#6e2f18" strokeWidth="3" fill="none" /><path d="M36 184 q46 -8 90 -2 t80 0" stroke="#c98a62" strokeWidth="3" fill="none" /><ellipse cx="150" cy="160" rx="10" ry="6" fill="#5a2a18" /></>
+          : <><circle cx="96" cy="168" r="9" fill="#00000022" /><circle cx="148" cy="180" r="13" fill="#00000022" /><circle cx="122" cy="156" r="5" fill="#00000022" /></>}
         <ellipse cx="120" cy="122" rx="74" ry="24" fill="none" stroke="#5cc8f0" strokeWidth="3" transform="rotate(-14 120 122)" />
         {/* Selene */}
         <g transform="translate(170 96) rotate(-14)">

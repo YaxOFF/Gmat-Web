@@ -122,6 +122,8 @@ export const CRATERS: Crater[] = [
     blurb: 'Promising and brutal. Very steep walls.' },
 ]
 export const CRATER: Record<string, Crater> = Object.fromEntries(CRATERS.map((c) => [c.id, c]))
+/** Sitio del evento del ciclo 4 (la Luna: punto ultrafrío en Cabeus). data/planet.ts lo cambia con el planeta. */
+export const SPECIAL = { site: 'cabeus' }
 
 export function defaultDesign(): Design {
   return { mode: 'B', orbitId: 'polar_high', launcherId: 'medium', partIds: [] }

@@ -74,11 +74,12 @@ export function Dialogue({ lines, onDone, startScene = 'void', skipLabel = 'Skip
   bk.current = back
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') { e.preventDefault(); adv.current() }
-      else if (e.key === 'ArrowLeft') { e.preventDefault(); bk.current() }
+      if ((e.target as HTMLElement).closest?.('input,textarea')) return
+      if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); adv.current() }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); bk.current() }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [])
 
   if (!step) return null

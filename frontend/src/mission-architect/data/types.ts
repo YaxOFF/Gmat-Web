@@ -27,7 +27,8 @@ export interface Part {
   cards?: string[] // cartas que esta pieza mete al mazo
 }
 
-export type CraterId = 'shackleton' | 'cabeus' | 'haworth' | 'gerlache' | 'faustini'
+/** Luna: 'shackleton' | 'cabeus' | 'haworth' | 'gerlache' | 'faustini'. Marte: los sitios de data/planet.ts. */
+export type CraterId = string
 
 export interface Crater {
   id: CraterId

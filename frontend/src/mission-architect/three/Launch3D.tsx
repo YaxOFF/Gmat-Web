@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import type { LaunchOutcome } from '../engine/mission'
 import { mulberry32, type Rng } from '../engine/rng'
-import { at, mountStage, moonTexture, stars } from './stage'
+import { at, bodyMaterial, mountStage, stars } from './stage'
 
 const T_LIFT = 5, T_EVENT = 2.4, T_SPACE = 13, T_END = 19
 /** El GLB está en metros reales (cohete de 58 m): escala a la escena y altura de la cubierta sobre el suelo. */
@@ -204,7 +204,7 @@ export function Launch3D({ launch, seed, onDone }: { launch: LaunchOutcome; seed
 
     // Escena de espacio: Luna y la nave en crucero.
     const space = new THREE.Group(); space.visible = false; scene.add(space)
-    const moon = new THREE.Mesh(new THREE.SphereGeometry(30, 64, 48), new THREE.MeshStandardMaterial({ map: moonTexture(rng), roughness: 1 }))
+    const moon = new THREE.Mesh(new THREE.SphereGeometry(30, 64, 48), bodyMaterial(rng))
     moon.position.set(0, 0, -120); space.add(moon)
     const craft = new THREE.Group()
     // Nave MSL (Blender): en el GLB la proa va en +y y la tobera en y=0. Aquí proa a +z, motor a −z, centrada.

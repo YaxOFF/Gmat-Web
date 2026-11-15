@@ -5,6 +5,7 @@ import {
 import { BASE_DECK } from '../data/cards'
 import type { Check, Design, Group, Layer, Part } from '../data/types'
 import { money, pct } from './rng'
+import { LAYER_LABEL } from './observe'
 
 export interface Stats {
   parts: Part[]
@@ -128,9 +129,9 @@ export function computeStats(d: Design, iterations = 0): Stats {
       why: 'Surprises cost money. Real programs hold back at least 10%.',
     },
     {
-      id: 'science', label: 'Science traceability', value: layers.includes('hydrogen') ? 'Hydrogen instrument ' : 'No hydrogen instrument',
+      id: 'science', label: 'Science traceability', value: layers.includes('hydrogen') ? `${PART.neutron.name} on board` : `No ${PART.neutron.name.toLowerCase()}`,
       status: layers.includes('hydrogen') ? (layers.includes('terrain') ? 'ok' : 'warn') : 'fail',
-      why: 'The mission asks "where is the hydrogen?". Only the neutron spectrometer answers that. Without a camera you cannot judge landing terrain.',
+      why: `The whole mission is about ${LAYER_LABEL.hydrogen.toLowerCase()}, and only the ${PART.neutron.name.toLowerCase()} can map it. Without a camera you cannot judge landing terrain.`,
     },
     {
       id: 'data', label: 'Data vs downlink', value: `${dataGbPerTarget} Gb/target · ${downlinkGbCycle} Gb/cycle down`,

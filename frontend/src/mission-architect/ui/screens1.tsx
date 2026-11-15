@@ -1,7 +1,7 @@
 import { CHARS } from '../data/chars'
 import { Orbit3D } from '../three/Orbit3D'
 import { Ship3D } from '../three/Ship3D'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CARD } from '../data/cards'
 import {
   GROUP_LABEL, GROUP_ORDER, ROVER_GROUPS, LAUNCHERS, ORBITS, PARTS, ITERATION_COST_M, MAX_ITERATIONS, starterFor,
@@ -12,24 +12,44 @@ import { reviewLines } from '../story/scripts'
 import { Dialogue } from './Dialogue'
 import { Meter, Term, statusIcon } from './Hud'
 import { pct } from '../engine/rng'
+import { PLANET, type PlanetId } from '../data/planet'
+import { preloadBody } from '../three/stage'
+import { HomeScene } from '../three/HomeScene'
 
 // ---------- Título ----------
 
-export function Title({ onStart, onMars }: { onStart: () => void; onMars: () => void }) {
+export function Title({ onStart }: { onStart: (planet: PlanetId) => void }) {
+  const [planet, setPlanet] = useState<PlanetId>(PLANET.id)
+  // Desde la portada ya se bajan los dos globos: así ninguna escena 3D arranca con el color liso.
+  useEffect(() => { preloadBody('moon'); preloadBody('mars') }, [])
+  const mars = planet === 'mars'
+  const BASE = import.meta.env.BASE_URL
   return (
-    <div className="title-screen">
-      <div className="halftone" />
-      <img className="title-moon" src={`${import.meta.env.BASE_URL}moon/southpole.png`} alt="" />
+    <div className={`title-screen home ${mars ? 'mars' : ''}`}>
+      <HomeScene planet={planet} />
+      <div className="home-shade" />
       <div className="title-inner">
         <div className="kicker">A space mission design game</div>
         <h1>MISSION<br /><b>ARCHITECT</b></h1>
-        <p className="tag">Episode 1 · Water on the Moon</p>
-        <p className="sub">There may be frozen water hiding in the darkest craters of the Moon. You have a budget, a rocket and one shot. Design the spacecraft, fly it, and find the ice.</p>
+        <p className="tag">{mars ? 'Episode 2 · Stones of Mars' : 'Episode 1 · Water on the Moon'}</p>
+        <div className="planet-pick" role="radiogroup" aria-label="Choose where to go">
+          {([
+            ['moon', 'The Moon', 'Find frozen water in craters that never see the Sun.', 'moon/southpole.png'],
+            ['mars', 'Mars', 'Drill rocks from old lakes that may keep traces of life.', 'mars/color.jpg'],
+          ] as const).map(([id, name, what, img]) => (
+            <button key={id} role="radio" aria-checked={planet === id} className={`planet ${id} ${planet === id ? 'sel' : ''}`} onClick={() => setPlanet(id)}>
+              <span className="planet-ball" style={{ backgroundImage: `url(${BASE}${img})` }} />
+              <b>{name}</b><small>{what}</small>
+            </button>
+          ))}
+        </div>
+        <p className="sub">{mars
+          ? 'Mars once had rivers and lakes. The rocks they left behind could hold the answer to the biggest question there is. You have a budget, a rocket and one shot. Map the old lakes, land, and drill the right stone before the dust storm.'
+          : 'There may be frozen water hiding in the darkest craters of the Moon. You have a budget, a rocket and one shot. Design the spacecraft, fly it, and find the ice.'}</p>
         <ol className="how">
-          {['Design', 'Launch', 'Map', 'Land', 'Explore'].map((t, i) => <li key={t}><span>0{i + 1}</span>{t}</li>)}
+          {['Design', 'Launch', 'Map', 'Land', mars ? 'Drill' : 'Explore'].map((t, i) => <li key={t}><span>0{i + 1}</span>{t}</li>)}
         </ol>
-        <button className="btn big" onClick={onStart}>START MISSION ▶</button>
-        <button className="btn ghost" onClick={onMars}>TRY MARS ▶</button>
+        <button className="btn big" onClick={() => onStart(planet)}>{mars ? 'START MISSION TO MARS ▶' : 'START MISSION TO THE MOON ▶'}</button>
         <p className="hint">Solo or a team of 4 · about 25 minutes · real orbit physics from NASA GMAT</p>
       </div>
     </div>
@@ -43,18 +63,20 @@ export function OrbitPick({ design, onPick, onInspect }: { design: Design; onPic
   const dots = (n: number, good: boolean) => <span className={`dots ${good ? 'good' : 'cost'}`}>{'●'.repeat(n)}<i>{'●'.repeat(3 - n)}</i></span>
   const INFO: Record<string, { best: string; maps: number; fuel: number; dark: number; talk: number; plain: string }> = {
     polar_low: { best: 'The sharpest maps', maps: 3, fuel: 3, dark: 3, talk: 3,
-      plain: 'Flying low gives you crisp maps, but the Moon\'s lumpy gravity keeps pulling Selene down. You will burn a lot of fuel to stay up, so you need the big tank.' },
+      plain: PLANET.id === 'mars'
+        ? 'Flying low gives you crisp maps, but the top of the thin Martian air drags on Ares. You will burn a lot of fuel to stay up, so you need the big tank.'
+        : 'Flying low gives you crisp maps, but the Moon\'s lumpy gravity keeps pulling Selene down. You will burn a lot of fuel to stay up, so you need the big tank.' },
     polar_high: { best: 'A safe, balanced first mission', maps: 2, fuel: 2, dark: 2, talk: 2,
       plain: 'A little higher, a lot calmer. Good maps, moderate fuel, and regular contact with a rover later. The easiest choice if this is your first time.' },
     polar_ellip: { best: 'Saving fuel and helping a rover', maps: 1, fuel: 1, dark: 1, talk: 2,
-      plain: 'Swoops low over the south pole and far away elsewhere. Very cheap on fuel and great for long rover chats, but the maps are blurrier.' },
+      plain: PLANET.id === 'mars' ? 'Swoops low over the surface and far away elsewhere, like Mars Express. Very cheap on fuel and great for long rover chats, but the maps are blurrier.' : 'Swoops low over the south pole and far away elsewhere. Very cheap on fuel and great for long rover chats, but the maps are blurrier.' },
   }
   const o = ORBITS.find((x) => x.id === sel)!
   const info = INFO[sel]
   return (
     <div className="page orbit2">
       <h2>Choose the orbit</h2>
-      <p className="lead">Where Selene circles the Moon. Every orbit is a trade: there is no perfect one.</p>
+      <p className="lead">Where {PLANET.ship} circles {PLANET.body}. Every orbit is a trade: there is no perfect one.</p>
       <div className="orbit-layout">
         <div className="orbit-stage big">
           <span className="tagline">{o.name} orbit · drag to rotate · scroll to zoom</span>
@@ -209,7 +231,7 @@ export function Review({ design, iterations, onApprove, onIterate, onForce }: {
   if (!done) return <Dialogue lines={lines} onDone={() => setDone(true)} startScene="review" />
   const FRIENDLY: Record<string, [string, string]> = {
     mass: ['', 'Light enough for the rocket'],
-    power: ['', 'Enough power, even in the Moon\'s shadow'],
+    power: ['', `Enough power, even in the shadow of ${PLANET.body}`],
     budget: ['', 'Money left for surprises'],
     science: ['', 'Can answer the science question'],
     data: ['', 'Can send all the data home'],

@@ -105,7 +105,7 @@ export function launchLines(o: LaunchOutcome, forced: boolean): Line[] {
       if (e.result === 'success') L.push(say('dev', 'Arrays are open and locked. Power nominal.', 'excited'))
       else if (e.result === 'partial') L.push(say('dev', 'One wing opened halfway. We are running on less power than planned.', 'worried'))
       else L.push(say('dev', 'The arrays are stuck. We are on battery. That clock is ticking.', 'angry'))
-    } else if (e.label === 'Lunar orbit insertion') {
+    } else if (e.label.endsWith('orbit insertion')) {
       L.push(bg('moonOrbit'))
       L.push(cap('The most nervous minutes of the cruise. The engine fires on the far side, out of contact.'))
       if (e.result === 'success') {

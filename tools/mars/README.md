@@ -1,6 +1,6 @@
 # Mars data
 
-`build_mars.py` generates the real Mars data for the "Try Mars" test view in `frontend/public/mars/` (~3.6 MB). Run it once, or again if the sources, sites or sizes change:
+`build_mars.py` generates the real Mars data for the Mars campaign and the test view (`?screen=mars`) in `frontend/public/mars/` (~6 MB). To rebuild only some sites (no globe), pass `--sites jezero,gale`. Run it once, or again if the sources, sites or sizes change:
 
 ```sh
 uv run --with rasterio --with pillow --with numpy tools/mars/build_mars.py

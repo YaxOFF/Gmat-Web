@@ -3,7 +3,8 @@ import * as THREE from 'three'
 import type { Crater } from '../data/types'
 import { clamp, engineeringRoll, mulberry32 } from '../engine/rng'
 import { buildLander } from './spacecraft'
-import { mountStage, stars } from './stage'
+import { earthMesh, mountStage, stars } from './stage'
+import { PLANET } from '../data/planet'
 
 export interface Landing { ok: boolean; batteryPct: number; integrity: number; sciMul: number; label: string }
 
@@ -78,7 +79,7 @@ export function Descent3D({ crater, stress, mapped, seed, names, onDone }: {
         { label: 'Long burn', hint: '−30% fuel · safer', go: () => { setFuel((f) => f - 30); setBonus((b) => b + 0.03); note('Long deorbit burn.'); descend(1) } },
         { label: 'Short burn', hint: '−15% fuel · riskier', go: () => { setFuel((f) => f - 15); setBonus((b) => b - 0.08); note('Short deorbit burn.'); descend(1) } },
       ] },
-    { role: 'Science', color: 'var(--pink)', title: 'Approach · 2 km', text: `LIDAR scans ${crater.name}. The planned site is closest to the hydrogen; an alternate site nearby is flatter but poorer.`,
+    { role: 'Science', color: 'var(--pink)', title: 'Approach · 2 km', text: `LIDAR scans ${crater.name}. The planned site is closest to the ${PLANET.hint}; an alternate site nearby is flatter but poorer.`,
       choices: [
         { label: 'Trust the planned site', hint: 'full science', go: () => { note('Holding the planned site.'); descend(2) } },
         { label: 'Divert to alternate', hint: 'safer · −30% ice', go: () => { setBonus((b) => b + 0.1); setSciMul(0.7); sim.current.shiftX = 10; note('Diverted to the alternate site.'); descend(2) } },
@@ -103,8 +104,10 @@ export function Descent3D({ crater, stress, mapped, seed, names, onDone }: {
     scene.add(stars(r, 2500, 2000))
     scene.add(new THREE.HemisphereLight(0x9aa6c8, 0x080808, 0.5))
     const sun = new THREE.DirectionalLight(0xfff3dd, 2.4); scene.add(sun)
-    scene.background = new THREE.Color(0x03050b)
-    scene.fog = new THREE.Fog(0x03050b, 160, 520)
+    // Marte: cielo de polvo color caramelo y suelo rojizo; la Luna: negro con estrellas.
+    const mars = PLANET.id === 'mars', sky = mars ? 0xc9a27c : 0x03050b
+    scene.background = new THREE.Color(sky)
+    scene.fog = new THREE.Fog(sky, mars ? 120 : 160, mars ? 420 : 520)
     sun.position.set(-260, 60, -120); sun.intensity = 3; sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
     Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, far: 800 })
@@ -125,13 +128,13 @@ export function Descent3D({ crater, stress, mapped, seed, names, onDone }: {
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), z = pos.getZ(i); pos.setY(i, hAt(x, z))
       const v = 0.42 + (Math.sin(x * 0.31) * Math.cos(z * 0.27)) * 0.04 + r() * 0.05
-      col.set([v, v, v * 1.03], i * 3)
+      col.set(mars ? [v * 1.5, v * 0.85, v * 0.55] : [v, v, v * 1.03], i * 3)
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals()
     const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }))
     ground.receiveShadow = true; scene.add(ground)
-    const earth = new THREE.Mesh(new THREE.SphereGeometry(14, 48, 32), new THREE.MeshStandardMaterial({ color: 0x3b74d6, emissive: 0x0a1c44 }))
-    earth.position.set(160, 70, -460); scene.add(earth)
+    const earth = earthMesh(8.5) // vista desde la Luna: ~2° de diámetro aparente a ~490 de distancia
+    earth.position.set(160, 70, -460); if (!mars) scene.add(earth)
     const haz = new THREE.Mesh(new THREE.RingGeometry(5, 6, 40), new THREE.MeshBasicMaterial({ color: 0xff4d5e, side: THREE.DoubleSide }))
     haz.rotation.x = -Math.PI / 2; haz.position.y = hAt(0, 0) + 0.4; haz.visible = false; scene.add(haz)
     const boulders = new THREE.Group()

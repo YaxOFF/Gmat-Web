@@ -3,13 +3,18 @@ import { MODE_BUDGET_M, MODE_MULT, BUDGET_M } from '../data/catalog'
 import type { MissionMode } from '../data/types'
 import { ROLES, type Role, type Team } from '../engine/roles'
 import { MissionPatch } from './Patch'
+import { PLANET } from '../data/planet'
 
-const MODES: { id: MissionMode; icon: string; title: string; q: string; what: string; stars: number; tag?: string }[] = [
+const MOON_MODES: { id: MissionMode; icon: string; title: string; q: string; what: string; stars: number; tag?: string }[] = [
   { id: 'A', icon: '', title: 'Map it', q: 'Where is the hydrogen?', what: 'Fly an orbiter, map the south pole and point to the best crater.', stars: 1 },
   { id: 'B', icon: '', title: 'Touch it', q: 'Is it really ice?', what: 'Orbiter + a rover that lands, drives into the dark and drills.', stars: 2, tag: 'Recommended' },
   { id: 'C', icon: '', title: 'Measure it', q: 'How much ice, and how deep?', what: 'Adds a radar and a 2 m drill. Bigger budget, harder choices.', stars: 3 },
 ]
-const FLOW = ['Pick an orbit', 'Build the spacecraft', 'Launch', 'Map the craters', 'Land & explore']
+const MARS_MODES: typeof MOON_MODES = [
+  { id: 'A', icon: '', title: 'Map it', q: 'Where did the water flow?', what: 'Fly an orbiter, map the old lakes and rivers and point to the best site.', stars: 1 },
+  { id: 'B', icon: '', title: 'Touch it', q: 'Which rocks held water?', what: 'Orbiter + a rover that lands, drives to the outcrops and drills rock cores.', stars: 2, tag: 'Recommended' },
+  { id: 'C', icon: '', title: 'Measure it', q: 'What is buried under the dust?', what: 'Adds a radar and a 2 m drill. Bigger budget, harder choices.', stars: 3 },
+]
 
 export function Setup({ mode, team, onDone }: {
   mode: MissionMode; team: Team; onDone: (mode: MissionMode, team: Team) => void
@@ -21,6 +26,8 @@ export function Setup({ mode, team, onDone }: {
     players: n,
     names: n === 1 ? { Director: 'You', Systems: 'You', Science: 'You', Comms: 'You' } : { Director: 'Player 1', Systems: 'Player 2', Science: 'Player 3', Comms: 'Player 4' },
   })
+  const MODES = PLANET.id === 'mars' ? MARS_MODES : MOON_MODES
+  const FLOW = ['Pick an orbit', 'Build the spacecraft', 'Launch', `Map the ${PLANET.siteNoun}s`, PLANET.id === 'mars' ? 'Land & drill' : 'Land & explore']
   const pick = MODES.find((x) => x.id === m)!
   return (
     <div className="page setup2">
