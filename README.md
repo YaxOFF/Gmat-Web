@@ -71,7 +71,7 @@ GMAT Web is also a full mission-design tool in its own right. Users can create s
 - **It covers the whole mission lifecycle.** Launch, transfer, landing site, EDL, operations, sample analysis and results are all in one experience.
 - **Students can try again.** Two different campaigns and changing events mean they can replay, compare strategies and learn from failures.
 - **It is accessible.** It runs in a web browser with no installation for players, and it is dockerized so schools and events can host it easily.
-- **It is designed for collaboration.** A 4-player cooperative mode is designed in which satellite operator, rover driver and scientist roles have to communicate.
+
 
 **Intended impact:** we want students who rarely get to touch real mission design to understand how a mission is designed and why engineers make the choices they do. Putting a real NASA tool and real data behind a game can spark interest in aerospace engineering and planetary science, especially among students without access to professional software or labs. In the long term, Mission Architect could become a classroom and outreach tool where new missions are added as GMAT scripts.
 
