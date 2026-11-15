@@ -5,6 +5,8 @@ from pathlib import Path
 
 GMAT_HOME = os.environ.get("GMAT_HOME", "")
 CACHE_DIR = Path(os.environ.get("GMAT_WEB_CACHE", Path(__file__).resolve().parent.parent / ".cache"))
+# Build del frontend que sirve FastAPI (Docker). Vacío en dev: lo sirve Vite.
+STATIC_DIR = os.environ.get("GMAT_WEB_STATIC", "")
 RUNS_DIR = Path(os.environ.get("GMAT_WEB_RUNS", Path(tempfile.gettempdir()) / "gmat-web-runs"))
 
 # Límites

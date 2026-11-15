@@ -1,4 +1,4 @@
-<!-- fuente: backend/app, frontend/src, shared | rev: e76b7b9 -->
+<!-- fuente: backend/app, frontend/src, shared | rev: 1a95f8e -->
 # Map
 
 ## Entry points
@@ -25,6 +25,7 @@
 | Field schemas from the engine (cache, isolated process) | `backend/app/engine/schema.py`, `frontend/src/model/schema.ts`; shape in `docs/API.md` |
 | Orbital state and epoch conversion | `worker.convert_state`/`convert_epoch`, routes `/api/convert/state`, `/api/convert/epoch`; `store.convert` |
 | Environment variables and limits | `backend/app/config.py`; table in `README.md` |
+| Docker (one container: Vite build + API + GMAT; FastAPI serves the build via `GMAT_WEB_STATIC`) | `Dockerfile`, `docker-compose.yml`, `.env.example`, mount at the end of `backend/app/main.py`; `docs/DEPLOY.md` |
 | Validating a script without running it | `worker.validate_script`, route `/api/script/validate` |
 | Resource tree (create/rename/clone/delete; `AskDialog` dialog) | `frontend/src/resources/ResourceTree.tsx`, `frontend/src/model/refs.ts` |
 | Resource form | `frontend/src/resources/ResourceForm.tsx` (frame), `Field.tsx` (one field), `value.ts` (`show`) |

@@ -1,5 +1,15 @@
 # syntax=docker/dockerfile:1
-# API FastAPI + motor GMAT R2026a (build de Ubuntu, gmatpy para Python 3.12).
+# Un solo contenedor: build de Vite + API FastAPI + motor GMAT R2026a (Ubuntu, gmatpy para Python 3.12).
+# uvicorn sirve /api y los estáticos del juego (GMAT_WEB_STATIC).
+
+# --- Frontend: build de Vite -----------------------------------------------------------------
+FROM node:22-alpine AS web
+WORKDIR /src
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY frontend/ ./
+# vite.config.ts copia los assets de Cesium a public/cesium y de ahí a dist/cesium.
+RUN npm run build
 
 # --- GMAT: descarga con sha256 fijo ---------------------------------------------------------
 FROM debian:bookworm-slim AS gmat
@@ -26,13 +36,15 @@ RUN useradd --system --uid 10001 --user-group --home-dir /nonexistent --shell /u
  && chown app:app /opt/gmat/output /var/lib/gmat-web/cache /var/lib/gmat-web/runs
 
 WORKDIR /srv/api
-COPY pyproject.toml ./
-COPY app ./app
+COPY backend/pyproject.toml ./
+COPY backend/app ./app
 RUN pip install --no-cache-dir . && rm -rf build *.egg-info
+COPY --from=web /src/dist /srv/web
 
 ENV GMAT_HOME=/opt/gmat \
     GMAT_WEB_CACHE=/var/lib/gmat-web/cache \
     GMAT_WEB_RUNS=/var/lib/gmat-web/runs \
+    GMAT_WEB_STATIC=/srv/web \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
