@@ -838,3 +838,4 @@
 .ds-option:disabled { opacity: .45; cursor: default; }
 .ma .ds-choice .actions { justify-content: center; }
 @media (max-width: 560px) { .ds-options { grid-template-columns: 1fr; } }
+.ma .cards .self-clear { color: var(--green); font-size: 11.5px; }

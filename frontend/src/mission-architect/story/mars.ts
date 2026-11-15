@@ -38,7 +38,7 @@ export const MARS_INTRO: Line[] = [
 
 export const MARS_ACT1_INTRO: Line[] = [
   bg('moonOrbit'),
-  title('ACT I', 'Mapping the old lakes · 4 cycles'),
+  title('ACT I', 'Five landing sites · four mapping passes'),
   say('amara', 'Five sites, four cycles. Clays, sulfates and carbonates are what we are after: minerals made in water.'),
   say('dev', 'Each cycle: cards drop, you respond, you point the instruments. Watch the battery in the eclipses.'),
   say('houston', 'And a cycle only counts if the data gets home through the DSN. Mars is far, so the pipe is thin.'),

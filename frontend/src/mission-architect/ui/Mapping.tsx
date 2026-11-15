@@ -108,6 +108,7 @@ export function Mapping({ ctx, mission, setMission, rng, onFinish }: {
                 <p>{d.text}</p>
                 <small>From: {d.source}</small>
                 {d.timer ? <small className="timer">⏱ {Math.max(0, d.timer - c.age)} pass(es) to fix it</small> : null}
+                {d.selfClear ? <small className="self-clear">Clears by itself in {Math.max(1, d.selfClear - c.age)} pass(es){d.response ? ', or fix it now' : ''}</small> : null}
                 {d.response && !report && (
                   <button className="btn small" disabled={c.tried} onClick={() => doRespond(c.uid)}>
                     {c.tried ? 'Already tried' : `${d.response.role}: ${d.response.label} (${pct(respondP(m, c.uid))})`}

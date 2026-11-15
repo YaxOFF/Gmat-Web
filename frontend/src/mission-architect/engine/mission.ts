@@ -355,6 +355,12 @@ export function runCycle(prev: Mission, ctx: Ctx, plan: CyclePlan, _rng: Rng): {
     const def = CARD[c.id]
     if (c.resolved) continue
     c.age++
+    // Problemas que pasan con el tiempo (una señal tapada, una tormenta que se asienta).
+    if (def.selfClear && c.age >= def.selfClear) {
+      c.resolved = true
+      m.log.push({ cycle: m.cycle, kind: 'good', text: `Cycle ${m.cycle}: "${def.name}" cleared up on its own.` })
+      continue
+    }
     if (def.timer && c.age >= def.timer && def.explode) {
       applyPerm(m, def.explode)
       m.stress = Math.min(100, m.stress + (def.explode.stress ?? 0))

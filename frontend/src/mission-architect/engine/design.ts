@@ -2,7 +2,7 @@ import {
   BUDGET_M, DSN_WINDOWS_PER_CYCLE, ITERATION_COST_M, LAUNCHER, ORBIT, PART,
   OPTIONAL_SINGLE, REQUIRED_SINGLE, GROUP_LABEL, MODE_BUDGET_M, ROVER_GROUPS, ROVER_REQUIRED,
 } from '../data/catalog'
-import { BASE_DECK } from '../data/cards'
+import { BASE_DECK, PLANET_DECK } from '../data/cards'
 import type { Check, Design, Group, Layer, Part } from '../data/types'
 import { money, pct } from './rng'
 import { LAYER_LABEL } from './observe'
@@ -159,6 +159,7 @@ export function buildDeck(d: Design, stats: Stats): DeckEntry[] {
   const hasSeu = deck.some((e) => e.cardId === 'seu')
   if (!has(d, 'shield') && !hasSeu) deck.push({ cardId: 'seu', because: 'You skipped the radiation shielding' })
   if (stats.powerMargin < 0.3) deck.push({ cardId: 'battery_overheat', because: 'Your power margin is thin' })
+  for (const cardId of PLANET_DECK) deck.push({ cardId, because: 'Mars itself: weather, dust and distance' })
   return deck
 }
 

@@ -93,10 +93,10 @@ export function Finale3D({ kind, crater, seed, partIds, onDone }: {
       {!res && (
         <div className="end-text">
           {kind === 'return'
-            ? <><h2>SELENE IS OUT OF FUEL</h2><p>The rover is safe in the sunlight. Your orbiter has a few m/s left. How does her story end?</p>
+            ? <><h2>SELENE IS OUT OF FUEL</h2><p>Selene mapped the pole and carried every message from Buscador. Now her tank is almost empty and she has one manoeuvre left. Crash her into the crater for one more water measurement, or lift her high and keep her alive as a radio relay for the astronauts who come next.</p>
               <div className="actions">
-                <button className="btn" onClick={() => choose('impact')}>Controlled impact into {crater}<small style={{ display: 'block' }}>LCROSS-style plume · +science (70% chance)</small></button>
-                <button className="btn ghost" onClick={() => choose('relay')}>Park as a relay for Artemis<small style={{ display: 'block' }}>+confidence · safe</small></button>
+                <button className="btn" onClick={() => choose('impact')}>Controlled impact into {crater}<small style={{ display: 'block' }}>The impact throws up a plume that the telescopes can read · more science · works 70% of the time</small></button>
+                <button className="btn ghost" onClick={() => choose('relay')}>Park as a relay for Artemis<small style={{ display: 'block' }}>Future crews talk to Earth through her · safe · more NASA confidence</small></button>
               </div></>
             : <><h2>PLAN B</h2><p>No rover. Selene can still try what LCROSS did in 2009: crash into {crater} and read the plume from orbit.</p>
               <div className="actions"><button className="btn big" onClick={() => choose('impact')}>Commit to impact</button></div></>}

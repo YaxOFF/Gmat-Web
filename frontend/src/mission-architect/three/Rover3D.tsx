@@ -24,7 +24,7 @@ export interface RoverStart {
 }
 export const DEFAULT_ROVER: RoverStart = { batteryPct: 100, sciMul: 1, integrity: 100, batteryKWh: 6, mesh: false, deep: true, massSpec: true, autonav: true, canExtend: true }
 
-const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyL', 'KeyC', 'KeyH', 'KeyR', 'KeyT', 'Digit1', 'Digit2', 'Digit3', 'Digit4'])
+const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyL', 'KeyC', 'KeyH', 'KeyR', 'KeyT', 'KeyP', 'Digit1', 'Digit2', 'Digit3', 'Digit4'])
 const SIZE = 240, HALF = SIZE / 2, RIM = 92, SEG = 200
 const DRILL_T = 5 // s por perforación: el brazo se despliega (0.9), baja (0.5) y perfora el resto
 const DRILL_BUSY = DRILL_T - 1.4 - 0.2 // s con la broca adentro (el margen evita que el corte termine antes)
@@ -204,7 +204,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
   const [final, setFinal] = useState<Final>(null)
   const [typed, setTyped] = useState(0)
   const result = useRef<RoverResult>({ samples: 0, wet: 0, waterG: 0, lostG: 0, bestPct: 0, points: 0, ending: 'dead', seed, minTemp: 20, confirmed: 0, live: false, extended: false, cores: [] })
-  const api = useRef<{ lastDrill: () => void; transmitAll: () => void; finish: (e: RoverEnding) => void; extend: () => void; seal: () => void; discard: () => void; reset: () => void } | null>(null)
+  const api = useRef<{ lastDrill: () => void; transmitAll: () => void; finish: (e: RoverEnding) => void; extend: () => void; seal: () => void; discard: () => void; reset: () => void; clean: () => void } | null>(null)
   const doneRef = useRef(onDone)
   useEffect(() => { doneRef.current = onDone }, [onDone])
   const [sound, setSound] = useState(true)
@@ -373,7 +373,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     const tubes: { pct: number; kind: RockKind; seed: number }[] = []
     // Reinicio: posiciones seguras de los últimos segundos; stuckT = tiempo acelerando sin avanzar.
     const trail: { x: number; z: number; yaw: number }[] = []
-    let trailT = 0, stuckT = 0, resetCd = 0
+    let trailT = 0, stuckT = 0, resetCd = 0, cleanCd = 0
     const skyClear = new THREE.Color(world.sky ?? 0), skyStorm = new THREE.Color(0x5a3a26), sunMax = sun.intensity
     let integ = start.integrity, stuck = false, freeT = 0
     const kB = 6 / start.batteryKWh // una batería de 3 kWh se vacía (y se llena) el doble de rápido en %
@@ -396,6 +396,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         else { depth = d; say(`Drill depth: ${DEPTHS[depth].label}`, 1.5) }
       }
       if (e.code === 'KeyT') api.current?.reset()
+      if (e.code === 'KeyP') api.current?.clean()
       if (e.code === 'KeyR' && stuck && freeT <= 0) {
         freeT = 1.5; bat -= 2 * kB
         if (rng() < (start.mesh ? 0.85 : 0.5)) { stuck = false; say(start.mesh ? 'The mesh wheels "walk" out of the soft regolith!' : 'Free! The wheels bite again.') }
@@ -499,6 +500,15 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         say(tubes.length >= TUBES ? 'Tube 3 of 3 sealed. The rack is full: end the mission and take them to the lab.' : `Sealed in tube ${tubes.length} of ${TUBES}.`, 4)
       },
       discard: () => { if (!pending) return; pending = null; setCore((c) => (c ? { ...c, state: 'discarded' } : c)); say('Core discarded. The tube stays free for a better rock.', 3) },
+      // Limpiar paneles: vibrarlos suelta parte del polvo (con la tormenta encima el viento los vuelve a cubrir).
+      clean: () => {
+        if (!rocksMode || paused) return
+        if (cleanCd > 0) { say(`The panel motors are cooling down: ${Math.ceil(cleanCd)} s.`, 2); return }
+        if (Math.abs(speed) > 0.8) { say('Stop the rover first to shake the panels.', 2); return }
+        const before = panelDust
+        panelDust *= tau > 0.5 ? 0.8 : 0.45; bat -= 3 * kB; cleanCd = 20
+        say(`Panels vibrated: ${Math.round((before - panelDust) * 100)}% of the dust is gone (−3% battery).${tau > 0.5 ? ' The storm keeps coating them, though.' : ''}`, 4)
+      },
       // Reiniciar: vuelve a donde estuvo hace unos segundos (o al lander), a cambio de batería.
       reset: () => {
         if (paused || resetCd > 0) return
@@ -588,7 +598,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         if (dark && !entered) { entered = true; say(rocksMode ? 'The storm is here. The solar panels are almost dark: every drill now comes out of the battery.' : 'Entering permanent shadow. No sunlight, no charging. Watch the red return marker.', 5) }
 
         // Rastro para reiniciar: una posición por segundo mientras avanza bien.
-        trailT += dt; if (resetCd > 0) resetCd -= dt
+        trailT += dt; if (resetCd > 0) resetCd -= dt; if (cleanCd > 0) cleanCd -= dt
         if (trailT > 1 && Math.abs(speed) > 0.8 && !stuck) { trailT = 0; trail.push({ x, z, yaw }); if (trail.length > 40) trail.shift() }
         stuckT = (keys.has('KeyW') || keys.has('KeyS') || keys.has('ArrowUp') || keys.has('ArrowDown')) && Math.abs(speed) < 0.3 && drillT === 0 ? stuckT + dt : 0
 
@@ -679,6 +689,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
             : rocksMode && tubes.length >= TUBES ? 'All 3 tubes are full. End the mission and take them to the lab.'
             : rocksMode ? (dark ? (st.wet > 0 ? 'Storm! Cache the cores now, or risk one more drill on battery.' : 'Storm! Find one good rock fast: the battery is not charging.')
               : sig > 0.2 ? 'Strong mineral signal! Stop (S) and press SPACE to drill a core.'
+              : panelDust > 0.45 ? 'The panels are dusty and barely charge: stop and press P to shake them clean.'
               : spike ? 'Drive to the pink beacon: something odd is there.'
               : st.wet > 0 ? 'Good core! Find a different rock, or cache the cores to end the mission.'
               : 'Follow the mineral signal: the bar fills and the beeps speed up near old water rocks.')
@@ -768,7 +779,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
           {rocksMode
             ? <>
               <div className="rv-row"><span>Dust storm</span><b className={h.stormOn || h.storm < 35 ? 'bad' : ''}>{h.stormOn ? `OVERHEAD · clears in ${h.storm.toFixed(0)} s` : `next in ${h.storm.toFixed(0)} s`}</b></div>
-              <div className="rv-row"><span>Solar panels</span><b className={h.clean < 0.55 ? 'bad' : ''}>{Math.round(h.clean * 100)}% clean{h.stormOn ? ' · no sun' : ''}</b></div>
+              <div className="rv-row"><span>Solar panels <kbd>P</kbd> clean</span><b className={h.clean < 0.55 ? 'bad' : ''}>{Math.round(h.clean * 100)}% clean{h.stormOn ? ' · no sun' : ''}</b></div>
               <div className="rv-row"><span>Sample tubes</span><b>{'●'.repeat(h.tubes)}<i className="rv-tube-empty">{'○'.repeat(Math.max(0, 3 - h.tubes))}</i> {h.tubes}/3</b></div>
             </>
             : <div className="rv-row"><span>Needed to return</span><b className={h.trapped ? 'bad' : ''}>{h.trapped ? 'NO RETURN' : `${h.need.toFixed(0)}%`}</b></div>}
@@ -788,6 +799,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         <div><kbd>W A S D</kbd> drive · <kbd>SPACE</kbd> drill</div>
         <div><kbd>L</kbd> lights · <kbd>C</kbd> top view · <kbd>R</kbd> unstick · <kbd>T</kbd> reset</div>
         <button className="btn small ghost" onClick={() => setSound(!sound)}>{sound ? 'Sound on' : 'Sound off'}</button>{' '}
+        {rocksMode && <><button className={`btn small ${h && h.clean < 0.55 ? 'warn' : 'ghost'}`} title="Vibrate the solar panels to shake dust off (−3% battery)." onClick={() => api.current?.clean()}>Clean panels</button>{' '}</>}
         <button className={`btn small ${h?.stuckHint ? 'warn' : 'ghost'}`} title="Stuck in a hole or on a rock? Put the rover back a few metres (−6% battery)." onClick={() => api.current?.reset()}>Reset rover</button>
       </div>
       {h && !final && <div className="rv-goal" role="status"><small>WHAT TO DO</small>{h.goal}</div>}

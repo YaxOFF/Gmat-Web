@@ -16,7 +16,7 @@ import {
   type EndingId, type LaunchOutcome, type Mission, type ScoreBreakdown,
 } from './engine/mission'
 import { clamp, money, mulberry32, type Rng } from './engine/rng'
-import { INTRO, endingLines } from './story/scripts'
+import { INTRO, endingLines, moonEpilogue } from './story/scripts'
 import { Dialogue } from './ui/Dialogue'
 import { STEP_NAMES, TopBar } from './ui/Hud'
 import { Mapping } from './ui/Mapping'
@@ -212,9 +212,11 @@ export default function MissionArchitect({ onInspect, onExit }: {
       {phase === 'rover' && site && (
         <Rover3D crater={CRATER[site]} quality={mission ? mission.quality[site]?.hydrogen ?? 0 : 0.6} seed={seed}
           orbitId={design.orbitId} start={roverStart} world={mars ? MARS : MOON}
-          onDone={(r) => { setRover(r); if (mars) setPhase('epilogue'); else if (r.ending === 'return') setPhase('finale'); else afterAct() }} />
+          onDone={(r) => { setRover(r); setPhase('epilogue') }} />
       )}
-      {phase === 'epilogue' && <Dialogue lines={marsEpilogue(rover, !!landing?.ok)} startScene="control" onDone={() => (rover?.cores.length ? setPhase('lab') : afterAct())} />}
+      {phase === 'epilogue' && (mars
+        ? <Dialogue lines={marsEpilogue(rover, !!landing?.ok)} startScene="control" onDone={() => (rover?.cores.length ? setPhase('lab') : afterAct())} />
+        : <Dialogue lines={moonEpilogue(rover, has('mass_spec'))} startScene="control" onDone={() => (rover?.ending === 'return' ? setPhase('finale') : afterAct())} />)}
       {phase === 'lab' && rover && site && <Lab tubes={rover.cores} site={CRATER[site].name} onDone={(r) => { setLab(r); afterAct() }} />}
       {phase === 'finale' && site && (
         <Finale3D kind={landing && !landing.ok ? 'planb' : 'return'} crater={CRATER[site].name} seed={seed} partIds={design.partIds}

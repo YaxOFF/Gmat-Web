@@ -1,4 +1,5 @@
 import { CRATER, CRATERS, GLOSSARY, ORBITS, PART, SPECIAL } from './catalog'
+import { MARS_DECK, PLANET_DECK } from './cards'
 import type { Crater, Layer, Orbit, Part } from './types'
 import { LAYER_LABEL, UNIT } from '../engine/observe'
 import { INSERTION, refreshBestSite } from '../engine/mission'
@@ -122,5 +123,6 @@ export function setPlanet(id: PlanetId) {
   SPECIAL.site = mars ? 'jezero' : MOON.special
   INSERTION.label = mars ? 'Mars orbit insertion' : MOON.insertion
   ROLES.forEach((r, i) => Object.assign(r, MOON.roles[i], mars ? MARS_ROLES[r.id] : {}))
+  PLANET_DECK.splice(0, PLANET_DECK.length, ...(mars ? MARS_DECK : []))
   refreshBestSite()
 }

@@ -139,7 +139,7 @@ function lossEpilogue(id: 'launch_failure' | 'lost'): Line[] {
 
 export const ACT1_INTRO: Line[] = [
   bg('moonOrbit'),
-  title('ACT I', 'Mapping the south pole · 4 cycles'),
+  title('ACT I', 'Five craters · four mapping passes'),
   say('amara', 'Five craters, four cycles. We cannot see them all sharply, so choose carefully.'),
   say('dev', 'Each cycle: cards drop, you respond, you point the instruments. Do not run out of battery.'),
   say('houston', 'And remember, a cycle of data only counts if I get it down through the DSN.'),
@@ -238,3 +238,31 @@ export function failureEnding(id: 'launch_failure' | 'lost'): Line[] {
 
 export const cardName = (id: string) => CARD[id]?.name ?? id
 export const orbitName = (id: string) => ORBIT[id]?.name ?? id
+
+// ---------- Epílogo de la Luna (antes de la decisión final sobre Selene) ----------
+
+/** Qué significa lo que encontró el rover. Cierra la historia antes del final de Selene o del informe. */
+export function moonEpilogue(r: { waterG: number; confirmed: number; wet: number; bestPct: number; ending: string } | null, massSpec: boolean): Line[] {
+  const L: Line[] = [bg('control'), title('EPILOGUE', 'What the ice means')]
+  if (!r) return L
+  if (r.waterG > 0) {
+    L.push(tele(`[DSN] ${r.waterG} G OF WATER CONFIRMED · BEST CORE ${r.bestPct}% BY WEIGHT`))
+    L.push(sfx('WATER ON THE MOON', 'good'))
+    L.push(say('amara', `It is real ice, not just hydrogen: frozen grains mixed into the soil, up to ${r.bestPct}% by weight. LCROSS measured about 5.6% at Cabeus in 2009.`, 'excited'))
+    L.push(say('elena', 'Water is drinking water. Split it and you get oxygen to breathe and hydrogen for rocket fuel.', 'excited'))
+    L.push(say('dev', 'So a base at the south pole would not have to haul every litre from Earth. That is why Artemis wants to land there.', 'excited'))
+  } else if (r.wet > 0 && !massSpec) {
+    L.push(say('amara', 'We saw hydrogen in the cores, but without the mass spectrometer we cannot prove it is water. It could be hydroxyl stuck to the minerals.', 'worried'))
+    L.push(say('elena', 'A strong hint, not a discovery. Next time, the spectrometer flies.', 'neutral'))
+  } else if (r.wet > 0) {
+    L.push(say('amara', 'Traces of ice, but every core with water was lost before it reached Earth.', 'worried'))
+  } else {
+    L.push(say('amara', 'Every core came up dry. The ice is down there; we just did not reach it.', 'worried'))
+  }
+  if (r.ending === 'last') L.push(say('houston', 'Buscador\'s last message made it home. The rover never woke up, but its data did.', 'neutral'))
+  else if (r.ending === 'frozen') L.push(say('houston', 'Buscador froze in the permanent shadow, colder than −40 °C. It is still out there.', 'worried'))
+  else if (r.ending === 'dead') L.push(say('houston', 'Buscador ran out of battery in the dark. Unsent samples went with it.', 'worried'))
+  else L.push(say('houston', 'Buscador is parked safely in the sunlight, still talking to us.', 'excited'))
+  if (r.ending === 'return') L.push(say('elena', 'One last decision. Selene is almost out of fuel: how does her story end?', 'neutral'))
+  return L
+}

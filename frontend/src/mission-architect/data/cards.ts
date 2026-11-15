@@ -25,6 +25,8 @@ export interface CardDef {
   duration: 'cycle' | 'until' | 'perm'
   response?: { label: string; role: string; p: number }
   timer?: number // ciclos antes de que explote si no se resuelve
+  /** Ciclos tras los que se arregla sola (problemas que pasan con el tiempo, como una señal tapada por el Sol). */
+  selfClear?: number
   explode?: CardEffect & { stress?: number; text: string }
 }
 
@@ -82,6 +84,23 @@ export const CARDS: CardDef[] = [
     response: { label: 'Try wiggling the wings', role: 'Systems', p: 0.5 },
     explode: { batCapMul: 0.7, stress: 5, text: 'The battery suffered from deep discharges. Capacity −30%.' } },
 
+  // Marte (entran al mazo solo en la campaña de Marte: ver PLANET_DECK)
+  { id: 'solar_conjunction', name: 'Solar conjunction', level: 'major', source: 'Mars: orbital geometry', duration: 'until', selfClear: 1,
+    text: 'The Sun sits between Earth and Mars and scrambles the radio. No downlink until it moves on. It happens every 26 months, for about two weeks.',
+    effect: { downMul: 0 } },
+  { id: 'global_dust_storm', name: 'Global dust storm', level: 'major', source: 'Mars: dust season', duration: 'until', selfClear: 2,
+    text: 'A planet-wide dust storm hides the surface. Maps −40% until the dust settles, or until you look through it.',
+    effect: { qMul: 0.6 },
+    response: { label: 'Switch to thermal infrared', role: 'Science', p: 0.75 } },
+  { id: 'swollen_atmosphere', name: 'Swollen atmosphere', level: 'minor', source: 'Mars: dust heats the air', duration: 'until', timer: 2,
+    text: 'The storm heats the upper air and it puffs up. More drag on the orbiter: raise the orbit or lose fuel.',
+    effect: {},
+    response: { label: 'Small raise burn', role: 'Systems', p: 0.85 },
+    explode: { dvMul: 0.85, stress: 5, text: 'Extra drag ate 15% of the remaining fuel.' } },
+  { id: 'light_delay', name: 'Late command', level: 'minor', source: 'Mars: up to 20 min of light-time', duration: 'cycle',
+    text: 'A command took 20 minutes to arrive and the pointing slipped. Mapping −15% this cycle. It sorts itself out next cycle.',
+    effect: { qMul: 0.85 } },
+
   // Críticas (solo con estrés ≥ 85)
   { id: 'propellant_leak', name: 'Propellant leak', level: 'critical', source: 'Stress above 85', duration: 'perm',
     text: 'A valve is leaking. 30% of the remaining fuel is gone.', effect: { dvMul: 0.7 } },
@@ -93,3 +112,6 @@ export const CARDS: CardDef[] = [
 export const CARD: Record<string, CardDef> = Object.fromEntries(CARDS.map((c) => [c.id, c]))
 export const BASE_DECK = ['telemetry_noise', 'pointing_drift', 'solar_heating', 'star_tracker']
 export const CRITICAL_POOL = ['propellant_leak', 'attitude_loss']
+/** Cartas extra del planeta activo (data/planet.ts la llena al elegir Marte). */
+export const PLANET_DECK: string[] = []
+export const MARS_DECK = ['solar_conjunction', 'global_dust_storm', 'swollen_atmosphere', 'light_delay']
