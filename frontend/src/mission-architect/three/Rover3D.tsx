@@ -416,11 +416,19 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       if (!best || best.k >= 6) return { pct: 0, dep: null as Dep | null }
       return { pct: +(best.d.rich * (1 - best.k / 7) * mul).toFixed(1), dep: best.d }
     }
+    // Hoyo de perforación a ras del suelo (sobre la malla que se ve, inclinado con la pendiente); con hielo, borde cian que brilla.
+    const holeGeo = new THREE.CircleGeometry(0.22, 18), ringGeo = new THREE.RingGeometry(0.22, 0.4, 24)
+    const holeMat = new THREE.MeshBasicMaterial({ color: 0x1a110b, polygonOffset: true, polygonOffsetFactor: -2 })
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x38e1ff, polygonOffset: true, polygonOffsetFactor: -2 })
     const mark = (wet: boolean) => {
-      const tip = rover.localToWorld(new THREE.Vector3(0, 0, -1.2))
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, wet ? 3 : 1), new THREE.MeshBasicMaterial({ color: wet ? 0x38e1ff : 0x777777 }))
-      m.position.set(tip.x, height(tip.x, tip.z) + (wet ? 1.5 : 0.5), tip.z); scene.add(m)
-      if (wet) { const glow = new THREE.PointLight(0x38e1ff, 30, 12); glow.position.copy(m.position); scene.add(glow) }
+      const tip = rover.localToWorld(new THREE.Vector3(0, 0, -1.2)), e = 0.3
+      const nrmG = new THREE.Vector3((floor(tip.x - e, tip.z) - floor(tip.x + e, tip.z)) / (2 * e), 1, (floor(tip.x, tip.z - e) - floor(tip.x, tip.z + e)) / (2 * e)).normalize()
+      const q2 = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), nrmG)
+      const at2 = new THREE.Vector3(tip.x, floor(tip.x, tip.z), tip.z).addScaledVector(nrmG, 0.04)
+      for (const [geo, mat] of wet ? [[holeGeo, holeMat], [ringGeo, ringMat]] as const : [[holeGeo, holeMat]] as const) {
+        const m = new THREE.Mesh(geo, mat); m.quaternion.copy(q2); m.position.copy(at2); scene.add(m)
+      }
+      if (wet) { const glow = new THREE.PointLight(0x38e1ff, 30, 12); glow.position.copy(at2).y += 0.6; scene.add(glow) }
     }
     const record = (pct: number) => {
       st.samples++; stored.push({ pct, conf: start.massSpec })
@@ -639,6 +647,12 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       camT.set(x, height(x, z), z)
       camera.position.lerp(off.add(camT), 1 - Math.exp(-dt * 4))
       camera.lookAt(camT.x, camT.y + (world.storms && !top ? 3.2 : 1.2), camT.z)
+      // Tormenta: la cámara tiembla un poco, como con miedo. Giro chico tras lookAt (no se acumula entre cuadros).
+      if (storm > 0.02 && !top) {
+        const tt = performance.now() / 1000, k = storm * (0.7 + 0.3 * Math.sin(tt * 1.7)) // ráfagas
+        camera.rotateZ((Math.sin(tt * 23.1) + 0.5 * Math.sin(tt * 37.3)) * 0.006 * k)
+        camera.rotateX((Math.sin(tt * 29.7 + 1.3) + 0.5 * Math.sin(tt * 41.9)) * 0.004 * k)
+      }
       if (dustFx && sky) {
         dustFx.update(dt, camera.position, Math.cos(wind), Math.sin(wind), storm)
         const fog = scene.fog as THREE.FogExp2
