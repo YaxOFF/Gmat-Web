@@ -1,5 +1,3 @@
-import { mulberry32 } from '../engine/rng'
-import { southPoleImage } from '../three/stage'
 import type { ReactNode } from 'react'
 import { useMemo, useState } from 'react'
 import { CRATERS, ORBIT } from '../data/catalog'
@@ -27,7 +25,9 @@ export function Site({ mission, design, onPick }: { mission: Mission; design: De
       <p className="lead">This is what Selene's data says. A "?" is a bet. Phase 2's rover lands on the sunlit rim of the crater you choose.</p>
       <div className="site-layout">
       <svg className="site-map" viewBox="0 0 100 100" aria-label="South pole map">
-        <image href={southPoleImage(mulberry32(7))} x="3" y="3" width="94" height="94" />
+        <defs><clipPath id="siteclip"><circle cx="50" cy="50" r="47" /></clipPath></defs>
+        <circle cx="50" cy="50" r="47" fill="#5a5f73" />
+        <image href={`${import.meta.env.BASE_URL}moon/southpole.png`} x="0" y="0" width="100" height="100" clipPath="url(#siteclip)" preserveAspectRatio="none" />
         {CRATERS.map((c) => (
           <g key={c.id} onClick={() => setSel(c.id)} style={{ cursor: 'pointer' }}>
             <circle cx={c.x} cy={c.y} r={sel === c.id ? 7 : 5} fill="#0a0f1c99" stroke={sel === c.id ? '#5cc8f0' : '#e8ecf6aa'} strokeWidth={sel === c.id ? 1.4 : 0.6} />

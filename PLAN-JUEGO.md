@@ -106,7 +106,7 @@ Meta: se siente terminado y se puede enseñar a alguien sin explicarle nada.
 - Tutorial: la primera vez, textos cortos por etapa que explican qué decide el jugador y por qué (apogeo, TLI, periselenio, LOI).
 - Tarjeta "Jugar: Viaje a la Luna" en el diálogo de Plantillas y entrada en la paleta (Ctrl+K).
 - Tablet sin scroll horizontal; teclado y etiquetas en todos los controles; contraste en claro y oscuro (mismo script de `docs/QA.md`, Fase 8).
-- Docs: sección "Jugar" en `docs/GUIA.md`, entradas en `docs/MAP.md`, trampas en `docs/GOTCHAS.md`, procedimientos en `docs/QA.md`.
+- Docs: sección "Jugar" en `docs/GUIDE.md`, entradas en `docs/MAP.md`, trampas en `docs/GOTCHAS.md`, procedimientos en `docs/QA.md`.
 - Verificar: partida completa en navegador de principio a fin a 1280 px y a 768 px; puntaje coherente (la solución de GMAT da 3 estrellas, una torpe da menos); `pytest`, `pytest -m slow`, lint y build en verde.
 
 ### Fase J5 (opcional) — Sesión viva del motor

@@ -38,7 +38,9 @@ export interface Crater {
   terrain: 'soft' | 'rocky' | 'steep' | 'very steep'
   risk: number // riesgo de aterrizaje 0..4
   slopeDeg: number
-  x: number // posición en el mapa polar (0..100)
+  lat: number // centro real (°, IAU/USGS Gazetteer)
+  lon: number // °E
+  x: number // posición en el mapa polar (0..100), calculada de lat/lon
   y: number
   blurb: string
 }

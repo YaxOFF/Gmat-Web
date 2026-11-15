@@ -1,5 +1,3 @@
-import { mulberry32 } from '../engine/rng'
-import { southPoleImage } from '../three/stage'
 import { CHARS } from '../data/chars'
 import { Orbit3D } from '../three/Orbit3D'
 import { Ship3D } from '../three/Ship3D'
@@ -21,7 +19,7 @@ export function Title({ onStart }: { onStart: () => void }) {
   return (
     <div className="title-screen">
       <div className="halftone" />
-      <img className="title-moon" src={southPoleImage(mulberry32(7))} alt="" />
+      <img className="title-moon" src={`${import.meta.env.BASE_URL}moon/southpole.png`} alt="" />
       <div className="title-inner">
         <div className="kicker">A space mission design game</div>
         <h1>MISSION<br /><b>ARCHITECT</b></h1>

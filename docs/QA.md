@@ -1,13 +1,13 @@
-# QA reutilizable
+# Reusable QA
 
-Pruebas de verificación por fase. Reusar y ampliar; no reinventar.
+Verification tests per phase. Reuse and extend; do not reinvent.
 
-## Entorno
-- `pytest` exige `GMAT_HOME`; sin él da ~26 errores de entorno:
+## Environment
+- `pytest` requires `GMAT_HOME`; without it you get ~26 environment errors:
   `export GMAT_HOME='C:\Users\Yaxon\Downloads\gmat-win-R2026a'`
-- Si 8000/5173 están ocupados por procesos viejos (el backend viejo da 404 en rutas nuevas), levantar en otros puertos:
+- If 8000/5173 are taken by old processes (the old backend gives 404 on new routes), start on other ports:
   - Backend: `cd backend; .venv/Scripts/python -m uvicorn app.main:app --port 8001`
-  - Vite: `cd frontend; npx vite --config <ruta>/vite.qa.mjs` con este config (proxy a 8001, puerto 5175):
+  - Vite: `cd frontend; npx vite --config <path>/vite.qa.mjs` with this config (proxy to 8001, port 5175):
 ```js
 import react from 'file:///D:/YaxonFolder/Github/Gmat-Web/frontend/node_modules/@vitejs/plugin-react/dist/index.js'
 export default {
@@ -16,11 +16,11 @@ export default {
   server: { port: 5175, strictPort: true, proxy: { '/api': { target: 'http://127.0.0.1:8001', ws: true }, '/ws': { target: 'ws://127.0.0.1:8001', ws: true } } },
 }
 ```
-  - Al terminar, detener solo esos puertos (8001/5175).
+  - When done, stop only those ports (8001/5175).
 
-## Automático
-- `cd backend; .venv/Scripts/python -m pytest -q` -> fase 5a: 320 passed, 46 skipped, 1 xfailed; fase 5b: 322 passed, 46 skipped, 1 xfailed.
-- `cd frontend; npm run lint` (oxlint limpio) y `npm run build` (solo aviso de chunk >500 kB).
+## Automatic
+- `cd backend; .venv/Scripts/python -m pytest -q` -> phase 5a: 320 passed, 46 skipped, 1 xfailed; phase 5b: 322 passed, 46 skipped, 1 xfailed.
+- `cd frontend; npm run lint` (oxlint clean) and `npm run build` (only the chunk >500 kB warning).
 
 ## API (python, urllib)
 ```python
@@ -32,113 +32,113 @@ def call(p,d=None):
 call('/api/parameters')   # 315 items {name,dep,depDefault,unit}; X dep=CoordinateSystem, Altitude dep=Origin
 t=call('/api/samples/Ex_HohmannTransfer.script')['text']
 t=t.replace("   Maneuver 'Apply TOI' TOI(DefaultSC);","   % Maneuver 'Apply TOI' TOI(DefaultSC);")
-m=call('/api/script/parse',{'script':t})          # claves: resources, sequence, raw
-# el Maneuver comentado sale en m['sequence'][1]['children'] con disabled:true y args {burn,sats}
-s=call('/api/script/serialize',m)['script']       # conserva "% Maneuver 'Apply TOI' ..."
+m=call('/api/script/parse',{'script':t})          # keys: resources, sequence, raw
+# the commented-out Maneuver shows up in m['sequence'][1]['children'] with disabled:true and args {burn,sats}
+s=call('/api/script/serialize',m)['script']       # keeps "% Maneuver 'Apply TOI' ..."
 call('/api/script/validate',{'script':s})         # {'ok':True,'errors':[]}
 call('/api/runs',{'script':s})                    # {'runId':...}
 ```
-- WebSocket `/ws/runs/{id}` desde Python da 403 por Origin: pasar header `Origin: http://localhost:5175` (o probar la corrida desde la UI).
-- Comentar el Maneuver de Hohmann hace fallar la corrida (jacobiano singular): es física, no bug. Para una corrida OK, dejar los Maneuver habilitados (TOI.Element1=2.2408, GOI.Element1=1.4330).
+- WebSocket `/ws/runs/{id}` from Python gives 403 because of Origin: pass the header `Origin: http://localhost:5175` (or test the run from the UI).
+- Commenting out the Hohmann Maneuver makes the run fail (singular Jacobian): it is physics, not a bug. For an OK run, leave the Maneuvers enabled (TOI.Element1=2.2408, GOI.Element1=1.4330).
 
-## Navegador (Chrome MCP)
-Ejemplos -> escribir "Hohmann" -> primer resultado -> pestaña Misión.
-1. Árbol: Target anidado, hijos sangrados, fila EndTarget.
-2. Propagate (pestaña Comando): Sincronizado, Hacia atrás, +Condición, ×; la "Línea de script" cambia.
-3. Picker "…": buscar Altitude, cuerpo Earth, Usar -> `Sat.Earth.Altitude`; X con EarthMJ2000Eq -> `Sat.EarthMJ2000Eq.X`.
-4. Arrastrar: el arrastre real no dispara HTML5 DnD; usar DragEvent sintéticos en la consola JS:
+## Browser (Chrome MCP)
+Ejemplos -> type "Hohmann" -> first result -> Misión tab.
+1. Tree: nested Target, indented children, EndTarget row.
+2. Propagate (Comando tab): Sincronizado, Hacia atrás, +Condición, ×; the "Línea de script" changes.
+3. "…" picker: search Altitude, body Earth, Usar -> `Sat.Earth.Altitude`; X with EarthMJ2000Eq -> `Sat.EarthMJ2000Eq.X`.
+4. Dragging: real dragging does not trigger HTML5 DnD; use synthetic DragEvents in the JS console:
 ```js
 window.__find=(t,k)=>[...document.querySelectorAll(k||'[role=tree] [role=treeitem]')].find(e=>e.textContent.trim().endsWith(t));
 window.__dnd=async(src,dst,frac)=>{const dt=new DataTransfer();const w=()=>new Promise(r=>setTimeout(r,60));
 const ev=(el,t,y)=>{const b=el.getBoundingClientRect();el.dispatchEvent(new DragEvent(t,{bubbles:true,cancelable:true,dataTransfer:dt,clientX:b.left+10,clientY:y??b.top+b.height/2}))};
 ev(src,'dragstart');await w();const b=dst.getBoundingClientRect();const y=b.top+b.height*frac;ev(dst,'dragover',y);await w();ev(dst,'drop',y);await w();ev(src,'dragend');await w();};
-// frac<0.35 antes (bloque) / <0.5 antes (hoja); frac 0.7 sobre bloque = dentro; fila EndTarget: '[role=tree] [class*=end]'; hueco final: '[role=tree] [class*=tail]'
+// frac<0.35 before (block) / <0.5 before (leaf); frac 0.7 over a block = inside; EndTarget row: '[role=tree] [class*=end]'; final gap: '[role=tree] [class*=tail]'
 await window.__dnd(__find('Prop 1 Day'),__find('Prop to Perigee'),0.2)
 ```
-   Casos: antes, después, dentro del Target, sobre EndTarget, hueco final; un Target no cae sobre sí mismo, un hijo ni su EndTarget.
-5. ↑/↓ con clic real (botones bajo el selector).
-6. Agregar: elegir en el select (setter nativo de `value` + evento `change`) y clic en Agregar; con selección dentro de un bloque se anida. Probar Report, Toggle, GMAT, Stop, If/Else, While, For, BeginScript, BeginFiniteBurn.
-7. Comentar/Habilitar un Maneuver: línea `% Maneuver ...;` en el Editor, `.cmd` tachado; botón deshabilitado en bloques y Else.
-8. Borrar: primer clic "¿Borrar?", segundo borra.
-9. Correr (botón verde), esperar ~10 s: consola "Mission run completed".
-10. Fase 5b (formularios de solver/control): Target (select Solver = DC, SolveMode/ExitMode/ShowProgressWindow con opción vacía = se omite); Vary (editar Upper/MaxStep: cambia la línea y el Editor); Achieve (Tolerance + picker `…`); If (+Condición, conector `|`, operador `>`, × a la 1.ª: desaparece el conector); For con Variable creada (inicio/paso/fin -> `For Variable1 = 2:2:6;`); Validar -> "El motor cargó el script sin errores.".
-11. Fase 5b CLAVE (Hohmann desde cero): Nuevo, en Recursos poner el select (setter nativo) y clic Crear para Spacecraft, ForceModel, Propagator, ImpulsiveBurn x2, DifferentialCorrector (Local/Earth/VNB son los valores por defecto). En Misión, con `__add` (select + Agregar, en JS) agregar en orden Propagate, Target, Vary, Maneuver, Propagate, Achieve, Vary, Maneuver, Achieve (se anidan en el Target; usan el primer DC/nave/burn). Editar: stop `Spacecraft1.Periapsis`/`Apoapsis` (vaciar el valor), Vary 2 `ImpulsiveBurn2.Element1`, Maneuver 2 burn ImpulsiveBurn2, Achieve 2 `Spacecraft1.ECC` = 0. Correr: ImpulsiveBurn1.Element1 = 2.24028397735, ImpulsiveBurn2.Element1 = 1.432966302 (idéntico al sample; el "≈2.2408" del plan es aproximado). Salida en la consola de la UI (no hay Report).
-- Regresión: Ejemplos -> Correr; pestaña Recursos (lista, Crear Spacecraft, editor dedicado); editar script a mano y ver el árbol.
-- Sin errores: `read_console_messages onlyErrors` (el rastreo empieza en la primera llamada; llamarlo antes de actuar); `scrollWidth <= innerWidth`.
-- Trampas:
-  - `resize_window` no cambia el viewport: capturar móvil con Chrome headless `--window-size=390,800 <url>`.
-  - `confirm()`/`prompt()` nativos (Borrar/Renombrar de recursos, ResourceTree.tsx) congelan CDP; evitarlos o pulsar Enter en el diálogo.
-  - Etiqueta y línea del comando se confirman al perder foco: pulsar Tab antes de comprobar.
-  - Nuevo deja el árbol de Misión viejo (bug 4b) hasta que se edita el Editor; la pestaña Recursos sí se vacía. Basta teclear `% new` en el Editor.
-  - Tras `Nuevo` la sesión de Chrome puede tener otra altura de viewport: los clics por coordenadas de filas del árbol cambian; medir con `getBoundingClientRect` o captura antes de clicar (un clic erróneo editó Upper de otro Vary).
-  - `javascript_tool` bloquea con "[BLOCKED: Cookie/query string data]" si el valor devuelto incluye `document.body.innerText` muy largo o textarea con ciertos textos; devolver recortes o usar captura. El selector del Agregar es el primer `select`; los selects de condiciones de If son `select` posteriores (op1, conector, op2).
-  - Clic en tab Editor + clic en el área + `ctrl+End` + captura permite leer el script (Monaco virtualiza líneas; no hay `window.monaco`).
-  - Capturas: copiar a `qa-capturas/fase-<N>/` (ignorada por git).
+   Cases: before, after, inside the Target, over EndTarget, final gap; a Target does not drop onto itself, a child or its EndTarget.
+5. ↑/↓ with a real click (buttons under the selector).
+6. Add: choose in the select (native `value` setter + `change` event) and click Agregar; with a selection inside a block it nests. Test Report, Toggle, GMAT, Stop, If/Else, While, For, BeginScript, BeginFiniteBurn.
+7. Comment out/Enable a Maneuver: line `% Maneuver ...;` in the Editor, `.cmd` struck through; button disabled on blocks and Else.
+8. Delete: first click "¿Borrar?", second one deletes.
+9. Correr (green button), wait ~10 s: console "Mission run completed".
+10. Phase 5b (solver/control forms): Target (select Solver = DC, SolveMode/ExitMode/ShowProgressWindow with empty option = omitted); Vary (edit Upper/MaxStep: the line and the Editor change); Achieve (Tolerance + `…` picker); If (+Condición, connector `|`, operator `>`, × on the 1st: the connector disappears); For with a created Variable (start/step/end -> `For Variable1 = 2:2:6;`); Validar -> "El motor cargó el script sin errores.".
+11. Phase 5b KEY (Hohmann from scratch): Nuevo, in Recursos set the select (native setter) and click Crear for Spacecraft, ForceModel, Propagator, ImpulsiveBurn x2, DifferentialCorrector (Local/Earth/VNB are the default values). In Misión, with `__add` (select + Agregar, in JS) add in order Propagate, Target, Vary, Maneuver, Propagate, Achieve, Vary, Maneuver, Achieve (they nest in the Target; they use the first DC/ship/burn). Edit: stop `Spacecraft1.Periapsis`/`Apoapsis` (clear the value), Vary 2 `ImpulsiveBurn2.Element1`, Maneuver 2 burn ImpulsiveBurn2, Achieve 2 `Spacecraft1.ECC` = 0. Run: ImpulsiveBurn1.Element1 = 2.24028397735, ImpulsiveBurn2.Element1 = 1.432966302 (identical to the sample; the plan's "≈2.2408" is approximate). Output in the UI console (there is no Report).
+- Regression: Ejemplos -> Correr; Recursos tab (list, Crear Spacecraft, dedicated editor); edit the script by hand and check the tree.
+- No errors: `read_console_messages onlyErrors` (tracking starts on the first call; call it before acting); `scrollWidth <= innerWidth`.
+- Gotchas:
+  - `resize_window` does not change the viewport: capture mobile with headless Chrome `--window-size=390,800 <url>`.
+  - Native `confirm()`/`prompt()` (resource Delete/Rename, ResourceTree.tsx) freeze CDP; avoid them or press Enter in the dialog.
+  - The command's label and line are confirmed on blur: press Tab before checking.
+  - Nuevo leaves the old Misión tree (bug 4b) until the Editor is edited; the Recursos tab does get cleared. Typing `% new` in the Editor is enough.
+  - After `Nuevo` the Chrome session can have a different viewport height: clicks by coordinates on tree rows change; measure with `getBoundingClientRect` or a screenshot before clicking (a wrong click edited Upper of another Vary).
+  - `javascript_tool` blocks with "[BLOCKED: Cookie/query string data]" if the returned value includes a very long `document.body.innerText` or a textarea with certain texts; return excerpts or use a screenshot. The Agregar selector is the first `select`; the If condition selects are later `select`s (op1, connector, op2).
+  - Click on the Editor tab + click in the area + `ctrl+End` + screenshot lets you read the script (Monaco virtualizes lines; there is no `window.monaco`).
+  - Screenshots: copy to `qa-capturas/fase-<N>/` (ignored by git).
 
-## Por fase
-- Fase 5a: parameters, parse/serialize de `% Cmd;`, árbol Misión, formulario Propagate, picker, drag, ↑/↓, agregar, comentar, borrar, corrida Hohmann, regresión de recursos.
-- Fase 5b: Target/Vary/Achieve/If/For formularios, `parser._args`, comandos nuevos con el primer recurso, Hohmann armado desde cero (TOI 2.24028397735, GOI 1.432966302), regresión 5a (drag, comentar, borrar).
+## Per phase
+- Phase 5a: parameters, parse/serialize of `% Cmd;`, Misión tree, Propagate form, picker, drag, ↑/↓, add, comment out, delete, Hohmann run, resource regression.
+- Phase 5b: Target/Vary/Achieve/If/For forms, `parser._args`, new commands with the first resource, Hohmann built from scratch (TOI 2.24028397735, GOI 1.432966302), 5a regression (drag, comment out, delete).
 
-### Fase 6a (Resultados)
-- Números: añadir al script un `ReportFile` propio (`RFq.Add={DefaultSC.A1ModJulian,DefaultSC.EarthMJ2000Eq.X,...}`) y comparar contra `GET /api/runs/{id}/results` (`ships[].columns`, `reports[]`, `xyplots[]`): Hohmann dio diferencia máx. 0 en 151 filas. Con `WriteHeaders=false` la 1.ª fila de datos se toma como cabecera (tabla pierde 1 fila).
-- `/files/..%2F..`, `a%2Fb`, `..%5C..`, `gmatweb_*.csv` -> 404. Ayudante de corrida: POST `/api/runs` y sondear `/results` (409 hasta terminar).
-- BackProp: `Propagate BackProp` con `ElapsedDays` POSITIVO nunca termina (usar negativo). Con `Propagate +0.5d; BackProp -0.3d` los datos de nave quedan 0..0.2 d (176 filas) mientras el ReportFile crudo tiene 698: `_csv` recorta mal.
-- UI: Ejemplos -> Correr -> pestaña Resultados; el select "Vista" se maneja con setter nativo + `change` (valores `gt:`/`sc:`/`rf:`/`xy:`). Ctrl hook de descargas: sobrescribir `HTMLAnchorElement.prototype.click` y leer `a.download`/blob.
-- Al cargar otro ejemplo, Resultados conserva los de la corrida anterior hasta correr de nuevo; al correr se vacía.
+### Phase 6a (Results)
+- Numbers: add your own `ReportFile` to the script (`RFq.Add={DefaultSC.A1ModJulian,DefaultSC.EarthMJ2000Eq.X,...}`) and compare against `GET /api/runs/{id}/results` (`ships[].columns`, `reports[]`, `xyplots[]`): Hohmann gave a max. difference of 0 over 151 rows. With `WriteHeaders=false` the 1st data row is taken as the header (the table loses 1 row).
+- `/files/..%2F..`, `a%2Fb`, `..%5C..`, `gmatweb_*.csv` -> 404. Run helper: POST `/api/runs` and poll `/results` (409 until finished).
+- BackProp: `Propagate BackProp` with POSITIVE `ElapsedDays` never finishes (use negative). With `Propagate +0.5d; BackProp -0.3d` the ship data stays at 0..0.2 d (176 rows) while the raw ReportFile has 698: `_csv` trims wrongly.
+- UI: Ejemplos -> Correr -> Resultados tab; the "Vista" select is driven with the native setter + `change` (values `gt:`/`sc:`/`rf:`/`xy:`). Download hook: override `HTMLAnchorElement.prototype.click` and read `a.download`/blob.
+- When loading another sample, Resultados keeps the previous run's results until you run again; running clears it.
 
-### Fase 6b (Vista 3D Cesium)
-- Cargar un script por UI sin diálogo: `fetch('/api/samples/X.script')`, `File` en `input[type=file]` (DataTransfer) + evento `change`; Ejemplos: el input de búsqueda es el primero que NO es `type=file`.
-- Red: `read_network_requests urlPattern:'https://'` -> 0 (todo sale de `/cesium/Assets`). Aviso "Cesium ion" es solo un crédito local (ion-credit.png).
-- Largo: Hohmann con `ElapsedSecs = 432000` + `DefaultProp.MaxStep = 8; InitialStepSize = 8;` da 56 948 filas; la pestaña 3D carga sin error.
-- `requestAnimationFrame` en la ventana de Chrome MCP va a ~1 fps (incluso sin WebGL): no sirve para medir fps. Un `javascript_tool` >45 s da timeout de CDP: partir en pasos.
-- Pestañas Editor/3D/Resultados x6: 1 `.cesium-viewer` constante, heap en diente de sierra (sin fuga).
-- La pestaña 3D arranca en pausa: clic en ▶ (333,608 en 1568 px). Los clics 'scroll' de `computer` hacen zoom de Cesium.
+### Phase 6b (Cesium 3D view)
+- Load a script through the UI without a dialog: `fetch('/api/samples/X.script')`, a `File` in `input[type=file]` (DataTransfer) + `change` event; Ejemplos: the search input is the first one that is NOT `type=file`.
+- Network: `read_network_requests urlPattern:'https://'` -> 0 (everything comes from `/cesium/Assets`). The "Cesium ion" notice is only a local credit (ion-credit.png).
+- Long: Hohmann with `ElapsedSecs = 432000` + `DefaultProp.MaxStep = 8; InitialStepSize = 8;` gives 56 948 rows; the 3D tab loads without error.
+- `requestAnimationFrame` in the Chrome MCP window runs at ~1 fps (even without WebGL): it is no use for measuring fps. A `javascript_tool` >45 s gives a CDP timeout: split into steps.
+- Editor/3D/Resultados tabs x6: 1 constant `.cesium-viewer`, sawtooth heap (no leak).
+- The 3D tab starts paused: click ▶ (333,608 at 1568 px). `computer` 'scroll' clicks zoom Cesium.
 
-### Fase 7a (Solvers en vivo)
-- API: ayudante WS (python `websockets`, `additional_headers={'Origin':'http://localhost:5175'}`, URL `/api/ws/runs/{id}`): imprimir eventos `type:'solver'`. Hohmann: 12 iteraciones, ultima TOI 2.24028397735 / GOI 1.432966302, `end` converged. Con `DC.MaximumIterations = 3;` antes de `BeginMissionSequence`: `end` failed, 3 iteraciones. `Ex_Yukon_AlgebraicOptimization`: kind Optimize, converged.
-- UI: pestana Solver; aviso verde/rojo (`role=status|alert`); linea de consola amarilla (color rgb(210,153,34)) "Aviso: el solver DC no convergio". Sin Target/Optimize: mensaje vacio.
-- Movil sin resize: en la pagina, `document.body.innerHTML=''` + `<iframe src="/" width=390>` mismo origen; cargar script y clics via `iframe.contentDocument`; capturar con `computer`. Ojo: el scrollWidth de 717 a 390 px ya existe en todas las pestanas (app no responsiva).
-- Medir solapamiento grafica/tabla: `getBoundingClientRect` de `[class*=_chart_]` vs su padre `[class*=_view_]`.
+### Phase 7a (Live solvers)
+- API: WS helper (python `websockets`, `additional_headers={'Origin':'http://localhost:5175'}`, URL `/api/ws/runs/{id}`): print `type:'solver'` events. Hohmann: 12 iterations, last TOI 2.24028397735 / GOI 1.432966302, `end` converged. With `DC.MaximumIterations = 3;` before `BeginMissionSequence`: `end` failed, 3 iterations. `Ex_Yukon_AlgebraicOptimization`: kind Optimize, converged.
+- UI: Solver tab; green/red notice (`role=status|alert`); yellow console line (color rgb(210,153,34)) "Aviso: el solver DC no convergio". Without Target/Optimize: empty message.
+- Mobile without resize: on the page, `document.body.innerHTML=''` + `<iframe src="/" width=390>` same origin; load the script and click via `iframe.contentDocument`; capture with `computer`. Note: the scrollWidth of 717 at 390 px already exists on all tabs (app not responsive).
+- Measure chart/table overlap: `getBoundingClientRect` of `[class*=_chart_]` vs its parent `[class*=_view_]`.
 
-### Fase 7b (lote de samples)
-- `python -m app.batch --jobs 4` (~1 min) regenera docs/COMPATIBILIDAD.md; sacar copia antes (el archivo no estaba en git) y comparar con `sed -E 's/\| [0-9.]+ \|/| T |/'` para ignorar tiempos. Dejó 64/8/0/0/1/15 estable; no deja procesos huérfanos (GMAT.exe de escritorio ya abierto es del usuario).
-- Ver si un `plugin` de verdad no corre: script con `sys.path.insert(0,'.')` y `python -I`, bajo `if __name__=='__main__'` (spawn), llamando `batch.run_desktop(path)` y `await batch.run_web(texto)`. En 7b: 8 de 9 samples "plugin" probados (MarsOrbit, Constellation, EclipseLocation, PlanetographicRegion, Covariance, StationContactLocator, IntrusionLocator, Inter_Spacecraft_Tracking) corren ok por la web; Contact_Location_Station_Mask da falta archivo (ruta relativa).
+### Phase 7b (sample batch)
+- `python -m app.batch --jobs 4` (~1 min) regenerates docs/COMPATIBILITY.md; make a copy beforehand (the file was not in git) and compare with `sed -E 's/\| [0-9.]+ \|/| T |/'` to ignore times. It left 64/8/0/0/1/15 stable; it leaves no orphan processes (an already open desktop GMAT.exe is the user's).
+- Check whether a `plugin` really does not run: script with `sys.path.insert(0,'.')` and `python -I`, under `if __name__=='__main__'` (spawn), calling `batch.run_desktop(path)` and `await batch.run_web(text)`. In 7b: 8 of 9 "plugin" samples tested (MarsOrbit, Constellation, EclipseLocation, PlanetographicRegion, Covariance, StationContactLocator, IntrusionLocator, Inter_Spacecraft_Tracking) run ok through the web; Contact_Location_Station_Mask gives missing file (relative path).
 
-### Fase 7c1 (pendientes de QA)
-- Cargar sample por UI sin diálogo: `__load(nombre, texto?)` = `fetch('/api/samples/X.script')` + `File` en `input[type=file]` + `change`; `__btn('Correr')` busca botón por texto. Esperar 15-20 s y leer `document.body.innerText.slice(-500)`.
-- Rutas relativas: Ex_Propagate_ThrustHistoryFile y Ex_Contact_Location_Station_Mask corren desde la UI ("Corrida terminada", 1 y 3 archivos).
-- sanitize directo (`from app.engine.sanitize import sanitize; sanitize(texto, Path('C:/run/out'))`): ReportFile/ContactLocator `../samples/x.txt` y absolutas -> `C:/run/out/x.txt`; ThrustHistoryFile y TrackingFileSet sin Simulator quedan como entrada (no escriben); con Simulator, TrackingFileSet va a la corrida. Ojo: ThrustHistoryFile con ruta inexistente fuera de samples se deja tal cual (solo lectura).
-- ShowProgress: `DC.ShowProgress = false;` antes de BeginMissionSequence -> línea "Aviso: DC tiene ShowProgress = false..." en consola.
-- Diálogos propios: Renombrar (nombre `1 bad name` y `GOI` repetido deshabilitan el botón con mensaje), Borrar TOI lista "Vary 'Vary TOI.V' / Maneuver 'Apply TOI'". Enter/Escape funcionan.
-- ForceModel: PrimaryBodies `{Earth, Luna}` agrega GravityField.Luna.*; volver a `{Earth}` los quita del script.
-- Marcadores Monaco: tras Validar con `DefaultSC.Bogus = 3;` aparece squiggle (`.squiggly-error`); Ctrl+G + número para llegar a la línea. Hoy NO se limpia al editar a mano (ScriptEditor.tsx solo limpia en setValue externo).
-- Guardar: hook `HTMLAnchorElement.prototype.click` y `fetch(this.href)` para leer el contenido; sin líneas `GMAT `.
-- Móvil: iframe 390 px sigue con scrollWidth 717 (preexistente).
+### Phase 7c1 (QA backlog)
+- Load a sample through the UI without a dialog: `__load(name, text?)` = `fetch('/api/samples/X.script')` + a `File` in `input[type=file]` + `change`; `__btn('Correr')` finds a button by text. Wait 15-20 s and read `document.body.innerText.slice(-500)`.
+- Relative paths: Ex_Propagate_ThrustHistoryFile and Ex_Contact_Location_Station_Mask run from the UI ("Corrida terminada", 1 and 3 files).
+- sanitize directly (`from app.engine.sanitize import sanitize; sanitize(text, Path('C:/run/out'))`): ReportFile/ContactLocator `../samples/x.txt` and absolute ones -> `C:/run/out/x.txt`; ThrustHistoryFile and TrackingFileSet without a Simulator stay as input (they do not write); with a Simulator, TrackingFileSet goes to the run. Note: ThrustHistoryFile with a nonexistent path outside samples is left as is (read-only).
+- ShowProgress: `DC.ShowProgress = false;` before BeginMissionSequence -> line "Aviso: DC tiene ShowProgress = false..." in the console.
+- Custom dialogs: Renombrar (name `1 bad name` and a repeated `GOI` disable the button with a message), Borrar TOI lists "Vary 'Vary TOI.V' / Maneuver 'Apply TOI'". Enter/Escape work.
+- ForceModel: PrimaryBodies `{Earth, Luna}` adds GravityField.Luna.*; going back to `{Earth}` removes them from the script.
+- Monaco markers: after Validar with `DefaultSC.Bogus = 3;` a squiggle appears (`.squiggly-error`); Ctrl+G + number to reach the line. Today it is NOT cleared when editing by hand (ScriptEditor.tsx only clears on an external setValue).
+- Guardar: hook `HTMLAnchorElement.prototype.click` and `fetch(this.href)` to read the content; no `GMAT ` lines.
+- Mobile: 390 px iframe still has scrollWidth 717 (pre-existing).
 
-### Fase 7c2 (misiones propias)
-- Las misiones de `backend/tests/missions/` no salen en `/api/samples`. Servirlas con CORS (`python` http.server en 127.0.0.1:8765, `os.chdir` a esa carpeta, header `Access-Control-Allow-Origin: *`) y cargar con `__load(nombre, 'http://127.0.0.1:8765/<m>.script')` (variante de `__load` con segundo argumento = URL; `File` en `input[type=file]` + `change`).
-- `__sel()` = el select de Vista de Resultados (opciones `gt:`/`sc:`/`rf:`); el selector de corridas de solver es el select cuyas opciones empiezan con `#N ·`. Ojo: el primer select de la página es el Agregar.
-- Guardar: hook de `HTMLAnchorElement.prototype.click` + `fetch(href)`; comparar con el original normalizando espacios (`replace(/\s+/g,' ')`). Diferencias esperadas y semánticamente iguales: se pierden comillas en `HistoricWeatherSource/PredictedWeatherSource = 'X'`, `Create Variable A B;` se parte en una línea por variable, comentario al final de línea pasa a línea propia, `1e-8` -> `1e-08`.
-- Números 7c2 (todos iguales a `reference.json`): m1 X=-4177.282287801592; m2 SK.Element1 por corrida -3.21037154806e-05 / -3.55370228741e-05 / -5.29010330181e-06; m3 LOI -0.603883729799; m4 FuelMass 1.000000000009152; m5 TOI 2.41950136969, GOI 1.46455506119. Ninguna misión propia tiene XYPlot (Resultados solo gt/sc/rf).
-- m6: Validar y Correr dan 2 squiggles (líneas 8 y 13); teclear los borra; Validar los devuelve.
-- Eje Y log del Solver muestra "0" en varias marcas (valores < 0,001 redondeados).
+### Phase 7c2 (own missions)
+- The missions in `backend/tests/missions/` do not show up in `/api/samples`. Serve them with CORS (`python` http.server on 127.0.0.1:8765, `os.chdir` to that folder, header `Access-Control-Allow-Origin: *`) and load with `__load(name, 'http://127.0.0.1:8765/<m>.script')` (variant of `__load` with second argument = URL; a `File` in `input[type=file]` + `change`).
+- `__sel()` = the Results Vista select (options `gt:`/`sc:`/`rf:`); the solver runs selector is the select whose options start with `#N ·`. Note: the first select on the page is the Agregar one.
+- Guardar: hook `HTMLAnchorElement.prototype.click` + `fetch(href)`; compare with the original normalizing spaces (`replace(/\s+/g,' ')`). Expected and semantically equal differences: quotes are lost in `HistoricWeatherSource/PredictedWeatherSource = 'X'`, `Create Variable A B;` is split into one line per variable, an end-of-line comment becomes its own line, `1e-8` -> `1e-08`.
+- 7c2 numbers (all equal to `reference.json`): m1 X=-4177.282287801592; m2 SK.Element1 per run -3.21037154806e-05 / -3.55370228741e-05 / -5.29010330181e-06; m3 LOI -0.603883729799; m4 FuelMass 1.000000000009152; m5 TOI 2.41950136969, GOI 1.46455506119. None of the own missions has an XYPlot (Results only gt/sc/rf).
+- m6: Validar and Correr give 2 squiggles (lines 8 and 13); typing clears them; Validar brings them back.
+- The Solver's log Y axis shows "0" on several ticks (values < 0.001 rounded).
 
-### Fase 8 (UX: plantillas, deshacer, validación en vivo, responsive)
-- Plantillas contra el motor, sin navegador: `API=http://127.0.0.1:8001 node --experimental-strip-types backend/tests/tools/templates_check.mjs [luna|leo|hohmann|track]`. Corre cada plantilla con sus valores por defecto, con el mínimo y el máximo de cada dato, y la lunar además en 5 fechas (2025 a 2030). Imprime naves, filas y la última fila del reporte. Esperado: 29 casos sin `ERROR`, `NO VALIDA` ni `INVALID`; lunar por defecto `Nave.Luna.RMAG` 5003.08, TLI 3.129455786, LOI -0.6438904876; Hohmann 500 km TOI 2.369788305, GOI 1.446256485. Una corrida que GMAT corta a medias devuelve `/results` igual: se nota porque la última fila es la del primer `Report` (pasó con LEO a 200 km: reentra).
-- Límites sacados de esa prueba: Luna con INC 20 no converge (TLI 4.42, ECC 4422); LEO a 200 km reentra en menos de 1 día.
-- Lunar web vs escritorio: `backend/tests/missions/m7_viaje_luna.script` (generada desde la plantilla) en `pytest -m slow tests/test_missions.py` -> 7 passed.
-- Luna en resultados: `pytest tests/test_results.py::test_moon_columns_and_static_ship` compara `LunaMJ2000Eq.X` y la distancia con un ReportFile propio (`DefaultSC.LunaEq.X`, `DefaultSC.Luna.RMAG`) y comprueba que la Luna queda a 356-407 mil km de la Tierra.
-- Navegador (helpers en la consola JS): `__btn(texto)`, `__set(el, valor)` (setter nativo + `input`/`change`), `__log()` (líneas de la consola de la app), `__tab(texto)`, `__w(ms)`. Un `javascript_tool` de más de 45 s da timeout: lanzar Correr y leer el log en otra llamada.
-  1. Primera visita (sin `gmatweb.tour` en localStorage): sale el recorrido, 6 pasos con marco; Terminar lo guarda y no vuelve a salir.
-  2. Plantillas: 4 tarjetas, la lunar marcada; radio 100 deshabilita Crear y muestra "Entre 2000 y 20000"; Crear misión carga `viaje_luna.script` (17 recursos) e indicador "✓ Sin errores" a los ~2 s.
-  3. Correr: ~3 s; Solver con 2 corridas (la 2.ª converge en 37 iteraciones); Resultados con Gráfica Distancias; 3D con la Luna y, con Centro = Luna, la órbita lunar (el select de 2 opciones `Earth`/`Luna`).
-  4. Guardar por atajo y leer el texto: sobrescribir `HTMLAnchorElement.prototype.click` (guarda `fetch(this.href)`) y despachar `keydown` Ctrl+S en `window`.
-  5. Deshacer: recurso Nave, campo `DryMass` 850 -> 900 (blur), ↶ lo deja en 850, ↷ en 900, Ctrl+Z en `window` otra vez 850.
-  6. Validación junto al campo: escribir `abc` en `DryMass` muestra "Debe ser un número…" sin salir del campo; `-5` + blur muestra a los ~3 s el mensaje del motor en el campo, la caja del formulario, ⚠ en el árbol y "⚠ 1 error" en la barra (título con "Línea 18"); ↶ lo limpia.
-  7. Paleta: `keydown` Ctrl+K; 39 acciones con la lunar cargada; "orbita leo" (sin tilde) deja "Plantilla: Órbita LEO"; "solver" + Enter abre la pestaña Solver.
-  8. Borrador: recargar la página restaura el script y la primera línea de la consola es "Se recuperó el borrador…".
-  9. F5 (`keydown` en `window`) corre la plantilla Traza en tierra; Hohmann desde plantilla da TOI 2.36978830493, GOI 1.44625648474 y "DC convergió en 4 iteraciones".
-  10. Regresión: Ejemplos -> Ex_HohmannTransfer -> Correr: TOI 2.24028397735, GOI 1.432966302.
-- Responsive sin cambiar la ventana: `<iframe src="/" width=768|390>` del mismo origen y medir `scrollWidth` del documento del iframe. Resultado: 768 -> 768 (barra de 77 px, panel izquierdo visible); 390 -> 390 (sin panel izquierdo, pestañas Editor/3D/Resultados/Solver).
-- Accesibilidad sin Lighthouse (no se pudo descargar): script en la página que recorre botones (nombre accesible), campos (aria-label, label o title) y el contraste de cada texto contra su fondo (canvas para normalizar colores, umbral 4,5:1 o 3:1 en texto grande). Vistas: recurso, comando, Solver, Resultados y diálogo de plantillas, en oscuro y en claro (`document.documentElement.dataset.theme = 'light'`). Resultado: 0 sin nombre, 0 sin etiqueta, 0 con contraste bajo. Ojo al medir: limpiar el canvas (`clearRect`) antes de cada color, si no un fondo transparente devuelve el color anterior.
-- Pendiente de 7c2 cerrado: `FM.Drag.HistoricWeatherSource = ConstantFluxAndGeoMag` sin comillas carga igual que con comillas (`/api/script/validate` -> `ok: true` en ambos, con `AtmosphereModel` antes).
+### Phase 8 (UX: templates, undo, live validation, responsive)
+- Templates against the engine, without a browser: `API=http://127.0.0.1:8001 node --experimental-strip-types backend/tests/tools/templates_check.mjs [luna|leo|hohmann|track]`. It runs each template with its default values, with the minimum and the maximum of each input, and the lunar one also on 5 dates (2025 to 2030). It prints ships, rows and the last row of the report. Expected: 29 cases without `ERROR`, `NO VALIDA` or `INVALID`; lunar default `Nave.Luna.RMAG` 5003.08, TLI 3.129455786, LOI -0.6438904876; Hohmann 500 km TOI 2.369788305, GOI 1.446256485. A run that GMAT cuts halfway returns `/results` anyway: you can tell because the last row is the one from the first `Report` (it happened with LEO at 200 km: it reenters).
+- Limits taken from that test: Moon with INC 20 does not converge (TLI 4.42, ECC 4422); LEO at 200 km reenters in less than 1 day.
+- Lunar web vs desktop: `backend/tests/missions/m7_viaje_luna.script` (generated from the template) in `pytest -m slow tests/test_missions.py` -> 7 passed.
+- Moon in results: `pytest tests/test_results.py::test_moon_columns_and_static_ship` compares `LunaMJ2000Eq.X` and the distance with your own ReportFile (`DefaultSC.LunaEq.X`, `DefaultSC.Luna.RMAG`) and checks that the Moon is 356-407 thousand km from Earth.
+- Browser (helpers in the JS console): `__btn(text)`, `__set(el, value)` (native setter + `input`/`change`), `__log()` (lines of the app console), `__tab(text)`, `__w(ms)`. A `javascript_tool` longer than 45 s times out: launch Correr and read the log in another call.
+  1. First visit (no `gmatweb.tour` in localStorage): the tour shows up, 6 steps with a frame; Terminar saves it and it does not show up again.
+  2. Plantillas: 4 cards, the lunar one highlighted; radius 100 disables Crear and shows "Entre 2000 y 20000"; Crear misión loads `viaje_luna.script` (17 resources) and indicator "✓ Sin errores" after ~2 s.
+  3. Correr: ~3 s; Solver with 2 runs (the 2nd converges in 37 iterations); Results with the Distancias chart; 3D with the Moon and, with Centro = Luna, the lunar orbit (the 2-option select `Earth`/`Luna`).
+  4. Save by shortcut and read the text: override `HTMLAnchorElement.prototype.click` (stores `fetch(this.href)`) and dispatch `keydown` Ctrl+S on `window`.
+  5. Undo: resource Nave, field `DryMass` 850 -> 900 (blur), ↶ leaves it at 850, ↷ at 900, Ctrl+Z on `window` 850 again.
+  6. Validation next to the field: typing `abc` in `DryMass` shows "Debe ser un número…" without leaving the field; `-5` + blur shows after ~3 s the engine message in the field, the form box, ⚠ in the tree and "⚠ 1 error" in the bar (title with "Línea 18"); ↶ clears it.
+  7. Palette: `keydown` Ctrl+K; 39 actions with the lunar one loaded; "orbita leo" (without accent) leaves "Plantilla: Órbita LEO"; "solver" + Enter opens the Solver tab.
+  8. Draft: reloading the page restores the script and the first line of the console is "Se recuperó el borrador…".
+  9. F5 (`keydown` on `window`) runs the Traza en tierra template; Hohmann from template gives TOI 2.36978830493, GOI 1.44625648474 and "DC convergió en 4 iteraciones".
+  10. Regression: Ejemplos -> Ex_HohmannTransfer -> Correr: TOI 2.24028397735, GOI 1.432966302.
+- Responsive without changing the window: a same-origin `<iframe src="/" width=768|390>` and measure the `scrollWidth` of the iframe's document. Result: 768 -> 768 (77 px bar, left panel visible); 390 -> 390 (no left panel, Editor/3D/Resultados/Solver tabs).
+- Accessibility without Lighthouse (it could not be downloaded): a script on the page that goes through buttons (accessible name), fields (aria-label, label or title) and the contrast of each text against its background (canvas to normalize colors, threshold 4.5:1 or 3:1 for large text). Views: resource, command, Solver, Results and templates dialog, in dark and in light (`document.documentElement.dataset.theme = 'light'`). Result: 0 without a name, 0 without a label, 0 with low contrast. Careful when measuring: clear the canvas (`clearRect`) before each color, otherwise a transparent background returns the previous color.
+- Closed 7c2 backlog item: `FM.Drag.HistoricWeatherSource = ConstantFluxAndGeoMag` without quotes loads the same as with quotes (`/api/script/validate` -> `ok: true` in both, with `AtmosphereModel` before).

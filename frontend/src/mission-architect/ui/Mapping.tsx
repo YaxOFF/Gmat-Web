@@ -1,5 +1,3 @@
-import { mulberry32 } from '../engine/rng'
-import { southPoleImage } from '../three/stage'
 import { Orbit3D } from '../three/Orbit3D'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CARD } from '../data/cards'
@@ -28,7 +26,13 @@ function PoleMap({ m, ctx, targets, focus, onToggle, onFocus, small }: {
 }) {
   return (
     <svg className={`polemap ${small ? 'small' : ''}`} viewBox="0 0 100 100">
-      <image href={southPoleImage(mulberry32(7))} x="3" y="3" width="94" height="94" />
+      <defs>
+        <radialGradient id="moonfill" cx="40%" cy="35%"><stop offset="0" stopColor="#c9ccd8" /><stop offset="1" stopColor="#5a5f73" /></radialGradient>
+        <clipPath id="poleclip"><circle cx="50" cy="50" r="47" /></clipPath>
+      </defs>
+      <circle cx="50" cy="50" r="47" fill="url(#moonfill)" />
+      {/* Relieve LOLA real (±POLE_MAP_DEG, tools/moon/build_moon.py); si no carga queda el degradado. */}
+      <image href={`${import.meta.env.BASE_URL}moon/southpole.png`} x="0" y="0" width="100" height="100" clipPath="url(#poleclip)" preserveAspectRatio="none" />
       <circle cx="50" cy="50" r="47" fill="none" stroke="#26314f" strokeWidth="0.8" />
       <circle cx="50" cy="50" r="30" fill="none" stroke="#ffffff30" strokeWidth="0.3" strokeDasharray="1 1.5" />
       <circle cx="50" cy="50" r="15" fill="none" stroke="#ffffff30" strokeWidth="0.3" strokeDasharray="1 1.5" />
