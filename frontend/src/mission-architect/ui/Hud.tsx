@@ -28,14 +28,14 @@ export function Term({ k, children }: { k: keyof typeof GLOSSARY; children: Reac
   return <span className="term" title={GLOSSARY[k]}>{children}</span>
 }
 
-export const statusIcon = (s: 'ok' | 'warn' | 'fail') => (s === 'ok' ? '✔' : s === 'warn' ? '▲' : '✖')
+export const statusIcon = (s: 'ok' | 'warn' | 'fail') => (s === 'ok' ? '' : s === 'warn' ? '▲' : '')
 
 export function TopBar({ step, steps, right }: { step: number; steps: string[]; right?: ReactNode }) {
   return (
     <header className="topbar">
       <div className="brand">MISSION <b>ARCHITECT</b></div>
       <ol className="steps">
-        {steps.map((s, k) => <li key={s} className={k === step ? 'cur' : k < step ? 'past' : ''}><span>{k + 1}</span>{s}</li>)}
+        {steps.map((s, k) => <li key={s} title={s} aria-current={k === step ? 'step' : undefined} className={k === step ? 'cur' : k < step ? 'past' : ''}><span>{k + 1}</span><em className="lbl">{s}</em></li>)}
       </ol>
       <div className="topbar-right">{right}</div>
     </header>

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import * as THREE from 'three'
 import type { Crater } from '../data/types'
 import { clamp, engineeringRoll, mulberry32 } from '../engine/rng'
-import { at, mountStage, stars } from './stage'
+import { buildLander } from './spacecraft'
+import { mountStage, stars } from './stage'
 
 export interface Landing { ok: boolean; batteryPct: number; integrity: number; sciMul: number; label: string }
 
@@ -21,7 +22,7 @@ export function Descent3D({ crater, stress, mapped, seed, names, onDone }: {
   crater: Crater; stress: number; mapped: boolean; seed: number; names?: Record<string, string>; onDone: (l: Landing) => void
 }) {
   const host = useRef<HTMLDivElement>(null)
-  const sim = useRef({ alt: ALT[0], target: ALT[0], shiftX: 0, burn: 1, crash: false, landed: false, hazard: false })
+  const sim = useRef({ alt: ALT[0], target: ALT[0], shiftX: 0, burn: 1, crash: false, landed: false, hazard: false, done: false })
   const rng = useRef(mulberry32(seed + 17))
   const [stage, setStage] = useState(0)
   const [falling, setFalling] = useState(true)
@@ -33,7 +34,7 @@ export function Descent3D({ crater, stress, mapped, seed, names, onDone }: {
   const [hazard] = useState(() => HAZARDS[Math.floor(rng.current() * HAZARDS.length)])
   const [result, setResult] = useState<Landing | null>(null)
 
-  const descend = (to: number) => { sim.current.target = ALT[to]; setStage(to); setFalling(true) }
+  const descend = (to: number) => { if (to === 3) sim.current.hazard = false; sim.current.target = ALT[to]; setStage(to); setFalling(true) }
   const note = (s: string) => setLog((l) => [...l.slice(-3), s])
 
   // Aviso cuando el lander llega a la altitud de la siguiente decisión.
@@ -63,7 +64,12 @@ export function Descent3D({ crater, stress, mapped, seed, names, onDone }: {
     } else landing = { ok: false, batteryPct: 0, integrity: 0, sciMul, label: 'Contact lost at 12 m. The lander is gone.' }
     sim.current.target = 0; sim.current.crash = !landing.ok && r === 'fail'
     setStage(4); setFalling(true)
-    setTimeout(() => { sim.current.landed = true; setResult({ ...landing, label: `${landing.label} (success chance was ${Math.round(p * 100)}%)` }) }, 2600)
+    // El resultado aparece cuando la animación toca el suelo (no por reloj: en equipos lentos va atrasada).
+    const id = setInterval(() => {
+      if (!sim.current.done) return
+      clearInterval(id); sim.current.landed = true; setTele({ alt: 0, vel: 0 })
+      setResult({ ...landing, label: `${landing.label} (success chance was ${Math.round(p * 100)}%)` })
+    }, 100)
   }
 
   const steps: Step[] = [
@@ -96,65 +102,101 @@ export function Descent3D({ crater, stress, mapped, seed, names, onDone }: {
     scene.background = new THREE.Color(0x000000)
     scene.add(stars(r, 2500, 2000))
     scene.add(new THREE.HemisphereLight(0x9aa6c8, 0x080808, 0.5))
-    const sun = new THREE.DirectionalLight(0xfff3dd, 2.4); sun.position.set(100, 40, -300); scene.add(sun)
-    const geo = new THREE.PlaneGeometry(600, 600, 160, 160); geo.rotateX(-Math.PI / 2)
-    const pos = geo.attributes.position
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), z = pos.getZ(i), d = Math.hypot(x, z)
-      pos.setY(i, Math.sin(x * 0.05 + r()) * 1.5 + Math.cos(z * 0.07) * 1.5 + Math.sin(x * 0.21 + z * 0.13) * 0.5 + (d > 120 ? ((d - 120) / 30) ** 2 * 4 : 0))
+    const sun = new THREE.DirectionalLight(0xfff3dd, 2.4); scene.add(sun)
+    scene.background = new THREE.Color(0x03050b)
+    scene.fog = new THREE.Fog(0x03050b, 160, 520)
+    sun.position.set(-260, 60, -120); sun.intensity = 3; sun.castShadow = true
+    sun.shadow.mapSize.set(2048, 2048)
+    Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, far: 800 })
+    // Terreno lunar: ondulación suave + cráteres con borde levantado, gris con variación (sin facetas).
+    const craters = Array.from({ length: 34 }, () => ({ x: (r() - 0.5) * 700, z: (r() - 0.5) * 700, rad: 6 + Math.pow(r(), 2) * 55 }))
+    craters.push({ x: 0, z: -60, rad: 70 }) // el cráter objetivo, delante
+    const hAt = (x: number, z: number) => {
+      let h = Math.sin(x * 0.02) * 2 + Math.cos(z * 0.025) * 2 + Math.sin((x + z) * 0.07) * 0.6
+      for (const c of craters) {
+        const d = Math.hypot(x - c.x, z - c.z) / c.rad
+        if (d < 1) h -= (1 - d * d) * c.rad * 0.22
+        else if (d < 1.5) h += Math.sin((d - 1) * Math.PI * 2) * c.rad * 0.06
+      }
+      return h
     }
-    geo.computeVertexNormals()
-    scene.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x6e7078, roughness: 1 })))
+    const geo = new THREE.PlaneGeometry(900, 900, 220, 220); geo.rotateX(-Math.PI / 2)
+    const pos = geo.attributes.position, col = new Float32Array(pos.count * 3)
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i); pos.setY(i, hAt(x, z))
+      const v = 0.42 + (Math.sin(x * 0.31) * Math.cos(z * 0.27)) * 0.04 + r() * 0.05
+      col.set([v, v, v * 1.03], i * 3)
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals()
+    const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }))
+    ground.receiveShadow = true; scene.add(ground)
+    const earth = new THREE.Mesh(new THREE.SphereGeometry(14, 48, 32), new THREE.MeshStandardMaterial({ color: 0x3b74d6, emissive: 0x0a1c44 }))
+    earth.position.set(160, 70, -460); scene.add(earth)
     const haz = new THREE.Mesh(new THREE.RingGeometry(5, 6, 40), new THREE.MeshBasicMaterial({ color: 0xff4d5e, side: THREE.DoubleSide }))
-    haz.rotation.x = -Math.PI / 2; haz.position.y = 3; haz.visible = false; scene.add(haz)
+    haz.rotation.x = -Math.PI / 2; haz.position.y = hAt(0, 0) + 0.4; haz.visible = false; scene.add(haz)
     const boulders = new THREE.Group()
     for (let i = 0; i < 9; i++) {
       const b = new THREE.Mesh(new THREE.DodecahedronGeometry(1 + r() * 1.5, 0), new THREE.MeshStandardMaterial({ color: 0x77777f, flatShading: true }))
       b.position.set((r() - 0.5) * 9, 1.5, (r() - 0.5) * 9); boulders.add(b)
     }
-    boulders.visible = false; scene.add(boulders)
+    boulders.position.y = hAt(0, 0) - 1; boulders.visible = false; scene.add(boulders)
 
-    const lander = new THREE.Group(), gold = new THREE.MeshStandardMaterial({ color: 0xd9a441, metalness: 0.7, roughness: 0.35 })
-    lander.add(at(new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.8, 1.4, 8), gold), 0, 1.6, 0))
-    lander.add(at(new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.8, 1.8), new THREE.MeshStandardMaterial({ color: 0xdedfe6, metalness: 0.5 })), 0, 2.7, 0))
-    for (let i = 0; i < 4; i++) {
-      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2), gold)
-      leg.position.set(Math.cos(i * 1.57) * 1.6, 0.8, Math.sin(i * 1.57) * 1.6); leg.rotation.set(Math.sin(i * 1.57) * 0.4, 0, -Math.cos(i * 1.57) * 0.4)
-      lander.add(leg)
-    }
+    const lander = buildLander()
     const flame = new THREE.Mesh(new THREE.ConeGeometry(0.7, 3, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.7 }))
-    flame.rotation.x = Math.PI; flame.position.y = -0.6; lander.add(flame)
+    flame.rotation.x = Math.PI; flame.position.y = -0.9; lander.add(flame)
     const glow = new THREE.PointLight(0x9fd8ff, 40, 30); glow.position.y = -1; lander.add(glow)
     scene.add(lander)
-    const dust = new THREE.Mesh(new THREE.RingGeometry(1, 2.5, 40), new THREE.MeshBasicMaterial({ color: 0xc8c8d0, transparent: true, opacity: 0, side: THREE.DoubleSide }))
-    dust.rotation.x = -Math.PI / 2; dust.position.y = 2; scene.add(dust)
+    const dust = new THREE.Mesh(new THREE.RingGeometry(1, 2.5, 40), new THREE.MeshBasicMaterial({ color: 0x9a9ca6, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }))
+    dust.rotation.x = -Math.PI / 2; dust.position.y = hAt(0, 0) + 0.3; scene.add(dust)
     const boom = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), new THREE.MeshBasicMaterial({ color: 0xffb020, transparent: true, opacity: 0 }))
     scene.add(boom)
 
-    const yOf = (alt: number) => 2.2 + Math.log10(1 + alt) * 14
-    let lx = 0, tBoom = 0
+    const yOf = (alt: number) => hAt(lx, 0) + Math.log10(1 + alt) * 14
+    let lx = 0, tBoom = 0, contact = -1
+    const up = new THREE.Vector3(0, 1, 0), nrm = new THREE.Vector3(), tilt = new THREE.Quaternion(), flat = new THREE.Quaternion()
     return (dt) => {
       const s = sim.current
-      // Baja en escala logarítmica hacia la altitud objetivo.
-      const la = Math.log10(1 + s.alt), lt = Math.log10(1 + s.target)
-      s.alt = Math.pow(10, la + (lt - la) * (1 - Math.exp(-dt * 1.1))) - 1
-      if (Math.abs(s.alt - s.target) < 0.5) s.alt = s.target
+      if (s.target > 0 || s.alt > 60) {
+        // Lejos del suelo: baja en escala logarítmica hacia la altitud de la siguiente decisión.
+        const la = Math.log10(1 + s.alt), lt = Math.log10(1 + s.target)
+        s.alt = Math.pow(10, la + (lt - la) * (1 - Math.exp(-dt * 1.1))) - 1
+        if (Math.abs(s.alt - s.target) < 0.05) s.alt = s.target
+      } else {
+        // Últimos metros: frenado continuo hasta tocar, sin saltos.
+        s.alt = Math.max(0, s.alt - dt * (1.2 + s.alt * 0.9))
+      }
       lx += (s.shiftX - lx) * dt * 0.8
+      const ground = hAt(lx, 0)
       const y = yOf(s.alt)
       haz.visible = boulders.visible = s.hazard && hazard.id !== 'shadow'
       haz.position.x = boulders.position.x = 0
-      if (!s.crash || !s.landed) lander.position.set(lx, y, 0)
-      lander.rotation.z = Math.sin(performance.now() / 700) * 0.03
-      const burning = s.alt > 0.5
+      if (!s.crash) lander.position.set(lx, y, 0)
+      // Se apoya según la pendiente del terreno al acercarse; en vuelo, un leve balanceo.
+      const e = 1.5
+      nrm.set(hAt(lx - e, 0) - hAt(lx + e, 0), 2 * e, hAt(lx, -e) - hAt(lx, e)).normalize()
+      tilt.setFromUnitVectors(up, nrm); flat.setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.sin(performance.now() / 700) * 0.03)
+      lander.quaternion.copy(flat).slerp(tilt, Math.max(0, Math.min(1, 1 - s.alt / 20)))
+      // Contacto: compresión de patas y nube de polvo.
+      if (s.alt === 0 && s.target === 0 && !s.crash && contact < 0) contact = 0
+      if (contact >= 0) { contact += dt; if (contact > 0.9) s.done = true; lander.scale.set(1, 1 - 0.06 * Math.exp(-contact * 6) * Math.cos(contact * 18), 1) }
+      const burning = s.alt > 0.05 && contact < 0
       flame.visible = burning; glow.intensity = burning ? 30 + Math.random() * 20 : 0
       flame.scale.set(1, 0.7 + Math.random() * 0.5, 1)
-      if (s.alt < 30 && !s.crash) { dust.material.opacity = Math.min(0.6, (30 - s.alt) / 30); dust.scale.setScalar(1 + (30 - s.alt) / 3); dust.position.x = lx }
-      if (s.crash && s.alt < 1) {
-        tBoom += dt; lander.visible = tBoom < 0.15
-        boom.position.set(lx, 2, 0); boom.scale.setScalar(2 + tBoom * 22); boom.material.opacity = Math.max(0, 1 - tBoom / 1.4)
+      dust.position.set(lx, ground + 0.3, 0)
+      if (s.alt < 25 && !s.crash && contact < 0) { dust.material.opacity = Math.min(0.35, (25 - s.alt) / 50); dust.scale.setScalar(1 + (25 - s.alt) / 8) }
+      else if (contact >= 0 && contact < 1.5) { dust.material.opacity = 0.35 * (1 - contact / 1.5); dust.scale.setScalar(4 + contact * 4) }
+      else dust.material.opacity = Math.max(0, dust.material.opacity - dt * 0.3)
+      if (s.crash) {
+        if (s.alt > 0.05) lander.position.set(lx, y, 0)
+        else {
+          tBoom += dt; lander.visible = tBoom < 0.15; if (tBoom > 1.2) s.done = true
+          boom.position.set(lx, ground + 2, 0); boom.scale.setScalar(2 + tBoom * 22); boom.material.opacity = Math.max(0, 1 - tBoom / 1.4)
+        }
       }
-      camera.position.set(lx + 16, y + 7 + Math.min(40, s.alt / 400), 22)
-      camera.lookAt(lx, Math.max(0, y - 6 - Math.min(30, s.alt / 600)), 0)
+      // Cámara de costado: nunca por debajo del terreno donde está parada.
+      const cx = lx + 14, cz = 20
+      camera.position.set(cx, Math.max(y + 4 + Math.min(10, s.alt / 1500), hAt(cx, cz) + 3), cz)
+      camera.lookAt(lx - 4, y - 3 - Math.min(14, s.alt / 900), -24)
     }
   }), [seed, hazard])
 
@@ -166,7 +208,7 @@ export function Descent3D({ crater, stress, mapped, seed, names, onDone }: {
         <div>ALTITUDE</div><b>{tele.alt >= 1000 ? `${(tele.alt / 1000).toFixed(1)} km` : `${Math.round(tele.alt)} m`}</b>
         <div>VELOCITY {Math.round(tele.vel)} m/s</div>
         <div>FUEL {fuel}%</div>
-        <div className="hint">{crater.name} · {mapped ? 'altimeter map ✓' : 'no altimeter map'}</div>
+        <div className="hint">{crater.name} · {mapped ? 'altimeter map ' : 'no altimeter map'}</div>
         {log.map((l, i) => <div key={i} className="hint">› {l}</div>)}
       </div>
       {step && (
