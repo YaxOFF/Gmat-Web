@@ -203,6 +203,7 @@ interface Hud {
   nav: boolean; seen: number; nextD: number; nextDrill: boolean
   /** Luna: lecturas por tramo (k: 0 seco, 1 trazas, 2 hielo), calor de la broca 0..1, s de enfriado forzado,
    *  carga solar en %/s (0 = no carga) y gases en vivo del espectrómetro de masas (H2O, H2, CO2; null = nada). */
+  core: null | { pct: number; cm: number; title: string; lost: number; bites: { t: string; k: number }[] }
   bites: { t: string; k: number }[]; heat: number; hot: number; chg: number; gas: null | [number, number, number]
   /** drilling = SPACE sostenido (drill = avance 0..1). laser: −1 = apagado, 0 = apuntando, 0..1 = analizando. */
   drilling: boolean; laser: number; inRange: boolean; kinds: number; kindsAll: number; scanned: number
@@ -392,6 +393,8 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     let prog = 0, drilling = false, holeX = Infinity, holeZ = Infinity, contact = 0
     let laserT = 0, aimed = false, aimT = 0, zapT = 0, libsT = 0, scannedN = 0, scanT = 0, cores = 0, mapDirty = true
     let drillRock: Rock | null = null
+    let spaceLock = false // tras terminar (o sobrecalentar) hay que soltar SPACE: la repetición de tecla no reinicia el taladro
+    let coreT = 0, coreInfo: Hud['core'] = null
     let iceTop = 0.5, biteT = 0, bitT = 0, hotT = 0, sublim = 0, chg = 0
     const bites: { t: string; k: number }[] = []
     // Lectura del polvo que sube la broca al llegar a la fracción f del hoyo. Con espectrómetro de masas da el
@@ -441,7 +444,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         else say('Still stuck. Try again (R): each attempt costs battery.')
       }
     }
-    const up = (e: KeyboardEvent) => keys.delete(e.code)
+    const up = (e: KeyboardEvent) => { keys.delete(e.code); if (e.code === 'Space') spaceLock = false }
     addEventListener('keydown', down); addEventListener('keyup', up)
 
     let audio: AudioContext | null = null
@@ -735,7 +738,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         // Marte: solo rocas (la que quede bajo la broca), una vez cada una.
         if (jamT > 0) jamT -= dt
         const D = cur()
-        const holding = keys.has('Space') && laserT === 0 && scanT === 0
+        const holding = keys.has('Space') && !spaceLock && laserT === 0 && scanT === 0
         if (hotT > 0) hotT -= dt
         if (holding && hotT > 0 && toastT <= 0) say('The bit is too hot. Let it cool for a moment.', 1.5)
         let want = holding && jamT <= 0 && hotT <= 0 && Math.abs(speed) < 0.8
@@ -743,6 +746,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
           const quiet = toastT <= 0
           if (iceHunt) {
             if (!dark && world.shadow) { want = false; if (quiet) say('Nothing to find on the sunlit rim: drive into the shadow first.') }
+            else if (holes.some((k) => Math.hypot(k.x - x, k.z - z) < 1)) { want = false; if (quiet) say('This spot is already drilled. Move at least 1 m away.', 2.5) }
           } else {
             drillRock = field.under(dp.x, dp.z, DRILL_R)
             if (!drillRock) { want = false; if (quiet) say('No rock under the drill. Park with a rock right in front of the arm.', 2.5) }
@@ -776,14 +780,14 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
             if (b > Math.floor(before * BITES)) { const r = reading(b / BITES); bites.push(r); biteT = BITE_T; beep(r.k === 2 ? 1500 : r.k === 1 ? 1000 : 600) }
             if (bitT >= 1) {
               // Sobrecalentada: se detiene sola unos segundos y, si ya estaba en hielo, parte se sublima.
-              bitT = 1; hotT = 2.5; drilling = false; keys.delete('Space')
+              bitT = 1; hotT = 2.5; drilling = false; spaceLock = true
               if (inIce) { sublim = Math.min(0.6, sublim + 0.15); say('Bit overheated! Part of the ice sublimated (−15% water). Drill in shorter bursts.', 4) }
               else say('Bit overheated. Let it cool, then keep drilling in shorter bursts.', 3)
             }
           }
           if (prog >= 1) {
             // Hoyo terminado: el taladro se detiene solo; hay que soltar y volver a apretar SPACE para el siguiente.
-            prog = 0; drilling = false; holeX = holeZ = Infinity; keys.delete('Space'); drill.position.y = 0.2
+            prog = 0; drilling = false; holeX = holeZ = Infinity; spaceLock = true; drill.position.y = 0.2
             if (rng() < D.jam) { jamT = 15; bat -= 2 * kB; say('Jammed drill! Freeing it takes 15 s (−2% battery).') }
             else if (!iceHunt) {
               // Marte: el polvo de la roca va a CheMin y SAM; esa roca no se vuelve a perforar.
@@ -802,6 +806,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
               record(pct); mark(pct > 0)
               if (dep) dep.taken = true
               holes.push({ x, z, wet: pct > 0 }); mapDirty = true
+              coreInfo = { pct, cm: D.cm, title: start.massSpec || !pct ? tier(pct).msg : 'Hydrogen detected (unconfirmed).', lost: Math.round(sublim * 100), bites: [...bites, reading(1)] }; coreT = 14
               if (pct > 0) beep(1400)
               say(verdict(pct) + ' Stored until the next relay pass.')
               if (pct > 0 && !anomaly) {
@@ -841,6 +846,8 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
           }
         }
         if (libsT > 0) libsT -= dt
+        if (coreT > 0) coreT -= dt
+        if (drilling) coreT = 0
         // Luna: escaneo del subsuelo. Deja nítido en el mapa lo que hay a SCAN_R m (el orbitador solo da manchas gruesas).
         if (scanT > 0) {
           scanT -= dt
@@ -909,6 +916,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
             integ, stuck, teleop: !start.autonav && !link, extended: st.extended,
             lcam: lpov > 0.5, pov: pov > 0.5, xray: xOn, xcm: +(clamp(prog, 0, 1) * cur().cm).toFixed(1), xmax: cur().cm, xice: xSeen,
             under, canDrill, cores,
+            core: coreT > 0 ? coreInfo : null,
             bites: [...bites], heat: bitT, hot: Math.max(0, hotT), chg,
             gas: iceHunt && start.massSpec && sig > 0.04 ? [sig * (0.85 + Math.random() * 0.15), sig * (0.4 + Math.random() * 0.2), sig * (0.2 + Math.random() * 0.15)] : null,
             nav, seen: seenN, nextD: next ? Math.hypot(next.x - x, next.z - z) : -1, nextDrill: !!next && flags.has(next),
@@ -1100,7 +1108,16 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         </div>
       )}
       <div ref={labelsRef} className="rv-labels" hidden />
-      {h?.gas && !final && !h.pov && (
+      {h?.core && !final && (
+        <div className="rv-libs gas core">
+          <small>CORE RESULT · {h.core.cm} cm HOLE</small>
+          <h4>{h.core.title}</h4>
+          <p className="min">{h.core.pct > 0 ? `${h.core.pct}% water by weight` : 'No water in this core'}{h.core.lost > 0 ? ` · ${h.core.lost}% lost to bit heat` : ''}</p>
+          <ul className="rv-bites">{h.core.bites.map((b) => <li key={b.t} className={`k${b.k}`}>{b.t}</li>)}</ul>
+          <p>This hole is done. Stored until the next relay pass.</p>
+        </div>
+      )}
+      {h?.gas && !h.core && !final && !h.pov && (
         <div className="rv-libs gas">
           <small>MASS SPECTROMETER · LIVE VOLATILES</small>
           <div className="rv-spec">

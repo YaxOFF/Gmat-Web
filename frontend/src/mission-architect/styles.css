@@ -726,3 +726,5 @@
 .ma .rv-libs.gas small { color: #9ffcff; }
 .ma .rv-libs.gas .rv-spec { height: 56px; }
 .ma .rv-libs.gas .rv-spec i { background: linear-gradient(#c8f6ff, #38e1ff); }
+.ma .rv-libs.core { width: 260px; }
+.ma .rv-libs.core h4 { margin-top: 6px; }
