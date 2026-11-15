@@ -5,6 +5,8 @@ Built by **NasaGang** for the NASA hackathon at UDLAP (November 2026).
 
 ![Mission Architect title screen: pick the Moon or Mars](docs/preview/title-ui2.jpg)
 
+**▶ [Watch the video on YouTube](https://youtu.be/_fT3Iw9nZN0)**
+
 Mission Architect runs on top of **GMAT Web**, our web using NASA's General Mission Analysis Tool (GMAT R2026a). The backend is FastAPI on top of `gmatpy` (GMAT's real engine), and the frontend is React + Vite + TypeScript.
 
 ## Preview
