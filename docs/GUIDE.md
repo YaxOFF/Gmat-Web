@@ -265,4 +265,4 @@ Ordered from least to most effort.
 | Engine, parser and sync gotchas | `docs/GOTCHAS.md` |
 | API routes and events | `docs/API.md` |
 | Which samples run | `docs/COMPATIBILITY.md` |
-| Phases, decisions and log | `PLAN.md` (web port), `PLAN-JUEGO.md` (Viaje a la Luna game) |
+| Phases, decisions and log | `PLAN.md` (web port), `PLAN-JUEGO.md` (Trip to the Moon game) |

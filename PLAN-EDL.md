@@ -1,285 +1,285 @@
-# Plan: entrada, descenso y aterrizaje en Marte (EDL)
+# Plan: Mars entry, descent and landing (EDL)
 
-Secuencia cinemática del aterrizaje del rover en Marte, con los modelos nuevos: cápsula (`Aeroshell`),
-etapa de descenso (`SkyCrane`) y el rover Curiosity que el juego ya usa. Corre en "Try Mars", antes de
-manejar el rover. Todo el trabajo va en la rama `game/msl-edl`; nunca en `main`.
+Cinematic sequence of the rover landing on Mars, with the new models: capsule (`Aeroshell`),
+descent stage (`SkyCrane`) and the Curiosity rover the game already uses. It runs in "Try Mars", before
+driving the rover. All work goes on the `game/msl-edl` branch; never on `main`.
 
-Modelos de origen: `D:\YaxonFolder\Github\RoverCuriosity\curiosity_rover.blend`. Notas de los modelos
-(nombres de nodos, materiales, posición acoplada): `D:\YaxonFolder\Github\RoverCuriosity\SKYCRANE.md`.
+Source models: `D:\YaxonFolder\Github\RoverCuriosity\curiosity_rover.blend`. Notes on the models
+(node names, materials, stacked position): `D:\YaxonFolder\Github\RoverCuriosity\SKYCRANE.md`.
 
-## Lo que hay hoy
+## What exists today
 
-- `mission-architect/three/Descent3D.tsx`: descenso **lunar** de la misión principal. Módulo de
-  alunizaje procedural (`buildLander` en `spacecraft.ts`), 4 decisiones y una tirada final. No se toca.
-- `mission-architect/ui/MarsTest.tsx`: globo de Marte y botón "Drive at …" que abre `Rover3D` con
-  `world={MARS}`. Hoy el rover aparece ya en el suelo, sin descenso. Aquí entra la secuencia nueva.
-- `three/curiosity.ts`: carga `public/models/curiosity_rover.glb` y arma la suspensión. El GLB sale del
-  mismo `.blend` (nodos `Rocker_Izq`, `Rueda_DI`, …). Marco del rover: frente = +Z, arriba = +Y.
-- Ninguna escena del juego tiene `scene.environment`. Por eso `curiosity.ts` baja `metalness` a 0.15.
-  El SkyCrane y la cápsula son casi todo metal con mapa de metal: sin entorno se ven negros.
-- El juego no usa `DRACOLoader`.
-- `main` tiene cambios sin commit que no son de este plan (`frontend/src/App.tsx`, `i18n/es.ts`,
-  `results/View3D.tsx`, `frontend/src/game/`, `results/orbit3d.ts`). Viajan en el árbol de trabajo.
+- `mission-architect/three/Descent3D.tsx`: **lunar** descent of the main mission. Procedural lunar
+  lander (`buildLander` in `spacecraft.ts`), 4 decisions and a final roll. Not touched.
+- `mission-architect/ui/MarsTest.tsx`: Mars globe and "Drive at …" button that opens `Rover3D` with
+  `world={MARS}`. Today the rover appears already on the ground, with no descent. The new sequence goes here.
+- `three/curiosity.ts`: loads `public/models/curiosity_rover.glb` and builds the suspension. The GLB comes from the
+  same `.blend` (nodes `Rocker_Izq`, `Rueda_DI`, …). Rover frame: front = +Z, up = +Y.
+- No game scene has `scene.environment`. That is why `curiosity.ts` lowers `metalness` to 0.15.
+  The SkyCrane and the capsule are almost all metal with a metal map: without an environment they look black.
+- The game does not use `DRACOLoader`.
+- `main` has uncommitted changes that are not part of this plan (`frontend/src/App.tsx`, `i18n/es.ts`,
+  `results/View3D.tsx`, `frontend/src/game/`, `results/orbit3d.ts`). They travel in the working tree.
 
-## Decisiones tomadas
+## Decisions made
 
-| Tema | Decisión |
+| Topic | Decision |
 |---|---|
-| Rama | `game/msl-edl`, creada desde `main`. Los commits y el push van solo a esta rama. |
-| Dónde corre | Solo en Marte: `MarsTest` → secuencia EDL → `Rover3D`. El descenso lunar queda igual. (Elegido por el usuario.) |
-| Jugabilidad | Solo cinemática: sin decisiones, sin tirada y sin final de fallo. Botón para saltarla. (Elegido por el usuario.) |
-| Tamaño del rover | No cambia. La cápsula ya está agrandada 1.65 veces en el `.blend` para que quepa el rover desplegado. |
-| Rover | Se usa el `curiosity_rover.glb` que ya está en el juego, con `loadCuriosity()`. No se vuelve a exportar. |
-| Archivos nuevos | `public/models/skycrane.glb` y `public/models/aeroshell.glb`, cada uno con su raíz en el origen. |
-| Compresión | Texturas a 1024 px máximo y WebP. Sin Draco (el juego no carga el decodificador). Nunca `gltf-transform optimize`. |
-| Posición acoplada | Constantes en código, en el marco del rover (origen de `gltf.scene` de `curiosity_rover.glb`): SkyCrane 2.17 m arriba, plano de separación de la cápsula 0.77 m arriba. Confirmadas en E1: el rover del juego mide lo mismo que el del `.blend` (2.78 × 2.22 × 3.95 m en x, y, z de Three.js) y su nodo `Curiosity` está en z = -0.035, igual que en Blender. |
-| Propulsores | En Three.js el chorro de cada `Thruster_*` va por su **-Y local** (el -Z de Blender); `Nozzle_*` está en y = -0.63 dentro de él. |
-| Interior de la cápsula | `MAT-aeroshell_interior` no se exporta (ninguna cara lo usa en el `.blend`). Por dentro se ve el material exterior, que es de doble cara. Revisado en E2: basta. |
-| Enganche de cables | 3 puntos del rover como constantes en código (`ROVER_BRIDLE` en `edl.ts`: cubierta a y = 1.15 m, uno al frente y dos atrás; el GLB del rover no tiene esos nodos). Arriba se usan los nodos `Bridle_Anchor_1..3` del SkyCrane. |
-| Animación | Toda en código (máquina de estados con tiempos), sin clips de Blender. Motivos en `SKYCRANE.md` §4. |
-| Paracaídas | Geometría procedural en Three.js (casquete con franjas blancas y naranjas, líneas). No hay modelo. |
-| Efectos | Llamas, plasma de entrada, polvo y humo se hacen en el juego con sprites o mallas simples. |
-| Iluminación | La escena EDL define `scene.environment` (PMREM de `RoomEnvironment` o de un cielo marciano simple). `Rover3D` no cambia. |
-| Escala del descenso | La altitud real (125 km → 0) se muestra en el HUD. La posición en pantalla va comprimida, como hace `Descent3D` con su escala logarítmica. Duración total cercana a 60 s. |
-| Terreno | El mismo relieve real del sitio que usa `Rover3D` (`loadDem`, `demHeight`). El rover toca el suelo en el punto donde `Rover3D` empieza (`x = 0, z = -74, yaw = 0`), para que el cambio de escena no salte. |
-| Textos | Como los hace hoy `mission-architect` (fase E3 revisa si van en `i18n` o en el componente y sigue esa forma). |
-| Cambios ajenos | Los archivos sin commit que venían de `main` no se incluyen en commits de este plan: `git add` siempre por ruta. |
+| Branch | `game/msl-edl`, created from `main`. Commits and push go only to this branch. |
+| Where it runs | Only on Mars: `MarsTest` → EDL sequence → `Rover3D`. The lunar descent stays the same. (Chosen by the user.) |
+| Gameplay | Cinematic only: no decisions, no roll and no failure ending. Button to skip it. (Chosen by the user.) |
+| Rover size | Unchanged. The capsule is already scaled up 1.65 times in the `.blend` so the deployed rover fits. |
+| Rover | The `curiosity_rover.glb` already in the game is used, with `loadCuriosity()`. It is not re-exported. |
+| New files | `public/models/skycrane.glb` and `public/models/aeroshell.glb`, each with its root at the origin. |
+| Compression | Textures at 1024 px maximum and WebP. No Draco (the game does not load the decoder). Never `gltf-transform optimize`. |
+| Stacked position | Constants in code, in the rover frame (origin of `gltf.scene` of `curiosity_rover.glb`): SkyCrane 2.17 m up, capsule separation plane 0.77 m up. Confirmed in E1: the game rover measures the same as the one in the `.blend` (2.78 × 2.22 × 3.95 m in Three.js x, y, z) and its `Curiosity` node is at z = -0.035, same as in Blender. |
+| Thrusters | In Three.js the plume of each `Thruster_*` goes along its **local -Y** (Blender's -Z); `Nozzle_*` is at y = -0.63 inside it. |
+| Capsule interior | `MAT-aeroshell_interior` is not exported (no face uses it in the `.blend`). From inside you see the exterior material, which is double-sided. Reviewed in E2: it is enough. |
+| Cable attachment | 3 rover points as constants in code (`ROVER_BRIDLE` in `edl.ts`: deck at y = 1.15 m, one at the front and two at the back; the rover GLB does not have those nodes). At the top the SkyCrane `Bridle_Anchor_1..3` nodes are used. |
+| Animation | All in code (state machine with timings), no Blender clips. Reasons in `SKYCRANE.md` §4. |
+| Parachute | Procedural geometry in Three.js (canopy with white and orange stripes, lines). There is no model. |
+| Effects | Flames, entry plasma, dust and smoke are made in the game with sprites or simple meshes. |
+| Lighting | The EDL scene defines `scene.environment` (PMREM from `RoomEnvironment` or from a simple Martian sky). `Rover3D` does not change. |
+| Descent scale | The real altitude (125 km → 0) is shown in the HUD. The on-screen position is compressed, like `Descent3D` does with its logarithmic scale. Total duration close to 60 s. |
+| Terrain | The same real site relief that `Rover3D` uses (`loadDem`, `demHeight`). The rover touches the ground at the point where `Rover3D` starts (`x = 0, z = -74, yaw = 0`), so the scene change does not jump. |
+| Texts | As `mission-architect` does them today (phase E3 checks whether they go in `i18n` or in the component and follows that form). |
+| Unrelated changes | The uncommitted files that came from `main` are not included in this plan's commits: always `git add` by path. |
 
-## Formatos destino
+## Target formats
 
-### Nodos de los GLB (iguales que en Blender)
+### GLB nodes (same as in Blender)
 
 ```
 skycrane.glb
-SkyCrane                     raíz, origen en el centro inferior de la nave
+SkyCrane                     root, origin at the bottom center of the craft
 ├─ SkyCrane_Body
-├─ Bridle_Anchor_1..3        salida de los cables
-└─ Thruster_{LF,LB,RF,RB}_{1,2}     pivote en el montaje; -Z local de Blender = dirección del chorro
-   └─ Nozzle_{…}             aquí va la llama
+├─ Bridle_Anchor_1..3        where the cables leave
+└─ Thruster_{LF,LB,RF,RB}_{1,2}     pivot at the mount; Blender local -Z = jet direction
+   └─ Nozzle_{…}             the flame goes here
 
 aeroshell.glb
-Aeroshell                    raíz, origen en el centro del plano de separación
-├─ Aeroshell_Backshell       se separa hacia arriba
-└─ Aeroshell_Heatshield      se separa hacia abajo
+Aeroshell                    root, origin at the center of the separation plane
+├─ Aeroshell_Backshell       separates upward
+└─ Aeroshell_Heatshield      separates downward
 ```
 
-En Three.js el eje Z de Blender pasa a ser Y, y el -Y de Blender pasa a ser +Z.
+In Three.js Blender's Z axis becomes Y, and Blender's -Y becomes +Z.
 
-### Etapas de la secuencia
+### Sequence stages
 
-| # | Etapa | Altitud en el HUD | Qué se ve |
+| # | Stage | HUD altitude | What is seen |
 |---|---|---|---|
-| 1 | Entrada | 125 km → 11 km | Cápsula cerrada, escudo por delante, plasma naranja y estela |
-| 2 | Paracaídas | 11 km, ~1450 km/h | Sale el paracaídas del cono superior; la cápsula se endereza y frena |
-| 3 | Escudo térmico | 8 km, ~600 km/h | `Aeroshell_Heatshield` cae; se ve el rover bajo el SkyCrane |
-| 4 | Carcasa trasera | 1.6 km, ~300 km/h | SkyCrane con el rover cae libre; la carcasa queda arriba con el paracaídas |
-| 5 | Descenso propulsado | 1.6 km → 20 m | 8 llamas; desvío lateral para alejarse de la carcasa; frena |
-| 6 | Sky crane | 20 m → 0, ~2.7 km/h | SkyCrane flota; 3 cables bajan el rover hasta 7.5 m |
-| 7 | Contacto | 0 m | Las 6 ruedas apoyan con la suspensión; se cortan los cables |
-| 8 | Vuelo de escape | — | SkyCrane se inclina, acelera y se estrella lejos con una nube de polvo |
+| 1 | Entry | 125 km → 11 km | Closed capsule, heat shield in front, orange plasma and trail |
+| 2 | Parachute | 11 km, ~1450 km/h | The parachute comes out of the top cone; the capsule straightens up and slows down |
+| 3 | Heat shield | 8 km, ~600 km/h | `Aeroshell_Heatshield` falls; the rover is seen under the SkyCrane |
+| 4 | Backshell | 1.6 km, ~300 km/h | SkyCrane with the rover falls free; the backshell stays above with the parachute |
+| 5 | Powered descent | 1.6 km → 20 m | 8 flames; lateral divert to move away from the backshell; slows down |
+| 6 | Sky crane | 20 m → 0, ~2.7 km/h | SkyCrane hovers; 3 cables lower the rover down to 7.5 m |
+| 7 | Touchdown | 0 m | The 6 wheels settle with the suspension; the cables are cut |
+| 8 | Flyaway | — | SkyCrane tilts, accelerates and crashes far away with a dust cloud |
 
-La separación de la etapa de crucero (antes de la entrada) queda como opcional: fase E7.
+Cruise stage separation (before entry) stays optional: phase E7.
 
-## Fases
+## Phases
 
-Cada fase deja `npm run lint` y `npm run build` en verde y la app funcionando.
+Each phase leaves `npm run lint` and `npm run build` green and the app working.
 
-### Fase E0 — Preparar ✅
+### Phase E0 — Prepare ✅
 
-Rama `game/msl-edl`, este plan y la sección de `CLAUDE.md`.
+Branch `game/msl-edl`, this plan and the `CLAUDE.md` section.
 
-### Fase E1 — Exportar los modelos ✅
+### Phase E1 — Export the models ✅
 
-Resultado: `skycrane.glb` 817 KB, `aeroshell.glb` 905 KB (detalle en `tools/msl/README.md`).
+Result: `skycrane.glb` 817 KB, `aeroshell.glb` 905 KB (details in `tools/msl/README.md`).
 
-Meta: `skycrane.glb` y `aeroshell.glb` en `frontend/public/models/`, comprobados.
+Goal: `skycrane.glb` and `aeroshell.glb` in `frontend/public/models/`, checked.
 
-- `tools/msl/export_edl.py`: script para Blender en modo consola (`blender --background <blend>
-  --python tools/msl/export_edl.py -- <carpeta de salida>`). Exporta por separado la jerarquía `SkyCrane`
-  y la jerarquía `Aeroshell`, cada una con su raíz llevada al origen solo durante el export (sin guardar
-  el `.blend`). Opciones: GLB, `export_apply=False`, sin Draco, sin cámaras ni luces, sin animaciones.
-- `tools/msl/README.md`: de dónde sale el `.blend`, comando completo, pasos de `gltf-transform`
-  (`resize --width 1024 --height 1024`, luego `webp --quality 90`) y tamaños obtenidos.
-- Comprobar con `npx @gltf-transform/cli inspect`:
-  - nombres de nodos iguales a la tabla de arriba;
-  - `SkyCrane_Body` y los propulsores llevan `COLOR_0` (oclusión horneada) y sus materiales una textura
-    metallicRoughness; si `COLOR_0` no sale, anotar y decidir (hornear en la textura o quitar el nodo);
-  - los 8 propulsores comparten una sola malla.
-- Confirmar la posición acoplada contra el rover del juego: comparar la caja del `curiosity_rover.glb`
-  del juego con la del rover del `.blend` (2.79 × 3.95 × 2.22 m). Si difiere, recalcular las dos
-  constantes y anotarlas en Decisiones.
-- Anotar en este plan el tamaño final de cada GLB.
+- `tools/msl/export_edl.py`: script for Blender in console mode (`blender --background <blend>
+  --python tools/msl/export_edl.py -- <output folder>`). Exports the `SkyCrane` hierarchy
+  and the `Aeroshell` hierarchy separately, each with its root moved to the origin only during the export (without saving
+  the `.blend`). Options: GLB, `export_apply=False`, no Draco, no cameras or lights, no animations.
+- `tools/msl/README.md`: where the `.blend` comes from, full command, `gltf-transform` steps
+  (`resize --width 1024 --height 1024`, then `webp --quality 90`) and resulting sizes.
+- Check with `npx @gltf-transform/cli inspect`:
+  - node names equal to the table above;
+  - `SkyCrane_Body` and the thrusters carry `COLOR_0` (baked occlusion) and their materials a
+    metallicRoughness texture; if `COLOR_0` does not come out, note it and decide (bake into the texture or remove the node);
+  - the 8 thrusters share a single mesh.
+- Confirm the stacked position against the game rover: compare the box of the game's `curiosity_rover.glb`
+  with that of the rover in the `.blend` (2.79 × 3.95 × 2.22 m). If it differs, recalculate the two
+  constants and note them in Decisions.
+- Note in this plan the final size of each GLB.
 
-Verificar: `inspect` de los dos archivos; cada GLB por debajo de 2 MB; los dos se ven bien en
-`https://sandbox.babylonjs.com` o en la vista de la fase E2.
+Verify: `inspect` of both files; each GLB under 2 MB; both look right in
+`https://sandbox.babylonjs.com` or in the phase E2 view.
 
-### Fase E2 — Módulo de carga y vista de prueba ✅
+### Phase E2 — Loader module and test view ✅
 
-Meta: los tres modelos acoplados en una escena del juego, bien iluminados.
+Goal: the three models stacked in a game scene, well lit.
 
-- `frontend/src/mission-architect/three/edl.ts` (modelo a imitar: `three/curiosity.ts`):
-  - `loadEdl()`: carga los dos GLB con `GLTFLoader`, busca cada nodo por nombre y lanza un error claro
-    si falta alguno; activa sombras; devuelve `{ root, skycrane, thrusters, nozzles, anchors, aeroshell,
+- `frontend/src/mission-architect/three/edl.ts` (model to imitate: `three/curiosity.ts`):
+  - `loadEdl()`: loads the two GLBs with `GLTFLoader`, finds each node by name and throws a clear error
+    if any is missing; enables shadows; returns `{ root, skycrane, thrusters, nozzles, anchors, aeroshell,
     backshell, heatshield }`.
-  - constantes de la posición acoplada y los 3 puntos de enganche en el rover;
-  - `edlEnvironment(renderer)`: textura de entorno PMREM para `scene.environment`.
-- Vista de prueba `?screen=edl` en `mission-architect/App.tsx` (junto a `?screen=mars`): rover +
-  SkyCrane + cápsula acoplados, `OrbitControls`, y un control deslizante que separa escudo y carcasa.
-- Comprobar que el metal no sale negro y que el `metalness` rebajado del rover se sigue viendo bien
-  con entorno (si no, quitar el rebaje solo dentro de esta escena).
+  - constants for the stacked position and the 3 attachment points on the rover;
+  - `edlEnvironment(renderer)`: PMREM environment texture for `scene.environment`.
+- Test view `?screen=edl` in `mission-architect/App.tsx` (next to `?screen=mars`): rover +
+  SkyCrane + capsule stacked, `OrbitControls`, and a slider that separates heat shield and backshell.
+- Check that the metal does not come out black and that the rover's lowered `metalness` still looks right
+  with an environment (if not, remove the lowering only inside this scene).
 
-Verificar: `cd frontend; npm run lint; npm run build`; abrir `?screen=edl`, sin errores en consola, nada
-atraviesa la pared de la cápsula al estar cerrada, las dos piezas se separan sin dejar huecos raros.
+Verify: `cd frontend; npm run lint; npm run build`; open `?screen=edl`, no console errors, nothing
+goes through the capsule wall when it is closed, the two pieces separate without leaving odd gaps.
 
-### Fase E3 — Escena y línea de tiempo: de la entrada a la carcasa trasera ✅
+### Phase E3 — Scene and timeline: from entry to backshell ✅
 
-Meta: etapas 1 a 4 moviéndose, sin efectos todavía.
+Goal: stages 1 to 4 moving, no effects yet.
 
-- Sacar `loadDem` y `demHeight` de `Rover3D.tsx` a `three/dem.ts` (solo mover y exportar; `Rover3D`
-  importa desde ahí y se comporta igual).
-- `frontend/src/mission-architect/three/Edl3D.tsx` (modelo: `Descent3D.tsx` para el montaje con
-  `mountStage`, y `Rover3D.tsx` para cielo, niebla, luces y terreno de Marte). Props: `site`, `seed`,
+- Move `loadDem` and `demHeight` from `Rover3D.tsx` to `three/dem.ts` (only move and export; `Rover3D`
+  imports from there and behaves the same).
+- `frontend/src/mission-architect/three/Edl3D.tsx` (model: `Descent3D.tsx` for mounting with
+  `mountStage`, and `Rover3D.tsx` for Mars sky, fog, lights and terrain). Props: `site`, `seed`,
   `onDone`.
-- Línea de tiempo: lista de etapas con duración; una función por etapa que recibe el avance 0..1 y
-  coloca los objetos. Sin librería de tweens: interpolación propia con suavizado.
-- Etapas 1 a 4 con cuerpos rígidos: cápsula inclinada con el escudo por delante; se endereza; el escudo
-  cae girando; SkyCrane con el rover sale por abajo de la carcasa. El rover y el SkyCrane están ocultos
-  mientras la cápsula está cerrada (ahorra dibujado).
-- Cámara por etapa (seguimiento lateral, nunca por debajo del terreno).
-- HUD: altitud, velocidad y nombre de la etapa; reutilizar las clases `.ds-hud` de `styles.css`.
-- `?screen=edl` pasa a abrir esta escena; la vista estática de E2 queda en `?screen=edl&static=1`.
+- Timeline: list of stages with duration; one function per stage that receives the progress 0..1 and
+  places the objects. No tween library: custom interpolation with easing.
+- Stages 1 to 4 with rigid bodies: tilted capsule with the heat shield in front; it straightens up; the heat shield
+  falls spinning; SkyCrane with the rover comes out the bottom of the backshell. The rover and the SkyCrane are hidden
+  while the capsule is closed (saves drawing).
+- Camera per stage (side tracking, never below the terrain).
+- HUD: altitude, speed and stage name; reuse the `.ds-hud` classes from `styles.css`.
+- `?screen=edl` now opens this scene; the static E2 view stays at `?screen=edl&static=1`.
 
-Si no cabe en una sesión: E3a = `dem.ts` + escena, terreno, cielo y HUD con la cápsula bajando;
-E3b = etapas 2 a 4 y cámaras.
+If it does not fit in one session: E3a = `dem.ts` + scene, terrain, sky and HUD with the capsule descending;
+E3b = stages 2 to 4 and cameras.
 
-Verificar: lint y build; `?screen=edl` recorre las 4 etapas sin errores de consola; `?screen=mars` →
-"Drive" sigue igual que antes (el cambio de `dem.ts` no rompió nada).
+Verify: lint and build; `?screen=edl` goes through the 4 stages without console errors; `?screen=mars` →
+"Drive" stays the same as before (the `dem.ts` change did not break anything).
 
-### Fase E4 — Descenso propulsado, sky crane, contacto y escape ✅
+### Phase E4 — Powered descent, sky crane, touchdown and flyaway ✅
 
-Meta: etapas 5 a 8; la secuencia completa de principio a fin.
+Goal: stages 5 to 8; the complete sequence from start to end.
 
-- Etapa 5: desvío lateral, frenado, propulsores orientados por código (rotar cada `Thruster_*` desde su
-  pivote).
-- Etapa 6: SkyCrane flota; el rover baja hasta 7.5 m. Cables: 3 `THREE.Line` (o cilindros finos) entre
-  `Bridle_Anchor_n` y los puntos del rover, actualizados cada frame.
-- Etapa 7: el rover apoya con `rig.update(...)` sobre el relieve real, para que las ruedas y la
-  suspensión queden como en `Rover3D`. Los cables se sueltan y desaparecen.
-- Etapa 8: SkyCrane se inclina unos 45°, acelera, sale del cuadro y cae lejos.
-- Al terminar llama `onDone()`.
+- Stage 5: lateral divert, braking, thrusters oriented by code (rotate each `Thruster_*` from its
+  pivot).
+- Stage 6: SkyCrane hovers; the rover is lowered down to 7.5 m. Cables: 3 `THREE.Line` (or thin cylinders) between
+  `Bridle_Anchor_n` and the rover points, updated every frame.
+- Stage 7: the rover settles with `rig.update(...)` on the real relief, so the wheels and the
+  suspension end up as in `Rover3D`. The cables are released and disappear.
+- Stage 8: SkyCrane tilts about 45°, accelerates, leaves the frame and falls far away.
+- When finished it calls `onDone()`.
 
-Verificar: lint y build; la secuencia completa corre sin errores; el rover queda en `x = 0, z = -74`
-apoyado en el suelo, sin flotar ni hundirse.
+Verify: lint and build; the complete sequence runs without errors; the rover ends at `x = 0, z = -74`
+resting on the ground, without floating or sinking.
 
-### Fase E5 — Efectos
+### Phase E5 — Effects
 
-Meta: que se vea como la referencia.
+Goal: make it look like the reference.
 
-- Plasma y estela en la entrada (malla aditiva delante del escudo + partículas), que se apagan al frenar.
-- Paracaídas procedural con franjas blancas y naranjas, líneas hasta el cono superior de la carcasa,
-  inflado animado y un balanceo leve.
-- Llamas en los 8 `Nozzle_*` (azuladas), con luz puntual compartida, no una por tobera.
-- Polvo al acercarse al suelo y nube en el choque lejano del SkyCrane.
-- Sombras: ajustar la cámara de sombra del sol a la zona de contacto.
-- Todo material y textura creado aquí se libera al desmontar (`mountStage` ya recorre la escena;
-  comprobar las texturas de sprites).
+- Plasma and trail during entry (additive mesh in front of the heat shield + particles), which fade out when braking.
+- Procedural parachute with white and orange stripes, lines up to the backshell's top cone,
+  animated inflation and a slight sway.
+- Flames on the 8 `Nozzle_*` (bluish), with a shared point light, not one per nozzle.
+- Dust when approaching the ground and a cloud at the SkyCrane's distant crash.
+- Shadows: fit the sun's shadow camera to the touchdown area.
+- Every material and texture created here is released on unmount (`mountStage` already walks the scene;
+  check the sprite textures).
 
-Verificar: lint y build; revisión visual etapa por etapa contra la tabla; sin errores de consola.
+Verify: lint and build; visual review stage by stage against the table; no console errors.
 
-### Fase E6 — Integración en "Try Mars"
+### Phase E6 — Integration into "Try Mars"
 
-Meta: el jugador ve la secuencia antes de manejar.
+Goal: the player sees the sequence before driving.
 
-- `ui/MarsTest.tsx`: "Drive at …" abre `Edl3D` con el sitio elegido; al terminar (`onDone`) o al pulsar
-  "Saltar" abre `Rover3D` como hoy.
-- Que el corte no salte: misma posición, rumbo, cielo, niebla y luz del sol que `Rover3D` en su primer
+- `ui/MarsTest.tsx`: "Drive at …" opens `Edl3D` with the chosen site; when finished (`onDone`) or when pressing
+  "Skip" it opens `Rover3D` as today.
+- Make the cut not jump: same position, heading, sky, fog and sunlight as `Rover3D` in its first
   frame.
-- Texto del botón y de las etapas donde vayan los demás textos de `mission-architect`.
-- Los modelos se cargan una sola vez (promesa en caché) y `Rover3D` no vuelve a descargar el rover si
-  ya está en memoria.
+- Button and stage text wherever the other `mission-architect` texts go.
+- The models are loaded only once (cached promise) and `Rover3D` does not download the rover again if
+  it is already in memory.
 
-Verificar: lint y build; en el navegador: título → Try Mars → elegir 2 sitios distintos → Drive: corre la
-secuencia, salta bien con el botón, y el rover se maneja igual que antes.
+Verify: lint and build; in the browser: title → Try Mars → choose 2 different sites → Drive: the
+sequence runs, skips correctly with the button, and the rover drives the same as before.
 
-### Fase E7 — Pulido, rendimiento y documentación ✅
+### Phase E7 — Polish, performance and documentation ✅
 
-- Medir en un equipo modesto o en móvil: bajar partículas o sombras si hace falta.
-- Pantalla de carga mientras bajan los GLB.
-- `docs/MAP.md`: fila nueva para la secuencia EDL (archivos, modelos, `tools/msl`). Correr
-  `sh docs/docs.sh stale` y actualizar lo que liste.
-- Actualizar `SKYCRANE.md` en el repo de los modelos: marcar los pendientes que este plan resolvió.
-- (Opcional) Separación de la etapa de crucero al inicio, con `public/models/msl.glb`.
-- (Opcional) Pose plegada del rover dentro de la cápsula y clips `deploy_wheels` / `raise_mast` desde
-  Blender; permitiría bajar la cápsula a 1.3 veces el tamaño real.
-- (Opcional) Sonido: motores, viento, contacto.
+- Measure on a modest machine or on mobile: reduce particles or shadows if needed.
+- Loading screen while the GLBs download.
+- `docs/MAP.md`: new row for the EDL sequence (files, models, `tools/msl`). Run
+  `sh docs/docs.sh stale` and update whatever it lists.
+- Update `SKYCRANE.md` in the models repo: mark the pending items this plan resolved.
+- (Optional) Cruise stage separation at the start, with `public/models/msl.glb`.
+- (Optional) Folded rover pose inside the capsule and `deploy_wheels` / `raise_mast` clips from
+  Blender; it would allow reducing the capsule to 1.3 times the real size.
+- (Optional) Sound: engines, wind, touchdown.
 
-Verificar: lint y build; `sh docs/docs.sh stale` sin pendientes.
+Verify: lint and build; `sh docs/docs.sh stale` with nothing pending.
 
-## Protocolo por sesión
+## Per-session protocol
 
-1. Confirmar la rama: `git branch --show-current` debe decir `game/msl-edl`. Si no, `git switch game/msl-edl`.
-2. Leer **Avance** y tomar la primera fase sin marcar. Leer solo los archivos que esa fase toca.
-3. Implementar la fase completa, nada de fases siguientes.
-4. Verificar: `cd frontend; npm run lint; npm run build`, y en el navegador (`npm run dev`, puerto 5173)
-   la URL que indique la fase, con la consola sin errores.
-5. Marcar la fase en **Avance** y escribir 2-5 líneas en **Bitácora**.
-6. Commit (Conventional Commits) con `git add` por ruta, sin incluir los cambios ajenos que venían de
-   `main`. `git push -u origin game/msl-edl`. Nunca hacer push ni merge a `main`.
-7. Avisar al usuario que puede hacer `/clear` y continuar con la siguiente fase.
+1. Confirm the branch: `git branch --show-current` must say `game/msl-edl`. If not, `git switch game/msl-edl`.
+2. Read **Progress** and take the first unchecked phase. Read only the files that phase touches.
+3. Implement the complete phase, nothing from later phases.
+4. Verify: `cd frontend; npm run lint; npm run build`, and in the browser (`npm run dev`, port 5173)
+   the URL the phase indicates, with the console free of errors.
+5. Check off the phase in **Progress** and write 2-5 lines in **Log**.
+6. Commit (Conventional Commits) with `git add` by path, without including the unrelated changes that came from
+   `main`. `git push -u origin game/msl-edl`. Never push or merge to `main`.
+7. Tell the user they can run `/clear` and continue with the next phase.
 
-## Avance
+## Progress
 
-- [x] Fase E0 — Preparar
-- [x] Fase E1 — Exportar los modelos
-- [x] Fase E2 — Módulo de carga y vista de prueba
-- [x] Fase E3 — Escena y línea de tiempo: de la entrada a la carcasa trasera
-- [x] Fase E4 — Descenso propulsado, sky crane, contacto y escape
-- [x] Fase E5 — Efectos
-- [x] Fase E6 — Integración en "Try Mars"
-- [x] Fase E7 — Pulido, rendimiento y documentación
+- [x] Phase E0 — Prepare
+- [x] Phase E1 — Export the models
+- [x] Phase E2 — Loader module and test view
+- [x] Phase E3 — Scene and timeline: from entry to backshell
+- [x] Phase E4 — Powered descent, sky crane, touchdown and flyaway
+- [x] Phase E5 — Effects
+- [x] Phase E6 — Integration into "Try Mars"
+- [x] Phase E7 — Polish, performance and documentation
 
-## Bitácora
+## Log
 
-- **2026-11-15 · Fase E0** — Rama `game/msl-edl` creada desde `main` (`e1d57d9`). Plan escrito tras leer
-  `Descent3D.tsx`, `MarsTest.tsx`, `curiosity.ts`, `stage.ts` y `Rover3D.tsx`. Decidido con el usuario:
-  solo en Marte y solo cinemática. Sin push todavía. Pendiente conocido: `main` traía cambios sin commit
-  que no son de este plan; siguen en el árbol de trabajo y no se incluyeron en el commit.
-- **2026-11-15 · Fase E1** — `tools/msl/export_edl.py` + `README.md`. Blender 5.2 exportó con
-  `export_vertex_color="ACTIVE"` para que salga `COLOR_0`; luego `gltf-transform` 4.5 resize + webp 90.
-  Nodos, `COLOR_0`, metallicRoughness y malla compartida de propulsores comprobados con `inspect` y
-  leyendo el JSON del GLB. Posición acoplada confirmada sin cambios. Hallazgos anotados en Decisiones:
-  chorro por -Y local y cápsula sin material interior. Revisión visual queda para la vista de E2.
-- **2026-11-15 · Fase E2** — `three/edl.ts` (`loadEdl`, `edlEnvironment` con `RoomEnvironment`, constantes de
-  acople y `ROVER_BRIDLE`) y `three/EdlStatic.tsx` en `?screen=edl`. Con entorno el metal ya no sale negro y el
-  rover con `metalness` rebajado se ve bien: no hizo falta quitar el rebaje. Cápsula cerrada sin cruces; escudo y
-  carcasa se separan limpios. Los cambios ajenos de `main` (`src/App.tsx` declara `game` dos veces) rompen lint y
-  build: para verificar se apartaron con `git stash -u` por ruta y se devolvieron después.
-- **2026-11-15 · Fase E3** — `three/dem.ts` (se movieron `loadDem`, `demHeight`, `noise`, `SIZE`/`HALF`; `Rover3D` importa
-  de ahí y `untileMaterial` quedó exportado). `three/Edl3D.tsx`: mismo relieve y semilla que `Rover3D`, línea de tiempo
-  de 4 etapas (32 s), altura en pantalla real bajo 100 m y logarítmica arriba, cielo que oscurece con la altitud y niebla
-  más rala arriba (con la de `Rover3D` el suelo no se veía). Textos en inglés dentro del componente, como `Descent3D`.
-  `?screen=edl` corre la secuencia en bucle (`&site=<id>`); `&static=1` abre la vista de E2. Para verificar se volvieron
-  a apartar los cambios ajenos con `git stash -u` por ruta. Revisado en Chrome: 4 etapas, `?screen=mars` → Drive igual.
-- **2026-11-15 · Fase E4** — Etapas 5 a 8 en `Edl3D.tsx` (64.5 s en total). Las etapas 1-4 bajan corridas 40 m en +X y el
-  desvío propulsado trae la pila sobre `LAND`; la carcasa se suelta a la escena y deriva. El rover va en su propio grupo:
-  colgado, `rig.update` lo apoya sobre un llano imaginario que en los últimos 0.4 m se vuelve el relieve real (`meshHeight`
-  de la misma malla que `Rover3D`), así las ruedas tocan sin salto. Cables con un `LineSegments`; los propulsores giran
-  desde su pivote para compensar la inclinación. Escape: se inclina ~45°, vuela hacia -X y se oculta al tocar el suelo
-  (el polvo queda para E5). La cámara termina donde arranca la de `Rover3D`. Revisado en Chrome, sin errores de consola.
-- **2026-11-15 · Fase E5** — Efectos en `Edl3D.tsx`, reusando `puffs`/`puffTexture` de `Launch3D.tsx` (ahora exportados; `puffs`
-  acepta altura del suelo y centro del rebote, `Launch3D` igual). Plasma: casquete aditivo medido del escudo + estela; paracaídas
-  procedural (gajos, líneas, inflado con rebote, vertical con balanceo) colgado de la carcasa; 8 llamas con geometría y material
-  compartidos y una sola `PointLight` (naranja en la entrada, azulada después); polvo bajo 25 m y nube en el choque. El escape
-  ahora va hacia +Z y algo de -X para que el choque se vea en el cuadro final. El sol sigue a la pila/rover con sombra de ±35 m.
-  Revisado en Chrome (con un arranque temporal en t=44 s para el final, ya quitado); `?screen=launch` sin cambios.
-- **2026-11-15 · Fase E6** — `MarsTest`: "Land and drive at …" abre `Edl3D`; al terminar o con "Skip landing ▶" pasa a `Rover3D`.
-  `cachedGlb` en `curiosity.ts`: cada GLB se descarga una vez y cada escena recibe un `clone()` (`loadCuriosity` y `loadEdl` lo
-  usan). Para que el corte no salte, `Rover3D` exporta `siteDeposits`/`siteRocks` y `Edl3D` consume el rng igual: mismas rocas y
-  mismo tinte de hidrógeno; suelo y rocas sin luz de entorno y el entorno se apaga durante el escape; la cámara termina
-  exactamente en la persecución inicial de `Rover3D`, que ahora arranca ya en ese punto. En Marte `Rover3D` no pone el lander
-  lunar. Revisado en Chrome: Arcadia (saltar) y Korolev (secuencia completa); `?rover=cabeus` sigue igual, sin errores.
-- **2026-11-15 · Fase E7** — Pantalla de carga `.edl-loading` en `Edl3D` hasta el primer cuadro (o "LOAD FAILED"); `MarsTest`
-  precarga los 3 GLB con `cachedGlb` mientras se elige sitio. Rendimiento no medido: en el Chrome automatizado hasta una página
-  vacía va a 1.5 fps (la ventana está frenada), así que no hay cifra válida; partículas y sombras quedan como estaban. Pendiente:
-  medir en un equipo modesto. `docs/`: fila EDL en `MAP.md`, `loadDem` en `dem.ts`, textos de UI ahora en `i18n/en.ts`; sellos al
-  día. `SKYCRANE.md` (repo de modelos) con los pendientes resueltos. Opcionales (crucero, pose plegada, sonido) no se hicieron.
+- **2026-11-15 · Phase E0** — Branch `game/msl-edl` created from `main` (`e1d57d9`). Plan written after reading
+  `Descent3D.tsx`, `MarsTest.tsx`, `curiosity.ts`, `stage.ts` and `Rover3D.tsx`. Decided with the user:
+  only on Mars and cinematic only. No push yet. Known pending item: `main` had uncommitted changes
+  that are not part of this plan; they remain in the working tree and were not included in the commit.
+- **2026-11-15 · Phase E1** — `tools/msl/export_edl.py` + `README.md`. Blender 5.2 exported with
+  `export_vertex_color="ACTIVE"` so that `COLOR_0` comes out; then `gltf-transform` 4.5 resize + webp 90.
+  Nodes, `COLOR_0`, metallicRoughness and the thrusters' shared mesh checked with `inspect` and
+  by reading the GLB JSON. Stacked position confirmed with no changes. Findings noted in Decisions:
+  plume along local -Y and capsule without interior material. Visual review is left for the E2 view.
+- **2026-11-15 · Phase E2** — `three/edl.ts` (`loadEdl`, `edlEnvironment` with `RoomEnvironment`, stacking
+  constants and `ROVER_BRIDLE`) and `three/EdlStatic.tsx` at `?screen=edl`. With an environment the metal no longer comes out black and the
+  rover with lowered `metalness` looks right: removing the lowering was not needed. Closed capsule with no intersections; heat shield and
+  backshell separate cleanly. The unrelated changes from `main` (`src/App.tsx` declares `game` twice) break lint and
+  build: to verify, they were set aside with `git stash -u` by path and restored afterwards.
+- **2026-11-15 · Phase E3** — `three/dem.ts` (`loadDem`, `demHeight`, `noise`, `SIZE`/`HALF` were moved; `Rover3D` imports
+  from there and `untileMaterial` was exported). `three/Edl3D.tsx`: same relief and seed as `Rover3D`, timeline
+  of 4 stages (32 s), real on-screen height below 100 m and logarithmic above, sky that darkens with altitude and fog
+  thinner higher up (with `Rover3D`'s fog the ground was not visible). Texts in English inside the component, like `Descent3D`.
+  `?screen=edl` runs the sequence in a loop (`&site=<id>`); `&static=1` opens the E2 view. To verify, the unrelated changes were
+  set aside again with `git stash -u` by path. Reviewed in Chrome: 4 stages, `?screen=mars` → Drive the same.
+- **2026-11-15 · Phase E4** — Stages 5 to 8 in `Edl3D.tsx` (64.5 s in total). Stages 1-4 descend shifted 40 m in +X and the
+  powered divert brings the stack over `LAND`; the backshell is released into the scene and drifts. The rover goes in its own group:
+  while hanging, `rig.update` settles it on an imaginary flat surface that in the last 0.4 m becomes the real relief (`meshHeight`
+  of the same mesh as `Rover3D`), so the wheels touch down without a jump. Cables with one `LineSegments`; the thrusters rotate
+  from their pivot to compensate for the tilt. Flyaway: it tilts ~45°, flies toward -X and is hidden when it touches the ground
+  (the dust is left for E5). The camera ends where `Rover3D`'s camera starts. Reviewed in Chrome, no console errors.
+- **2026-11-15 · Phase E5** — Effects in `Edl3D.tsx`, reusing `puffs`/`puffTexture` from `Launch3D.tsx` (now exported; `puffs`
+  accepts ground height and bounce center, `Launch3D` unchanged). Plasma: additive cap measured from the heat shield + trail; procedural
+  parachute (gores, lines, inflation with bounce, vertical with sway) hung from the backshell; 8 flames with shared geometry and material
+  and a single `PointLight` (orange during entry, bluish afterwards); dust below 25 m and a cloud at the crash. The flyaway
+  now goes toward +Z and somewhat toward -X so the crash is visible in the final frame. The sun follows the stack/rover with a ±35 m shadow.
+  Reviewed in Chrome (with a temporary start at t=44 s for the ending, already removed); `?screen=launch` unchanged.
+- **2026-11-15 · Phase E6** — `MarsTest`: "Land and drive at …" opens `Edl3D`; when finished or with "Skip landing ▶" it switches to `Rover3D`.
+  `cachedGlb` in `curiosity.ts`: each GLB is downloaded once and each scene receives a `clone()` (`loadCuriosity` and `loadEdl`
+  use it). So the cut does not jump, `Rover3D` exports `siteDeposits`/`siteRocks` and `Edl3D` consumes the rng the same way: same rocks and
+  same hydrogen tint; ground and rocks without environment light and the environment is turned off during the flyaway; the camera ends
+  exactly at `Rover3D`'s initial chase view, which now starts already at that point. On Mars `Rover3D` does not place the lunar
+  lander. Reviewed in Chrome: Arcadia (skip) and Korolev (complete sequence); `?rover=cabeus` unchanged, no errors.
+- **2026-11-15 · Phase E7** — Loading screen `.edl-loading` in `Edl3D` until the first frame (or "LOAD FAILED"); `MarsTest`
+  preloads the 3 GLBs with `cachedGlb` while the site is being chosen. Performance not measured: in automated Chrome even an empty
+  page runs at 1.5 fps (the window is throttled), so there is no valid figure; particles and shadows stay as they were. Pending:
+  measure on a modest machine. `docs/`: EDL row in `MAP.md`, `loadDem` in `dem.ts`, UI texts now in `i18n/en.ts`; stamps
+  up to date. `SKYCRANE.md` (models repo) with the pending items resolved. Optional items (cruise, folded pose, sound) were not done.

@@ -47,7 +47,7 @@ States: `ok` finished without error; `rejected` is stopped by `sanitize` (securi
 | Ex_CSSISpaceWeatherFile.script | ok | 1.3 |  |  |
 | Ex_CustomSegmentColors.script | ok | 1.1 | DC: converged |  |
 | Ex_DoubleLunarSwingby.script | ok | 1.3 | DC1: converged ×2 |  |
-| Ex_DynamicDisplay_QuaternionPropagation.script | rejected |  |  | 'Python.time' no está permitido en el servidor (line 315) |
+| Ex_DynamicDisplay_QuaternionPropagation.script | rejected |  |  | 'Python.time' is not allowed on the server (line 315) |
 | Ex_EclipseLocation.script | ok | 2.3 |  |  |
 | Ex_ElectricPropulsion.script | ok | 1.1 |  |  |
 | Ex_EOPFileLocationFromScript.script | ok | 1.1 |  |  |
@@ -60,16 +60,16 @@ States: `ok` finished without error; `rejected` is stopped by `sanitize` (securi
 | Ex_ForceModels.script | ok | 3.3 |  |  |
 | Ex_GEOTransfer.script | ok | 1.8 | DC: converged ×3 |  |
 | Ex_GivenEpochGoToTheMoon.script | ok | 2.2 | DC1: converged ×2 |  |
-| Ex_GMATFunction_Math.script | rejected |  |  | 'GmatFunction' no está permitido en el servidor (line 11) |
-| Ex_GMATFunction_TargetInsideFunction.script | rejected |  |  | 'GmatFunction' no está permitido en el servidor (line 163) |
-| Ex_GMATFunction_UsingGlobalObjects.script | rejected |  |  | 'GmatFunction' no está permitido en el servidor (line 353) |
+| Ex_GMATFunction_Math.script | rejected |  |  | 'GmatFunction' is not allowed on the server (line 11) |
+| Ex_GMATFunction_TargetInsideFunction.script | rejected |  |  | 'GmatFunction' is not allowed on the server (line 163) |
+| Ex_GMATFunction_UsingGlobalObjects.script | rejected |  |  | 'GmatFunction' is not allowed on the server (line 353) |
 | Ex_HighFidelitySRP.script | ok | 1.1 |  |  |
 | Ex_HohmannTransfer.script | ok | 1.1 | DC: converged |  |
 | Ex_ImprovedTargeterAlgorithms.script | ok | 1.1 | aDC: converged |  |
-| Ex_IncludeMacro.script | rejected |  |  | '#Include' no está permitido en el servidor (line 12) |
+| Ex_IncludeMacro.script | rejected |  |  | '#Include' is not allowed on the server (line 12) |
 | Ex_Integrators.script | ok | 1.1 |  |  |
 | Ex_IntrusionLocator_Mercury_Sun_Transit.script | ok | 1.1 |  |  |
-| Ex_IOD.script | rejected |  |  | 'Python.IODFunctions' no está permitido en el servidor (line 47) |
+| Ex_IOD.script | rejected |  |  | 'Python.IODFunctions' is not allowed on the server (line 47) |
 | Ex_L2Design.script | ok | 1.1 | DC: converged ×4 |  |
 | Ex_LCROSSTrajectory.script | ok | 29.0 |  |  |
 | Ex_LEOStationKeeping.script | ok | 21.2 | DC: converged ×2 |  |
@@ -93,7 +93,7 @@ States: `ok` finished without error; `rejected` is stopped by `sanitize` (securi
 | Ex_PrecessingSpinnerAttitude.script | ok | 1.1 |  |  |
 | Ex_Propagate_Covariance.script | ok | 1.9 |  |  |
 | Ex_Propagate_ThrustHistoryFile.script | ok | 1.3 |  |  |
-| Ex_PythonInterface.script | rejected |  |  | 'Python.ArrayFunctions' no está permitido en el servidor (line 42) |
+| Ex_PythonInterface.script | rejected |  |  | 'Python.ArrayFunctions' is not allowed on the server (line 42) |
 | Ex_SafetyEllipse.script | ok | 4.0 |  |  |
 | Ex_SchattenFile_NominalCycle_Mean.script | ok | 1.9 |  |  |
 | Ex_SolverConvergenceParameters.script | ok | 1.3 | aDC: converged |  |
@@ -110,7 +110,7 @@ States: `ok` finished without error; `rejected` is stopped by `sanitize` (securi
 | Ex_WriteCommand.script | ok | 1.0 |  |  |
 | Ex_Yukon_AlgebraicOptimization.script | ok | 1.2 | Yukon1: converged |  |
 | Ex_Yukon_MarsLaunchWindowAnalysis.script | ok | 25.3 | Yukon1: converged ×20 |  |
-| Navigation/Ex_CompareEphemeris.script | rejected |  |  | '#Include' no está permitido en el servidor (line 57) |
+| Navigation/Ex_CompareEphemeris.script | rejected |  |  | '#Include' is not allowed on the server (line 57) |
 | Navigation/Ex_Estimate_AngleData.script | ok | 11.5 |  |  |
 | Navigation/Ex_Estimate_BRTSTracking.script | ok | 22.8 |  |  |
 | Navigation/Ex_Estimate_NPlateSRP_AreaCoefficient.script | ok | 61.4 |  |  |
@@ -133,8 +133,8 @@ States: `ok` finished without error; `rejected` is stopped by `sanitize` (securi
 | Navigation/Ex_Simulate_and_Process_GpsPosVec_data.script | ok | 3.1 |  |  |
 | Navigation/Ex_Simulate_and_Process_Range_and_RangeRate_data.script | ok | 24.0 |  |  |
 | Navigation/Simulate_DSN_Range_then_Estimate_CartesianState_and_Cr.script | ok | 26.4 |  |  |
-| NeedMatlab/Ex_CallMatlabFunctions.script | rejected |  |  | 'MatlabFunction' no está permitido en el servidor (line 31) |
-| NeedMatlab/Ex_MatlabEnv.script | rejected |  |  | 'MatlabFunction' no está permitido en el servidor (line 9) |
+| NeedMatlab/Ex_CallMatlabFunctions.script | rejected |  |  | 'MatlabFunction' is not allowed on the server (line 31) |
+| NeedMatlab/Ex_MatlabEnv.script | rejected |  |  | 'MatlabFunction' is not allowed on the server (line 9) |
 | NeedOpenFramesInterface/Ex_OFI_Attitude_Inertial.script | ok | 2.1 |  |  |
 | NeedOpenFramesInterface/Ex_OFI_Attitude_NadirPointing.script | ok | 2.1 |  |  |
 | NeedOpenFramesInterface/Ex_OFI_ConstellationScript.script | ok | 3.6 |  |  |
@@ -182,7 +182,7 @@ States: `ok` finished without error; `rejected` is stopped by `sanitize` (securi
 | OptimalControl/Ex_OCPropTest_GEO_4x4.script | plugin |  |  | libCsaltInterface (disabled in the startup file) |
 | OptimalControl/Ex_PCLaunch_ConstrainedC3AndDLA_EarthLaunch_EarthOrigin.script | plugin |  |  | libCsaltInterface (disabled in the startup file) |
 | OptimalControl/Ex_Phase_Type_ImplicitRKOrder6.script | plugin |  |  | libCsaltInterface (disabled in the startup file) |
-| SupportFiles/Ex_EphemerisCompareGeneric.script | rejected |  |  | 'GmatFunction' no está permitido en el servidor (line 70) |
+| SupportFiles/Ex_EphemerisCompareGeneric.script | rejected |  |  | 'GmatFunction' is not allowed on the server (line 70) |
 | SupportFiles/Ex_IncludeFile.script | ok | 1.1 |  |  |
 | Tut_ElectricPropulsionModelling.script | ok | 3.0 |  |  |
 | Tut_Inter_Spacecraft_Tracking.script | ok | 10.0 |  |  |
@@ -193,4 +193,4 @@ States: `ok` finished without error; `rejected` is stopped by `sanitize` (securi
 | Tut_Simulate_DSN_Range_and_Doppler_Data_3_weeks.script | ok | 41.9 |  |  |
 | Tut_SimulatingAnOrbit.script | ok | 1.1 |  |  |
 | Tut_Target_Finite_Burn_to_Raise_Apogee.script | ok | 1.4 | DC1: converged |  |
-| Tut_UsingGMATFunctions.script | rejected |  |  | 'GmatFunction' no está permitido en el servidor (line 343) |
+| Tut_UsingGMATFunctions.script | rejected |  |  | 'GmatFunction' is not allowed on the server (line 343) |

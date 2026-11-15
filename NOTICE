@@ -1,27 +1,43 @@
 GMAT Web
 Copyright (c) 2026 YaxOFF
 
-Este proyecto usa el General Mission Analysis Tool (GMAT) y su API de Python
-(gmatpy) como motor de cálculo. GMAT se distribuye bajo la Apache License,
+This project uses the General Mission Analysis Tool (GMAT) and its Python API
+(gmatpy) as its computation engine. GMAT is distributed under the Apache License,
 Version 2.0: https://www.apache.org/licenses/LICENSE-2.0
 
-GMAT no se redistribuye en este repositorio; debe instalarse por separado.
-Este proyecto no está afiliado ni respaldado por los autores de GMAT.
+GMAT is not redistributed in this repository; it must be installed separately.
+This project is not affiliated with or endorsed by the authors of GMAT or by NASA.
 
-Datos de la Luna (frontend/public/moon/, generados con tools/moon/build_moon.py), de dominio público:
-- Color LROC y relieve LOLA global: NASA Scientific Visualization Studio, "CGI Moon Kit"
+Moon data (frontend/public/moon/, generated with tools/moon/build_moon.py), public domain:
+- LROC color and global LOLA relief: NASA Scientific Visualization Studio, "CGI Moon Kit"
   (https://svs.gsfc.nasa.gov/4720).
-- Relieve polar LOLA (LDEM_80S_80MPP_ADJ): NASA Planetary Geodesy Data Archive
+- Polar LOLA relief (LDEM_80S_80MPP_ADJ): NASA Planetary Geodesy Data Archive
   (https://pgda.gsfc.nasa.gov/products/90), Barker et al.
-- Coordenadas de cráteres: USGS/IAU Gazetteer of Planetary Nomenclature.
-- Textura de regolito "moon_03" del suelo del rover: Poly Haven (https://polyhaven.com), CC0.
+- Crater coordinates: USGS/IAU Gazetteer of Planetary Nomenclature.
+- "moon_03" regolith texture for the rover ground: Poly Haven (https://polyhaven.com), CC0.
 
-Datos de Marte (frontend/public/mars/, generados con tools/mars/build_mars.py), de dominio público:
-- Color: mosaico global Viking MDIM2.1 colorizado (USGS Astrogeology), servido por NASA Mars Trek
+Mars data (frontend/public/mars/, generated with tools/mars/build_mars.py), public domain:
+- Color: colorized Viking MDIM2.1 global mosaic (USGS Astrogeology), served by NASA Mars Trek
   (https://trek.nasa.gov/mars).
-- Relieve: "HRSC and MOLA Blended Digital Elevation Model at 200m v2", Fergason, Hare y Laura (2018),
+- Relief: "HRSC and MOLA Blended Digital Elevation Model at 200m v2", Fergason, Hare and Laura (2018),
   USGS Astrogeology (https://astrogeology.usgs.gov/search/map/mars_mgs_mola_mex_hrsc_blended_dem_global_200m).
-- Coordenadas de sitios: USGS/IAU Gazetteer of Planetary Nomenclature.
-- Textura de rocas y afloramientos en Marte: "rock_face_03" de Poly Haven (https://polyhaven.com), CC0.
-- Textura del suelo del rover en Marte: "Textura uniforme de suelo marciano rojizo", elegida por el equipo (solo color;
-  normal y AO derivados en tools/mars/build_mars.py; no son datos escaneados).
+- Site coordinates: USGS/IAU Gazetteer of Planetary Nomenclature.
+- Rock and outcrop texture on Mars: "rock_face_03" from Poly Haven (https://polyhaven.com), CC0.
+- Rover ground texture on Mars: "Textura uniforme de suelo marciano rojizo", chosen by the team (color only;
+  normal and AO derived in tools/mars/build_mars.py; not scanned data).
+
+3D models (frontend/public/models/):
+- curiosity_rover.glb, skycrane.glb, aeroshell.glb (Curiosity / MSL entry, descent and landing),
+  msl.glb (MSL cruise stage) and atlas_v_541.glb (Atlas V 541 launcher) are based on NASA's public
+  3D models (NASA 3D Resources: https://science.nasa.gov/3d-resources/,
+  https://github.com/nasa/NASA-3D-Resources). The team modified them so they run in a browser game:
+  fewer polygons, parts split and named so they can be articulated (suspension, arm, drill, sky crane,
+  heat shield), and textures resized and compressed. The export steps are in tools/msl/README.md.
+  Use of these models does not imply endorsement by NASA, and no NASA logos or marks are used.
+- The orbiter and the hangar spacecraft are not model files: they are built in code from the game's
+  parts (frontend/src/mission-architect/three/spacecraft.ts).
+
+Sky, Earth and trajectories:
+- Star sky: Tycho-2 star map skybox bundled with CesiumJS (Apache 2.0).
+- Earth: Natural Earth II imagery bundled with CesiumJS, public domain.
+- Moon transfer trajectory (frontend/public/trajectories/moon_transfer.json): computed with GMAT.

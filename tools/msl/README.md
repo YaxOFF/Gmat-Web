@@ -6,7 +6,8 @@ exported again.
 
 Source: `curiosity_rover.blend` in the `RoverCuriosity` repo (model notes in its `SKYCRANE.md`). The
 `.blend` is saved in the docked position; the script moves each root to the origin only for its export
-and never saves the file.
+and never saves the file. The models in that `.blend` start from NASA's public 3D models (NASA 3D Resources);
+the team reduced their polygons and split them into named parts so the game can animate them (credits in `NOTICE`).
 
 ## Commands
 

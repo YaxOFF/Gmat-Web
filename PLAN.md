@@ -1,240 +1,240 @@
-# PLAN — GMAT Web: port web del General Mission Analysis Tool
+# PLAN — GMAT Web: web port of the General Mission Analysis Tool
 
-Port web de GMAT R2026a (NASA, Apache 2.0) para diseño de misiones espaciales: crear naves,
-propagadores, maniobras y secuencias de misión, correrlas con el **motor real de GMAT** y ver los
-resultados (3D, ground track, gráficas, reportes) en una interfaz moderna e intuitiva.
-Restricción clave: los resultados deben ser idénticos a GMAT escritorio, porque el cálculo lo hace
-GMAT mismo (`gmatpy`); la web no reimplementa física. Proyecto no oficial: sin logos ni marca de NASA.
+Web port of GMAT R2026a (NASA, Apache 2.0) for space mission design: create spacecraft,
+propagators, maneuvers and mission sequences, run them with the **real GMAT engine** and see the
+results (3D, ground track, plots, reports) in a modern, intuitive interface.
+Key constraint: results must be identical to desktop GMAT, because the computation is done by
+GMAT itself (`gmatpy`); the web app does not reimplement physics. Unofficial project: no NASA logos or branding.
 
-Referencias locales:
-- Instalación GMAT Windows (motor + `bin/gmatpy` + 162 `samples/*.script`): `C:\Users\Yaxon\Downloads\gmat-win-R2026a`
-- Código fuente C++ R2026a (para consultar campos, defaults, comportamiento de la GUI original): `C:\Users\Yaxon\Downloads\GMAT-src`
-  (`src/base` motor, `src/gui` GUI wxWidgets: `resource/`, `mission/`, `spacecraft/`, `propagator/`, `burn/`, `solver/`, `subscriber/`)
-- Guía de la API: `gmat-win-R2026a/api/` y `docs/` de la instalación.
+Local references:
+- GMAT Windows install (engine + `bin/gmatpy` + 162 `samples/*.script`): `C:\Users\Yaxon\Downloads\gmat-win-R2026a`
+- R2026a C++ source code (to look up fields, defaults, behavior of the original GUI): `C:\Users\Yaxon\Downloads\GMAT-src`
+  (`src/base` engine, `src/gui` wxWidgets GUI: `resource/`, `mission/`, `spacecraft/`, `propagator/`, `burn/`, `solver/`, `subscriber/`)
+- API guide: `gmat-win-R2026a/api/` and `docs/` in the install.
 
-## Decisiones tomadas
+## Decisions made
 
-| Tema | Decisión |
+| Topic | Decision |
 |---|---|
-| Motor | Backend **Python + FastAPI** que usa `gmatpy` (API oficial de GMAT). Probado: `gmatpy` R2026a carga y corre `Ex_HohmannTransfer.script` con Python 3.14 en Windows. |
-| Aislamiento de corridas | `gmatpy` es un singleton global por proceso: cada corrida y cada consulta pesada va a un **proceso worker** (`multiprocessing`, spawn) con timeout. El proceso FastAPI nunca importa `gmatpy`. |
-| Ubicación de GMAT | Variable `GMAT_HOME` (local: `C:\Users\Yaxon\Downloads\gmat-win-R2026a`; Docker: `/opt/gmat`). Nada hardcodeado. |
-| Fuente de verdad | El **script GMAT (`.script`)**. La app trabaja con un modelo JSON (recursos + secuencia) que se convierte a/desde script con un parser/serializer propio en Python, validado contra `gmatpy`. Abrir/guardar `.script` compatibles con GMAT escritorio. |
-| Formularios | Generados desde metadatos que da el propio motor (`GetParameterCount/Text/Type`, valores por defecto de un objeto recién creado), cacheados en `/api/schema`. Editores a mano solo donde la UX lo pide (estado orbital de Spacecraft, stop conditions, Target/Optimize). |
-| Frontend | **React + Vite + TypeScript**. 3D con **CesiumJS** (sin Cesium ion: imágenes offline/OSM), gráficas con **uPlot**, editor de scripts con **Monaco** + resaltado GMAT. Estado con Zustand. Estilos con CSS modules + tokens (tema claro/oscuro). |
-| Comunicación | REST para modelo/esquemas; **WebSocket** para corridas (log en vivo, progreso de solvers, fin con resultados). |
-| Resultados | El worker inyecta `ReportFile` ocultos por nave (época, X/Y/Z, VX/VY/VZ en EarthMJ2000Eq; lat/lon para ground track) y lee los `ReportFile`/`XYPlot` del usuario. Archivos de salida en carpeta temporal por corrida; nunca rutas del usuario. |
-| Alcance v1 | Núcleo de diseño de misión: recursos (Spacecraft, tanques/thrusters, ForceModel/Propagator, ImpulsiveBurn/FiniteBurn, CoordinateSystem, solvers, variables/arrays, subscribers) + secuencia (Propagate, Maneuver, Begin/EndFiniteBurn, Target/Vary/Achieve, Optimize/Minimize/NonlinearConstraint, If/While/For, Report, Toggle, asignaciones) + vistas. Plugins (estimación, eventos, formaciones, CSALT) = fases opcionales. |
-| Seguridad (VPS) | Los scripts pueden escribir archivos y llamar Python/MATLAB/sistema: el backend **rechaza** `CallPythonFunction`, `CallMatlabFunction`, `SystemCommand`/`System` y funciones externas, y **reescribe** toda ruta de salida (`Filename`, `OutputFile`…) a la carpeta temporal de la corrida. Límite de tiempo, de corridas simultáneas y de tamaño de script. Sin cuentas en v1. |
-| Deploy | `docker-compose.yml`: `api` (Python 3.12 + `gmat-ubuntu-x64-R2026a.tar.gz` descargado en build con sha256 fijo) + `web` (nginx con el build de Vite, proxy `/api` y `/ws`). Todo por `.env` (skill `dockerizar-portainer`). También corre local con un comando. |
-| Idioma UI | Español por defecto, textos en un solo archivo (`src/i18n/es.ts`) para poder agregar inglés. Nombres de campos GMAT se muestran tal cual + etiqueta legible. |
-| Licencia | Código propio MIT; `NOTICE` con atribución a GMAT (Apache 2.0). No se copian assets ni íconos de la GUI de GMAT. |
-| Git | Repo nuevo `D:\YaxonFolder\Github\Gmat-Web`, `origin` = `https://github.com/YaxOFF/Gmat-Web.git`, rama `main`. Commit + push al cerrar cada fase. |
+| Engine | **Python + FastAPI** backend that uses `gmatpy` (official GMAT API). Tested: `gmatpy` R2026a loads and runs `Ex_HohmannTransfer.script` with Python 3.14 on Windows. |
+| Run isolation | `gmatpy` is a global per-process singleton: every run and every heavy query goes to a **worker process** (`multiprocessing`, spawn) with a timeout. The FastAPI process never imports `gmatpy`. |
+| GMAT location | `GMAT_HOME` variable (local: `C:\Users\Yaxon\Downloads\gmat-win-R2026a`; Docker: `/opt/gmat`). Nothing hardcoded. |
+| Source of truth | The **GMAT script (`.script`)**. The app works with a JSON model (resources + sequence) that is converted to/from script with our own Python parser/serializer, validated against `gmatpy`. Open/save `.script` files compatible with desktop GMAT. |
+| Forms | Generated from metadata provided by the engine itself (`GetParameterCount/Text/Type`, default values of a freshly created object), cached in `/api/schema`. Hand-written editors only where the UX calls for it (Spacecraft orbital state, stop conditions, Target/Optimize). |
+| Frontend | **React + Vite + TypeScript**. 3D with **CesiumJS** (no Cesium ion: offline/OSM imagery), plots with **uPlot**, script editor with **Monaco** + GMAT highlighting. State with Zustand. Styles with CSS modules + tokens (light/dark theme). |
+| Communication | REST for model/schemas; **WebSocket** for runs (live log, solver progress, end with results). |
+| Results | The worker injects hidden `ReportFile`s per spacecraft (epoch, X/Y/Z, VX/VY/VZ in EarthMJ2000Eq; lat/lon for ground track) and reads the user's `ReportFile`/`XYPlot`. Output files in a temporary folder per run; never user paths. |
+| v1 scope | Mission design core: resources (Spacecraft, tanks/thrusters, ForceModel/Propagator, ImpulsiveBurn/FiniteBurn, CoordinateSystem, solvers, variables/arrays, subscribers) + sequence (Propagate, Maneuver, Begin/EndFiniteBurn, Target/Vary/Achieve, Optimize/Minimize/NonlinearConstraint, If/While/For, Report, Toggle, assignments) + views. Plugins (estimation, events, formations, CSALT) = optional phases. |
+| Security (VPS) | Scripts can write files and call Python/MATLAB/the system: the backend **rejects** `CallPythonFunction`, `CallMatlabFunction`, `SystemCommand`/`System` and external functions, and **rewrites** every output path (`Filename`, `OutputFile`…) to the run's temporary folder. Limits on time, concurrent runs and script size. No accounts in v1. |
+| Deploy | `docker-compose.yml`: `api` (Python 3.12 + `gmat-ubuntu-x64-R2026a.tar.gz` downloaded at build time with a pinned sha256) + `web` (nginx with the Vite build, proxy `/api` and `/ws`). Everything via `.env` (skill `dockerizar-portainer`). Also runs locally with one command. |
+| UI language | Spanish by default, strings in a single file (`src/i18n/es.ts`) so English can be added. GMAT field names are shown as-is + a readable label. |
+| License | Own code MIT; `NOTICE` with attribution to GMAT (Apache 2.0). No assets or icons are copied from the GMAT GUI. |
+| Git | New repo `D:\YaxonFolder\Github\Gmat-Web`, `origin` = `https://github.com/YaxOFF/Gmat-Web.git`, branch `main`. Commit + push when closing each phase. |
 
-## Formatos destino (todas las fases los respetan)
+## Target formats (all phases follow them)
 
-**Modelo de misión (JSON)** — `shared/mission.schema.json`, tipos TS espejo en `frontend/src/model/`:
+**Mission model (JSON)** — `shared/mission.schema.json`, mirror TS types in `frontend/src/model/`:
 ```jsonc
 {
   "resources": [ { "type": "Spacecraft", "name": "Sat", "fields": { "SMA": 7000, "DisplayStateType": "Keplerian" }, "comments": [] } ],
   "sequence":  [ { "cmd": "Propagate", "label": "Prop to Apoapsis", "text": "DefaultProp(Sat) {Sat.Apoapsis}", "args": { }, "children": [] } ],
-  "raw": [ ]   // líneas que el parser no entiende: se preservan tal cual, nunca se pierden
+  "raw": [ ]   // lines the parser does not understand: kept as they are, never lost
 }
 ```
-- Campos con el nombre exacto de GMAT. Valores: número, string, bool, lista o referencia (`{"ref": "Sat"}`).
-- `children` solo en comandos de bloque (Target, Optimize, If, While, For).
+- Fields with the exact GMAT name. Values: number, string, bool, list or reference (`{"ref": "Sat"}`).
+- `children` only in block commands (Target, Optimize, If, While, For).
 
-**API backend** (prefijo `/api`):
-- `GET /health` → versión de GMAT, `GMAT_HOME`, workers libres.
-- `GET /samples`, `GET /samples/{id}` → scripts de ejemplo de la instalación.
-- `POST /script/parse` (texto → modelo), `POST /script/serialize` (modelo → texto), `POST /script/validate` (carga en worker, devuelve errores con línea).
-- `GET /schema` (tipos creables), `GET /schema/{type}` (campos, tipo, default, enum, unidades).
-- `POST /convert/state` (Cartesian ↔ Keplerian ↔ ModKeplerian ↔ Spherical… vía motor).
-- `POST /runs` → `{runId}`; `WS /ws/runs/{runId}` → eventos `log`, `progress`, `solver`, `done{results}`, `error`.
+**Backend API** (prefix `/api`):
+- `GET /health` → GMAT version, `GMAT_HOME`, free workers.
+- `GET /samples`, `GET /samples/{id}` → sample scripts from the install.
+- `POST /script/parse` (text → model), `POST /script/serialize` (model → text), `POST /script/validate` (loads in worker, returns errors with line).
+- `GET /schema` (creatable types), `GET /schema/{type}` (fields, type, default, enum, units).
+- `POST /convert/state` (Cartesian ↔ Keplerian ↔ ModKeplerian ↔ Spherical… via the engine).
+- `POST /runs` → `{runId}`; `WS /ws/runs/{runId}` → events `log`, `progress`, `solver`, `done{results}`, `error`.
 - `GET /runs/{runId}/results`, `GET /runs/{runId}/files/{name}`.
 
-## Fases
+## Phases
 
-Una fase por sesión. Cada fase deja la app funcionando.
+One phase per session. Each phase leaves the app working.
 
-### Fase 0 — Preparar ✅
-Repo nuevo, `origin`, este `PLAN.md` y `CLAUDE.md`.
+### Phase 0 — Prepare ✅
+New repo, `origin`, this `PLAN.md` and `CLAUDE.md`.
 
-### Fase 1 — Esqueleto backend + frontend
-Meta: monorepo que arranca local con un comando y muestra el estado del motor.
-- `backend/` (FastAPI, `pyproject.toml`, `uv` o `pip`): `app/main.py`, `app/config.py` (`GMAT_HOME`, límites), `app/engine/worker.py` (pool de procesos spawn que hacen `import gmatpy` con el `api_startup_file`), `GET /api/health` (versión GMAT vía worker).
-- `frontend/` (Vite + React + TS): shell de la app — barra superior (Nuevo/Abrir/Guardar/Correr), panel izquierdo (Recursos / Misión en pestañas), área central con pestañas (Editor, 3D, Gráficas, Reportes), panel inferior (Consola). Tokens de diseño claro/oscuro. Indicador de estado del motor desde `/api/health`.
-- `dev.ps1` / `dev.sh`: levanta backend y frontend (proxy Vite → `:8000`). `README.md` con requisitos.
+### Phase 1 — Backend + frontend skeleton
+Goal: monorepo that starts locally with one command and shows the engine status.
+- `backend/` (FastAPI, `pyproject.toml`, `uv` or `pip`): `app/main.py`, `app/config.py` (`GMAT_HOME`, limits), `app/engine/worker.py` (pool of spawn processes that do `import gmatpy` with the `api_startup_file`), `GET /api/health` (GMAT version via worker).
+- `frontend/` (Vite + React + TS): app shell — top bar (New/Open/Save/Run), left panel (Resources / Mission in tabs), central area with tabs (Editor, 3D, Plots, Reports), bottom panel (Console). Light/dark design tokens. Engine status indicator from `/api/health`.
+- `dev.ps1` / `dev.sh`: starts backend and frontend (Vite proxy → `:8000`). `README.md` with requirements.
 - `.gitignore`, `NOTICE`, `LICENSE`.
-- Verificar: `pytest backend` (health con motor real), `npm run build` + `npm run lint`, abrir la app y ver "GMAT R2026a listo".
+- Verify: `pytest backend` (health with the real engine), `npm run build` + `npm run lint`, open the app and see "GMAT R2026a ready".
 
-### Fase 2 — Correr scripts (editor + consola)
-Meta: pegar/abrir un `.script`, correrlo con el motor y ver el log en vivo.
-- Backend: `POST /runs` + `WS /ws/runs/{id}`; worker carga el script, corre, captura log de GMAT (`gmat.UseLogFile`/MessageInterface) y lo emite; timeout y cancelación. Saneo de seguridad (comandos prohibidos, reescritura de rutas de salida) en `app/engine/sanitize.py` con pruebas.
-- `GET /samples` desde `GMAT_HOME/samples` (nombre, carpeta, descripción del encabezado).
-- Frontend: Monaco con lenguaje GMAT (keywords de `src/base` + tipos), abrir archivo local / galería de ejemplos / guardar `.script`, botón Correr/Detener, consola con niveles y errores clicables a la línea.
-- Verificar: pytest corre `Ex_HohmannTransfer.script` y 5 samples más vía API; prueba de saneo (ruta absoluta reescrita, `SystemCommand` rechazado); en navegador correr un ejemplo y ver el log.
+### Phase 2 — Run scripts (editor + console)
+Goal: paste/open a `.script`, run it with the engine and see the log live.
+- Backend: `POST /runs` + `WS /ws/runs/{id}`; worker loads the script, runs it, captures the GMAT log (`gmat.UseLogFile`/MessageInterface) and emits it; timeout and cancellation. Security sanitizing (forbidden commands, output path rewriting) in `app/engine/sanitize.py` with tests.
+- `GET /samples` from `GMAT_HOME/samples` (name, folder, description from the header).
+- Frontend: Monaco with a GMAT language (keywords from `src/base` + types), open local file / samples gallery / save `.script`, Run/Stop button, console with levels and errors clickable to the line.
+- Verify: pytest runs `Ex_HohmannTransfer.script` and 5 more samples via the API; sanitize test (absolute path rewritten, `SystemCommand` rejected); in the browser run a sample and see the log.
 
-### Fase 3 — Modelo de misión: parser/serializer + esquemas
-Meta: script ↔ modelo JSON sin pérdidas y metadatos de campos desde el motor.
-- `backend/app/script/` parser (Create, asignaciones `Obj.Campo = …`, `GMAT` prefijo, arrays `[ ]`, `{ }`, comentarios `%`, continuaciones `...`, `BeginMissionSequence`, comandos con etiqueta `'Nombre'`, bloques anidados) y serializer con formato estable estilo GMAT.
-- `shared/mission.schema.json` + tipos TS.
-- `app/engine/schema.py`: para cada tipo creable, crear objeto en worker y leer parámetros (nombre, tipo, default, read-only, enum cuando el motor lo da); cache en disco por versión de GMAT. `GET /schema`, `GET /schema/{type}`.
-- Verificar: prueba de ida y vuelta sobre **los 162 samples**: `serialize(parse(x))` carga en `gmatpy` con los mismos objetos y los mismos valores de campo que `x` (comparando vía motor). Lista de excepciones documentada si alguna no pasa. Si no cabe: 3a parser/serializer, 3b esquemas.
+### Phase 3 — Mission model: parser/serializer + schemas
+Goal: lossless script ↔ JSON model and field metadata from the engine.
+- `backend/app/script/` parser (Create, assignments `Obj.Campo = …`, `GMAT` prefix, arrays `[ ]`, `{ }`, `%` comments, `...` continuations, `BeginMissionSequence`, commands with label `'Nombre'`, nested blocks) and serializer with a stable GMAT-style format.
+- `shared/mission.schema.json` + TS types.
+- `app/engine/schema.py`: for each creatable type, create an object in the worker and read its parameters (name, type, default, read-only, enum when the engine provides it); disk cache per GMAT version. `GET /schema`, `GET /schema/{type}`.
+- Verify: round-trip test over **the 162 samples**: `serialize(parse(x))` loads in `gmatpy` with the same objects and the same field values as `x` (compared via the engine). Documented list of exceptions if any fail. If it doesn't fit: 3a parser/serializer, 3b schemas.
 
-### Fase 4 — Árbol de recursos + formularios
-Meta: crear y editar recursos sin escribir script. Partida en dos:
-- **4a**: `POST /convert/state` y `POST /script/validate`; `GET /schema` con categoría y `objectType` por tipo; árbol agrupado (crear/renombrar con refs/clonar/borrar con aviso); formulario genérico; sincronía script ↔ modelo; botón Validar.
-- **4b**: editores dedicados (Spacecraft con cambio de representación vía `/convert/state`, época, masa/áreas, tanques/thrusters; ForceModel; Propagator) + verificación LEO (prueba backend + recorrido en navegador).
+### Phase 4 — Resource tree + forms
+Goal: create and edit resources without writing script. Split in two:
+- **4a**: `POST /convert/state` and `POST /script/validate`; `GET /schema` with category and `objectType` per type; grouped tree (create/rename with refs/clone/delete with warning); generic form; script ↔ model sync; Validate button.
+- **4b**: dedicated editors (Spacecraft with representation change via `/convert/state`, epoch, mass/areas, tanks/thrusters; ForceModel; Propagator) + LEO verification (backend test + browser walkthrough).
 
-Detalle original:
-- Árbol agrupado (Naves, Hardware, Propagadores, Maniobras, Sistemas de coordenadas, Solvers, Variables, Salidas) con crear / renombrar (actualiza referencias) / clonar / borrar (avisa referencias).
-- Formulario genérico desde `/schema/{type}`: tipos number/string/bool/enum/referencia (combo con objetos del tipo correcto), unidades, ayuda.
-- Editores dedicados: Spacecraft (estado orbital con cambio de representación vía `POST /convert/state`, época con formatos, masa/áreas, tanques/thrusters adjuntos), ForceModel (cuerpo central, gravedad grado/orden, terceros cuerpos, arrastre, SRP), Propagator (integrador, pasos, tolerancias).
-- Sincronía editor de script ↔ modelo (editar en uno actualiza el otro; error de parseo no destruye el modelo). `POST /convert/state` y `POST /script/validate` en backend.
-- Verificar: crear desde cero una misión LEO solo con formularios, correrla y obtener el mismo resultado que el script equivalente escrito a mano (prueba backend + recorrido en navegador).
+Original detail:
+- Grouped tree (Spacecraft, Hardware, Propagators, Maneuvers, Coordinate systems, Solvers, Variables, Outputs) with create / rename (updates references) / clone / delete (warns about references).
+- Generic form from `/schema/{type}`: types number/string/bool/enum/reference (combo with objects of the correct type), units, help.
+- Dedicated editors: Spacecraft (orbital state with representation change via `POST /convert/state`, epoch with formats, mass/areas, attached tanks/thrusters), ForceModel (central body, gravity degree/order, third bodies, drag, SRP), Propagator (integrator, steps, tolerances).
+- Script editor ↔ model sync (editing one updates the other; a parse error does not destroy the model). `POST /convert/state` and `POST /script/validate` in the backend.
+- Verify: create a LEO mission from scratch using only forms, run it and get the same result as the equivalent hand-written script (backend test + browser walkthrough).
 
-### Fase 5 — Editor de secuencia de misión
-Meta: armar la secuencia como árbol visual. Partida en dos:
-- **5a**: árbol de comandos (pestaña Misión) anidado en bloques, arrastrar/soltar y ↑/↓, menú "agregar comando" por categoría, etiqueta, borrar, habilitar/comentar (`% Cmd ...;` reconocido por el parser como `disabled`); `args` de comandos en el parser (Propagate, Maneuver, Begin/EndFiniteBurn, Report, Toggle, asignación); formularios de esos comandos + Stop; editor de la línea para el resto; `GET /api/parameters` (cacheado) y selector de parámetros con búsqueda.
-- **5b**: formularios Target/Vary/Achieve, Optimize/Minimize/NonlinearConstraint, If/While/For (condiciones) + verificación: reconstruir `Ex_HohmannTransfer` solo con la UI y comparar resultados numéricos con el sample.
+### Phase 5 — Mission sequence editor
+Goal: build the sequence as a visual tree. Split in two:
+- **5a**: command tree (Mission tab) nested in blocks, drag/drop and ↑/↓, "add command" menu by category, label, delete, enable/comment out (`% Cmd ...;` recognized by the parser as `disabled`); command `args` in the parser (Propagate, Maneuver, Begin/EndFiniteBurn, Report, Toggle, assignment); forms for those commands + Stop; line editor for the rest; `GET /api/parameters` (cached) and parameter picker with search.
+- **5b**: Target/Vary/Achieve, Optimize/Minimize/NonlinearConstraint, If/While/For (conditions) forms + verification: rebuild `Ex_HohmannTransfer` using only the UI and compare numerical results with the sample.
 
-Detalle original:
-- Árbol de comandos con arrastrar/soltar, anidado en bloques, menú "agregar comando" por categoría, etiquetas, habilitar/comentar.
-- Formularios: Propagate (propagador, naves, stop conditions con parámetro/valor, modo sincronizado, hacia atrás), Maneuver, Begin/EndFiniteBurn, Target/Vary/Achieve, Optimize/Minimize/NonlinearConstraint, If/While/For (condiciones), Report, Toggle, asignación (`GMAT x = expr`), Stop.
-- Selector de parámetros (`Sat.Earth.Altitude`, `Sat.ElapsedDays`…) con búsqueda, desde los parámetros que da el motor.
-- Verificar: reconstruir `Ex_HohmannTransfer` solo con la UI y que el script resultante corra igual que el sample (comparar resultados numéricos).
+Original detail:
+- Command tree with drag/drop, nested in blocks, "add command" menu by category, labels, enable/comment out.
+- Forms: Propagate (propagator, spacecraft, stop conditions with parameter/value, synchronized mode, backwards), Maneuver, Begin/EndFiniteBurn, Target/Vary/Achieve, Optimize/Minimize/NonlinearConstraint, If/While/For (conditions), Report, Toggle, assignment (`GMAT x = expr`), Stop.
+- Parameter picker (`Sat.Earth.Altitude`, `Sat.ElapsedDays`…) with search, from the parameters provided by the engine.
+- Verify: rebuild `Ex_HohmannTransfer` using only the UI and check that the resulting script runs the same as the sample (compare numerical results).
 
-### Fase 6 — Resultados: 3D, ground track, gráficas, reportes
-Meta: ver lo que GMAT calcula, mejor que en escritorio. Partida en dos:
-- **6a**: datos del worker + `GET /runs/{id}/results` y `/files`, pestaña Resultados con XYPlot (uPlot), tabla de ReportFile y traza en tierra 2D.
-- **6b**: vista 3D con Cesium (trayectorias, barra de tiempo, cámara, marcos) + sample lunar + rendimiento con 50k puntos.
+### Phase 6 — Results: 3D, ground track, plots, reports
+Goal: see what GMAT computes, better than on desktop. Split in two:
+- **6a**: worker data + `GET /runs/{id}/results` and `/files`, Results tab with XYPlot (uPlot), ReportFile table and 2D ground track.
+- **6b**: 3D view with Cesium (trajectories, time bar, camera, frames) + lunar sample + performance with 50k points.
 
-Detalle original:
-- Worker: `ReportFile` ocultos por nave + lectura de `ReportFile`/`XYPlot`/`OrbitView`/`GroundTrackPlot` del usuario; resultados en `GET /runs/{id}/results` (series en binario compacto o JSON por bloques).
-- Cesium: Tierra (y cuerpo central si es otro: Luna/Marte con textura offline), trayectorias por nave con color, marcadores de maniobra, barra de tiempo con reproducción, cámara seguir nave, marcos inerciales vs fijos.
-- Ground track 2D, XYPlot con uPlot (zoom, varias series, exportar PNG/CSV), tabla de ReportFile con exportar CSV.
-- Verificar: Hohmann, un sample lunar y uno de ground track se ven correctos (comparar puntos con el `ReportFile` crudo); sin errores de consola; 60 fps razonables con 50k puntos.
+Original detail:
+- Worker: hidden `ReportFile`s per spacecraft + reading the user's `ReportFile`/`XYPlot`/`OrbitView`/`GroundTrackPlot`; results in `GET /runs/{id}/results` (series in compact binary or chunked JSON).
+- Cesium: Earth (and central body if different: Moon/Mars with offline texture), trajectories per spacecraft with color, maneuver markers, time bar with playback, camera follows spacecraft, inertial vs fixed frames.
+- 2D ground track, XYPlot with uPlot (zoom, multiple series, export PNG/CSV), ReportFile table with CSV export.
+- Verify: Hohmann, a lunar sample and a ground track sample look correct (compare points with the raw `ReportFile`); no console errors; reasonable 60 fps with 50k points.
 
-### Fase 7 — Solvers en vivo y misiones complejas
-Meta: Target/Optimize entendibles. Partida en dos:
-- **7a**: eventos `solver` desde el worker + pestaña Solver (tabla, gráfica, aviso si no converge).
-- **7b**: lote de samples del núcleo con tabla en `docs/COMPATIBILITY.md`; Optimize y B-plane comparados con escritorio.
+### Phase 7 — Live solvers and complex missions
+Goal: understandable Target/Optimize. Split in two:
+- **7a**: `solver` events from the worker + Solver tab (table, plot, warning if it doesn't converge).
+- **7b**: batch of core samples with a table in `docs/COMPATIBILITY.md`; Optimize and B-plane compared with desktop.
 
-Detalle original:
-- Eventos `solver` por iteración (variables, objetivos, restricciones, convergencia) desde el worker; panel con tabla y gráfica de convergencia; avisos claros si no converge.
-- Correr todos los samples del núcleo (sin plugins opcionales) en lote: tabla de estado en `docs/COMPATIBILITY.md`.
-- Verificar: `Ex_HohmannTransfer`, un sample de Optimize (VF13ad o fmincon-free) y B-plane convergen igual que escritorio; lote de samples sin regresiones.
+Original detail:
+- `solver` events per iteration (variables, goals, constraints, convergence) from the worker; panel with table and convergence plot; clear warnings if it doesn't converge.
+- Run all core samples (without optional plugins) in batch: status table in `docs/COMPATIBILITY.md`.
+- Verify: `Ex_HohmannTransfer`, an Optimize sample (VF13ad or fmincon-free) and B-plane converge the same as desktop; samples batch without regressions.
 
-### Fase 7c1 — Arreglar pendientes de QA
-Meta: cerrar los fallos que QA dejó anotados en Bitácora antes de pulir la UX.
-- **Arreglos de backend:**
-  - Rutas de entrada relativas: fijar el directorio de trabajo del motor (`GmatWorkingDirectory` o equivalente) para que `../samples/SupportFiles/...` resuelva como en escritorio. Casos: Ex_Propagate_ThrustHistoryFile y Ex_Contact_Location_Station_Mask.
-  - `sanitize` reescribe `TrackingFileSet.FileName` aunque sea una entrada (`.gmd` que lee el estimador), y por eso falla Tut_Orbit_Estimation_using_DSN_Range_and_Doppler_Data. Hay que distinguir entrada de salida sin dejar escribir fuera de la carpeta de la corrida. Una opción: si el archivo ya existe en samples, se trata como entrada de solo lectura.
-  - Limpiar las carpetas `run-*`/`desk-*` y el dict `runs` (Fase 2).
-  - El corte por timeout no debe depender de `pool._processes` (Fase 3b).
-  - Enum de `DateFormat` vacío (Fase 3b).
-- **Arreglos de modelo/serializer:**
-  - Quitar un cuerpo primario no debe dejar campos `GravityField.*` (Fase 4b).
-  - Las líneas editadas no deben llevar el prefijo `GMAT ` (Fase 4b).
-  - El `Add` de un XYPlot debe leerse aunque ocupe varias líneas (Fase 6a).
-- **Arreglos de frontend:**
-  - Nuevo debe vaciar el documento y el árbol de Misión (Fases 4b y 5b).
-  - Renombrar y borrar en el árbol de recursos con diálogo propio en vez de `prompt/confirm` nativos.
-  - Marcadores de error de validación en Monaco (Fase 2).
-  - Quitar el crédito "Cesium ion" de la vista 3D (Fase 6b).
+### Phase 7c1 — Fix QA leftovers
+Goal: close the failures QA logged in the Log before polishing the UX.
+- **Backend fixes:**
+  - Relative input paths: set the engine's working directory (`GmatWorkingDirectory` or equivalent) so that `../samples/SupportFiles/...` resolves as on desktop. Cases: Ex_Propagate_ThrustHistoryFile and Ex_Contact_Location_Station_Mask.
+  - `sanitize` rewrites `TrackingFileSet.FileName` even when it is an input (`.gmd` read by the estimator), and that is why Tut_Orbit_Estimation_using_DSN_Range_and_Doppler_Data fails. Input must be told apart from output without allowing writes outside the run folder. One option: if the file already exists in samples, treat it as a read-only input.
+  - Clean up the `run-*`/`desk-*` folders and the `runs` dict (Phase 2).
+  - The timeout cutoff must not depend on `pool._processes` (Phase 3b).
+  - Empty `DateFormat` enum (Phase 3b).
+- **Model/serializer fixes:**
+  - Removing a primary body must not leave `GravityField.*` fields (Phase 4b).
+  - Edited lines must not carry the `GMAT ` prefix (Phase 4b).
+  - An XYPlot's `Add` must be read even if it spans several lines (Phase 6a).
+- **Frontend fixes:**
+  - New must clear the document and the Mission tree (Phases 4b and 5b).
+  - Rename and delete in the resource tree with our own dialog instead of native `prompt/confirm`.
+  - Validation error markers in Monaco (Phase 2).
+  - Remove the "Cesium ion" credit from the 3D view (Phase 6b).
 - **Solver (7a):**
-  - Los optimizadores que no son Yukon deben mostrar costo y restricciones si GMAT los imprime.
-  - Asignar bien el cierre de solvers anidados.
-  - Con `ShowProgress=false`, avisar que no habrá eventos.
-- Verificar: pytest + `pytest -m slow` + `python -m app.batch` sin regresiones; Ex_Propagate_ThrustHistoryFile, Ex_Contact_Location_Station_Mask y Tut_Orbit_Estimation_using_DSN_Range_and_Doppler_Data corren.
+  - Optimizers other than Yukon must show cost and constraints if GMAT prints them.
+  - Correctly assign the closing of nested solvers.
+  - With `ShowProgress=false`, warn that there will be no events.
+- Verify: pytest + `pytest -m slow` + `python -m app.batch` without regressions; Ex_Propagate_ThrustHistoryFile, Ex_Contact_Location_Station_Mask and Tut_Orbit_Estimation_using_DSN_Range_and_Doppler_Data run.
 
-### Fase 7c2 — Probar más misiones
-Meta: ver el comportamiento con muchas más misiones antes de pulir la UX.
-- **Más misiones:**
-  - Extender `app.batch` a los samples de subcarpetas de `GMAT_HOME/samples`, no solo los 88 raíz.
-  - Agregar 5-8 misiones propias en `backend/tests/missions/`: LEO con arrastre, GEO con station-keeping (Target en bucle While/For), transferencia lunar, finite burn con tanque que se vacía, Optimize con NonlinearConstraint y un script con errores a propósito. Cada una con valores de referencia sacados de `batch.run_desktop` (gmatpy directo).
-  - Probar en navegador al menos 5 misiones de punta a punta: abrir, editar con formularios, correr, Solver, Resultados (XYPlot, tabla, 2D, 3D) y guardar `.script` para volver a abrirlo. Una de ellas con varias corridas de solver, para probar el selector.
-  - Actualizar `docs/COMPATIBILITY.md` con los conteos nuevos.
-- **Pendiente de QA 7c1:** los marcadores de error de Monaco deben limpiarse al editar a mano (hoy solo se limpian al recargar el texto; `ScriptEditor.tsx`).
-- Verificar: pytest + `pytest -m slow` + `python -m app.batch` sin regresiones. Las misiones propias deben coincidir con escritorio. QA debe recorrer las 5 misiones en navegador.
+### Phase 7c2 — Test more missions
+Goal: see the behavior with many more missions before polishing the UX.
+- **More missions:**
+  - Extend `app.batch` to the samples in subfolders of `GMAT_HOME/samples`, not just the 88 at the root.
+  - Add 5-8 of our own missions in `backend/tests/missions/`: LEO with drag, GEO with station-keeping (Target in a While/For loop), lunar transfer, finite burn with a tank that empties, Optimize with NonlinearConstraint and a script with deliberate errors. Each with reference values taken from `batch.run_desktop` (gmatpy directly).
+  - Test at least 5 missions end to end in the browser: open, edit with forms, run, Solver, Results (XYPlot, table, 2D, 3D) and save `.script` to reopen it. One of them with several solver runs, to test the picker.
+  - Update `docs/COMPATIBILITY.md` with the new counts.
+- **QA leftover from 7c1:** Monaco error markers must be cleared when editing by hand (today they are only cleared when the text is reloaded; `ScriptEditor.tsx`).
+- Verify: pytest + `pytest -m slow` + `python -m app.batch` without regressions. Our own missions must match desktop. QA must walk through the 5 missions in the browser.
 
-### Fase 8 — UX: intuitivo de verdad
-Meta: que un estudiante arme su primera misión en 5 minutos.
-- Plantillas/asistentes: "Órbita LEO", "Transferencia Hohmann a GEO", "Viaje a la Luna", "Ground track de un satélite"; recorrido guiado la primera vez.
-- Deshacer/rehacer, autoguardado del borrador (localStorage, con aviso), atajos de teclado (Ctrl+S, F5 correr, Ctrl+Z), paleta de comandos (Ctrl+K).
-- Validación en vivo con mensajes en español junto al campo; errores del motor mapeados a recurso/campo.
-- Responsive (tablet como mínimo; móvil solo visor de resultados), accesibilidad (teclado, contraste, labels).
-- Pendientes de QA 7c2: el eje Y logarítmico del Solver rotula "0" los valores menores de 0,001; Guardar quita las comillas de `FM.Drag.HistoricWeatherSource = 'ConstantFluxAndGeoMag'` (confirmar si GMAT escritorio lo acepta o conservarlas); las misiones propias no tienen XYPlot (agregar uno a alguna para que QA lo cubra).
-- Verificar: recorrido de las plantillas en navegador; sin scroll horizontal en 768 px; Lighthouse accesibilidad ≥ 90.
-- Hecha con foco en "Viaje a la Luna" (pedido del usuario): esa plantilla es la primera del asistente, el 3D dibuja la Luna y tiene vista centrada en ella, y queda como misión de regresión `m7`.
+### Phase 8 — UX: truly intuitive
+Goal: a student builds their first mission in 5 minutes.
+- Templates/wizards: "LEO Orbit", "Hohmann Transfer to GEO", "Trip to the Moon", "Ground track of a satellite"; guided tour the first time.
+- Undo/redo, draft autosave (localStorage, with notice), keyboard shortcuts (Ctrl+S, F5 run, Ctrl+Z), command palette (Ctrl+K).
+- Live validation with messages in Spanish next to the field; engine errors mapped to resource/field.
+- Responsive (tablet at minimum; mobile only as results viewer), accessibility (keyboard, contrast, labels).
+- QA leftovers from 7c2: the Solver's logarithmic Y axis labels values below 0.001 as "0"; Save removes the quotes from `FM.Drag.HistoricWeatherSource = 'ConstantFluxAndGeoMag'` (confirm whether desktop GMAT accepts it or keep them); our own missions have no XYPlot (add one to some mission so QA covers it).
+- Verify: walkthrough of the templates in the browser; no horizontal scroll at 768 px; Lighthouse accessibility ≥ 90.
+- Done with a focus on "Trip to the Moon" (user request): that template is the first in the wizard, the 3D view draws the Moon and has a view centered on it, and it stays as regression mission `m7`.
 
-### Fase 9 — Docker y deploy en VPS
-Meta: `docker compose up` y listo en Portainer.
-- Pendientes de la Fase 8: correr Lighthouse (accesibilidad ≥ 90) contra el build servido por nginx; decidir si la validación en vivo (un proceso con motor por pausa de escritura) necesita límite por IP en producción.
-- `backend/Dockerfile` (Python 3.12, descarga `gmat-ubuntu-x64-R2026a.tar.gz` con sha256 fijo, dependencias de sistema que pida `gmatpy`, usuario no root), `frontend/Dockerfile` (build Vite → nginx endurecido, proxy `/api` y `/ws`), `docker-compose.yml`, `.env.example` (puertos, límites, `GMAT_HOME`).
-- Límites de producción: corridas simultáneas, timeout, tamaño de script, limpieza de carpetas temporales, rate limit simple por IP.
-- Verificar: stack levantado en local con Docker, correr samples desde el navegador contra el contenedor; reinicio limpio.
+### Phase 9 — Docker and VPS deploy
+Goal: `docker compose up` and ready in Portainer.
+- Leftovers from Phase 8: run Lighthouse (accessibility ≥ 90) against the build served by nginx; decide whether live validation (one engine process per typing pause) needs a per-IP limit in production.
+- `backend/Dockerfile` (Python 3.12, downloads `gmat-ubuntu-x64-R2026a.tar.gz` with a pinned sha256, system dependencies required by `gmatpy`, non-root user), `frontend/Dockerfile` (Vite build → hardened nginx, proxy `/api` and `/ws`), `docker-compose.yml`, `.env.example` (ports, limits, `GMAT_HOME`).
+- Production limits: concurrent runs, timeout, script size, temporary folder cleanup, simple per-IP rate limit.
+- Verify: stack running locally with Docker, run samples from the browser against the container; clean restart.
 
-### Fase 10 — Pruebas E2E y documentación
-- Playwright: abrir ejemplo → correr → ver 3D/gráfica; crear misión con formularios; guardar/abrir `.script`.
-- `docs/` (skill `documentar-proyecto`): arquitectura, cómo agregar un editor dedicado, compatibilidad.
-- Verificar: `npx playwright test` en verde.
+### Phase 10 — E2E tests and documentation
+- Playwright: open sample → run → see 3D/plot; create mission with forms; save/open `.script`.
+- `docs/` (skill `documentar-proyecto`): architecture, how to add a dedicated editor, compatibility.
+- Verify: `npx playwright test` green.
 
-### Fase 11 (opcional) — Plugins
-Por separado, cada uno su propia sesión: EventLocator (eclipses, contactos), Estimation (batch/EKF, estaciones, mediciones), Formation, Propagadores extra (SPK/TLE), CSALT.
+### Phase 11 (optional) — Plugins
+Separately, each in its own session: EventLocator (eclipses, contacts), Estimation (batch/EKF, stations, measurements), Formation, extra propagators (SPK/TLE), CSALT.
 
-### Fase 12 (opcional) — Multiusuario
-Cuentas, misiones guardadas en servidor (PostgreSQL), compartir por enlace, cuotas por usuario.
+### Phase 12 (optional) — Multi-user
+Accounts, missions saved on the server (PostgreSQL), share by link, per-user quotas.
 
-## Protocolo por sesión
+## Per-session protocol
 
-1. Leer **Avance** y tomar la primera fase sin marcar. Leer solo los archivos que esa fase toca.
-2. Implementar la fase completa, nada de fases siguientes.
-3. Verificar: `cd backend; pytest` · `cd frontend; npm run lint; npm run build` · levantar con `dev.ps1` y revisar en el navegador lo que pida la fase (consola sin errores).
-   **Entre cada fase (obligatorio, lo hace el agente `qa-fase` (`~/.claude/agents/qa-fase.md`), distinto del programador, lanzado por el líder; solo lee y prueba, no edita código, y reporta fallos con pasos y capturas):** (a) validación funcional: pytest + lint + build en verde y la función nueva ejercida de verdad (API o UI), comparando contra GMAT (`gmatpy`) cuando haya números; (b) prueba visual en navegador (Chrome): recorrer el flujo nuevo, capturas de escritorio y móvil, consola sin errores, sin scroll horizontal; (c) regresión rápida de lo de fases anteriores (abrir ejemplo, correr script, árbol/formularios); (d) resultado y capturas resumidas en Bitácora; las capturas clave quedan en `qa-capturas/fase-N/` (fuera de git) y el líder se las muestra al usuario. Sin esto no se marca la fase. QA empieza leyendo `docs/QA.md` (pruebas ya hechas y cómo), reutiliza esos procedimientos en vez de crear nuevos y al final agrega solo lo nuevo.
-4. Marcar la fase en **Avance** y escribir 2-5 líneas en **Bitácora**.
+1. Read **Progress** and take the first unchecked phase. Read only the files that phase touches.
+2. Implement the complete phase, nothing from later phases.
+3. Verify: `cd backend; pytest` · `cd frontend; npm run lint; npm run build` · start with `dev.ps1` and check in the browser whatever the phase requires (console without errors).
+   **Between phases (mandatory, done by the `qa-fase` agent (`~/.claude/agents/qa-fase.md`), separate from the programmer, launched by the lead; it only reads and tests, does not edit code, and reports failures with steps and screenshots):** (a) functional validation: pytest + lint + build green and the new feature actually exercised (API or UI), comparing against GMAT (`gmatpy`) when there are numbers; (b) visual test in the browser (Chrome): walk through the new flow, desktop and mobile screenshots, console without errors, no horizontal scroll; (c) quick regression of earlier phases (open sample, run script, tree/forms); (d) result and summarized screenshots in the Log; the key screenshots stay in `qa-capturas/fase-N/` (outside git) and the lead shows them to the user. Without this the phase is not checked. QA starts by reading `docs/QA.md` (tests already done and how), reuses those procedures instead of creating new ones and at the end adds only what is new.
+4. Check the phase in **Progress** and write 2-5 lines in the **Log**.
 5. Commit (Conventional Commits) + `git push`.
-6. Avisar al usuario que puede hacer `/clear` y continuar con la siguiente fase.
+6. Tell the user they can run `/clear` and continue with the next phase.
 
-## Avance
+## Progress
 
-- [x] Fase 0 — Preparar
-- [x] Fase 1 — Esqueleto backend + frontend
-- [x] Fase 2 — Correr scripts (editor + consola)
-- [x] Fase 3a — Modelo de misión: parser/serializer
-- [x] Fase 3b — Esquemas de campos desde el motor (/api/schema)
-- [x] Fase 4a — Árbol de recursos + formulario genérico + sincronía
-- [x] Fase 4b — Editores dedicados (Spacecraft, ForceModel, Propagator) + prueba LEO
-- [x] Fase 5a — Árbol de secuencia, formularios básicos y selector de parámetros
-- [x] Fase 5b — Formularios Target/Optimize/If/While/For + reconstruir Hohmann con la UI
-- [x] Fase 6a — Resultados: datos del motor, gráficas, tablas y traza en tierra 2D
-- [x] Fase 6b — Resultados: vista 3D con Cesium
-- [x] Fase 7a — Solvers en vivo: eventos por iteración + pestaña Solver
-- [x] Fase 7b — Lote de samples del núcleo + docs/COMPATIBILITY.md + B-plane/Optimize vs escritorio
-- [x] Fase 7c1 — Arreglar pendientes de QA
-- [x] Fase 7c2 — Probar más misiones
-- [x] Fase 8 — UX: intuitivo de verdad
-- [ ] Fase 9 — Docker y deploy en VPS
-- [ ] Fase 10 — Pruebas E2E y documentación
-- [ ] Fase 11 (opcional) — Plugins
-- [ ] Fase 12 (opcional) — Multiusuario
+- [x] Phase 0 — Prepare
+- [x] Phase 1 — Backend + frontend skeleton
+- [x] Phase 2 — Run scripts (editor + console)
+- [x] Phase 3a — Mission model: parser/serializer
+- [x] Phase 3b — Field schemas from the engine (/api/schema)
+- [x] Phase 4a — Resource tree + generic form + sync
+- [x] Phase 4b — Dedicated editors (Spacecraft, ForceModel, Propagator) + LEO test
+- [x] Phase 5a — Sequence tree, basic forms and parameter picker
+- [x] Phase 5b — Target/Optimize/If/While/For forms + rebuild Hohmann with the UI
+- [x] Phase 6a — Results: engine data, plots, tables and 2D ground track
+- [x] Phase 6b — Results: 3D view with Cesium
+- [x] Phase 7a — Live solvers: per-iteration events + Solver tab
+- [x] Phase 7b — Core samples batch + docs/COMPATIBILITY.md + B-plane/Optimize vs desktop
+- [x] Phase 7c1 — Fix QA leftovers
+- [x] Phase 7c2 — Test more missions
+- [x] Phase 8 — UX: truly intuitive
+- [ ] Phase 9 — Docker and VPS deploy
+- [ ] Phase 10 — E2E tests and documentation
+- [ ] Phase 11 (optional) — Plugins
+- [ ] Phase 12 (optional) — Multi-user
 
-## Bitácora
+## Log
 
-- **2026-11-14 · Fase 0** — Repo creado con `origin` a `YaxOFF/Gmat-Web`. Elegido backend Python + `gmatpy` (motor real) en lugar de WebAssembly o reescritura; frontend React + Vite + TS + Cesium; alcance v1 = núcleo de diseño de misión; deploy Docker/Portainer + local. Comprobado que `gmatpy` R2026a corre samples con Python 3.14 en Windows y que existe build Ubuntu R2026a para Docker. Código fuente C++ de referencia clonado en `C:\Users\Yaxon\Downloads\GMAT-src` (tag `R2026a`).
-- **2026-11-14 · Fase 1** — Backend FastAPI con `ProcessPoolExecutor` (spawn) cuyo initializer importa `gmatpy`; `GET /api/health` devuelve versión vía worker (`{status:"error"}` si el motor falla). Si falta `GMAT_HOME/bin/api_startup_file.txt` se genera uno equivalente en `backend/.cache/`. Límites por env: `GMAT_WEB_WORKERS=2`, `GMAT_WEB_TASK_TIMEOUT=60`. Frontend Vite 8 + TS 7 + oxlint (en vez de eslint), Zustand, tokens `light-dark()`, textos en `es.ts`. Verificado: pytest, lint, build, health por proxy, shell visible sin errores de consola. Pendiente: `GMAT_HOME` debe estar definido (pytest y `dev.ps1` fallan sin él, a propósito); `dev.sh` solo con `sh -n`.
-- **2026-11-14 · Fase 2** — Cada corrida es un proceso spawn propio (`engine/runner.py`, cwd `GMAT_HOME/bin`); log por `WS /api/ws/runs/{id}` (log con nivel y línea, progress, done, error); cancelar con `DELETE /api/runs/{id}`; timeout y `MAX_RUNS` (429). `sanitize.py` rechaza CallPython/Matlab/GmatFunction, System*, Save, `#Include`; reescribe rutas de salida a la carpeta de la corrida; comenta visores GUI sin mover líneas. Corregida carrera al escribir `api_startup_file`. Frontend: Monaco (lazy), ejemplos, abrir/guardar, consola con errores clicables. ~70 de 88 samples raíz corren limpios (faltan GmatFunction, Python, MarsGRAM, archivos de entrada). Pendientes: limpiar carpetas de corrida y dict `runs`; en Docker instalación GMAT solo lectura; marcadores de error en Monaco; revisión visual completa de UI (solo se comprobó carga sin errores de consola).
-- **2026-11-14 · Fase 3a** — Parser/serializer en `backend/app/script/` con formato estable estilo GMAT; nada se pierde (lo no entendido, campos repetidos, copias `A = B` van a `raw`). `POST /api/script/parse` y `/serialize`; `shared/mission.schema.json` + `frontend/src/model/mission.ts`. `worker.snapshot(path)` carga un script sin correrlo y devuelve el texto canónico de objetos y comandos. Ida y vuelta: 162 samples textual OK; comparación vía motor 115 iguales, 1 xfail (copia `SimSatCopy = SimSat` entre campos), 46 skip (sanitize o el original no carga). Detalle en `docs/ROUNDTRIP_EXCEPTIONS.md`. Fase 3 partida: 3b (esquemas `/api/schema`) pendiente; `args` de comandos sin llenar; comentarios en línea y líneas en blanco no se conservan.
-- **2026-11-14 · Fase 3b** — `engine/schema.py`: 47 tipos creables sacados del motor (`GetListOfViewableItems` por categoría; PropSetup se publica como "Propagator"; de PARAMETER solo Variable/String/Array). Cada tipo se crea en un proceso spawn propio (algunos tumban el motor al leer campos de solo lectura, que salen con default null). Por campo: name, type, readOnly, default, enum, unit, refType. Spacecraft suma elementos de estado desde `GetStateElementLabels`; enum `DisplayStateType` filtrado con `SetField`. Caché en `backend/.cache/schema/<versión>.json`. `GET /api/schema`, `/api/schema/{type}` (404 si no existe). Pendientes: FminconOptimizer, VF13ad y GroundStation no salen (el motor no los lista); enum de `DateFormat` vacío; el corte por timeout usa `pool._processes` (API privada).
-- **2026-11-14 · Fase 4a** — Fase 4 partida en 4a/4b. Backend: `POST /api/convert/state` (Spacecraft en worker) y `POST /api/script/validate` (sanitize + LoadScript aislado, errores con línea); `/api/schema` suma `category` y `objectType` (caché `*.v2.json`). Frontend: `resources/ResourceTree.tsx` (crear/renombrar con refs/clonar/borrar con aviso) y `ResourceForm.tsx` genérico; sincronía script↔modelo con contador `seq` (si falla el parse queda el último modelo bueno); botón Validar. Verificado: pytest 315 passed, lint y build OK. **No verificado en navegador** (revisión visual pendiente). Riesgos: renombrar también toca strings y `raw`; crear/renombrar/borrar usan `prompt/confirm` nativos; convert solo EarthMJ2000Eq; Monaco pierde undo al reescribir script; sin pruebas frontend para `refs.ts`.
-- **2026-11-14 · Fase 4b** — Editores dedicados en `resources/Editors.tsx` (Spacecraft: estado orbital con cambio de representación vía `/convert/state`, época con `POST /api/convert/epoch`, masa/áreas, tanques/propulsores; ForceModel: gravedad grado/orden, masas puntuales, atmósfera, SRP; Propagator: integrador, pasos, FM como select de ForceModels). Los demás tipos siguen con el formulario genérico (`Field.tsx` extraído). `test_leo.py`: LEO armada solo como modelo da el mismo ReportFile que el script a mano. QA (agente aparte) rechazó una vez: SRP Off dejaba líneas `SRP.*` que GMAT rechaza; corregido (SRP Off quita sus subcampos) con prueba nueva. QA final APRUEBA: pytest 318 passed, lint y build OK, conversiones coinciden con el motor, corrida SRP Off OK. Pendientes: layout móvil no responsive (scrollWidth 695 vs 386, va a Fase 8); botón Nuevo no vacía el documento; renombrar/borrar siguen con `prompt/confirm` nativos (no probados por QA); quitar un cuerpo primario deja campos `GravityField.*`; el serializer añade prefijo `GMAT ` a líneas editadas; `/convert/state` solo EarthMJ2000Eq; esquema del motor no trae GravityField/Drag/pasos del integrador (definidos a mano); no comprobado si NRLMSISE00/MSISE86 existen en esta versión.
-- **2026-11-14 · Fase 5a** — Fase 5 partida en 5a/5b. `frontend/src/mission/`: árbol de la secuencia con bloques anidados, arrastrar/soltar (antes, después, dentro de un bloque, hueco final; un bloque no entra en sí mismo), ↑/↓, menú de agregar por categoría, etiqueta, borrar con segundo clic, comentar/habilitar (`% Cmd ...;` se vuelve a leer como `disabled`, lista `COMMENTABLE` duplicada en `parser.py` y `commands.ts`). `args` es una vista que `parser._args` saca de `text` (Propagate, Maneuver, Begin/EndFiniteBurn, Report, Toggle, asignación); el serializer sigue escribiendo solo `text`. Formulario de Propagate con selector de parámetros desde `GET /api/parameters` (315 parámetros, proceso aislado, misma caché que /api/schema); los demás comandos usan el editor de línea. QA (agente aparte) APRUEBA: pytest 320 passed, lint y build OK; Hohmann editado corre y converge (TOI 2.2403, GOI 1.4330). Procedimientos de QA en `docs/QA.md` para reutilizar. Pendientes: arrastre probado solo con eventos sintéticos; etiqueta y línea se confirman al perder foco; `confirm()/prompt()` nativos del árbol de recursos; selección por índices puede moverse si se edita el script a mano; móvil (Fase 8).
-- **2026-11-14 · Fase 5b** — `parser._args` entiende Target/Optimize (`{solver, opts}`), Vary/Achieve/Minimize/NonlinearConstraint (`{solver, lhs, op?, rhs?, opts?}`), If/While (`conds` unidas con `&`/`|`) y For (`step` vacío = `inicio:fin`). Hay formularios para todos en `FORMS` (`mission/CommandForm.tsx`), con selects de solver filtrados por `DC_TYPES`/`OPT_TYPES` (lista fija). Opciones vacías se omiten. `newCommand` usa el primer recurso existente de cada tipo. `test_hohmann_model.py` rearma Hohmann desde un modelo y da los mismos números que el sample. QA APRUEBA: pytest 322 passed, lint y build OK; Hohmann armado desde cero solo con menú y formularios da TOI=2.24028397735 y GOI=1.432966302, idénticos al sample. Pendientes: Optimize/Minimize/NonlinearConstraint y Else/While solo probados por pytest; ElseIf no existe en GMAT; el valor libre rechaza `, ; { } % & |` (usar la línea de script); bug de 4b: Nuevo deja el árbol de Misión viejo hasta editar el Editor.
-- **2026-11-14 · Fase 6a** — Fase 6 partida en 6a/6b. `engine/results.py`: el runner inserta ReportFile ocultos (`gmatweb_*.csv`, `SolverIterations = Current`) por nave y por XYPlot antes de `BeginMissionSequence`. Con `Current`, GMAT escribe solo la pasada final, así que no se recorta nada y BackProp se conserva. `None` no sirve porque omite la pasada convergida del Target. Los ReportFile del usuario respetan `WriteHeaders`. Se agregaron `GET /runs/{id}/results` (409 si no terminó) y `/files/{name}` (solo nombres simples, sin internos); el evento `done` trae `available`. Construir los subscribers con `Construct` tumba RunScript (anotado en GOTCHAS). Frontend: la pestaña Resultados reemplaza Gráficas/Reportes, con XYPlot uPlot (zoom, PNG/CSV), tabla de 500 filas (el CSV lleva todas) y traza 2D en SVG. Se vacía al correr o cambiar de documento. QA APRUEBA, con una ronda de correcciones (BackProp recortado, WriteHeaders, resultados viejos): pytest 333 passed, lint y build OK. En Hohmann, /results coincide exacto con un ReportFile propio y /files rechaza traversal. Pendientes: sin épocas de maniobra; el XYPlot oculto no sigue Toggle; lat/lon siempre respecto a la Tierra; el `Add` solo se lee en una línea; la traza sin etiquetas de grados; Resultados en móvil sin probar (Fase 8).
-- **2026-11-14 · Fase 6b** — Vista 3D en `results/View3D.tsx`, carga perezosa (chunk de 4.2 MB, 1.1 MB gzip), con Cesium 1.147 sin ion: token vacío y base NaturalEarthII local. `vite.config.ts` copia los assets a `public/cesium` (en .gitignore; se copian al arrancar `npm run dev`; borrarlo si se actualiza cesium) con `CESIUM_BASE_URL=/cesium/`. Las trayectorias van en un solo Primitive SimplePolylineGeometry en ICRF, y por cuadro solo cambia su modelMatrix. La nave usa SampledPositionProperty INERTIAL (lineal); la hora es UTCGregorian de la 1ª fila + segundos A1. Hay seguir nave y cámara inercial (postUpdate + computeIcrfToFixedMatrix). QA APRUEBA: lint y build OK, pytest 333 passed. Hohmann sale a escala (apogeo ~6.5 R⊕) y Ex_LunarTransfer se encuadra. 57k puntos cargan en ~0.5 s. No hay peticiones externas ni errores de consola, y el viewer no tiene fugas al cambiar de pestaña. Pendientes: fps sin medir (Chrome MCP limita rAF), doble clic en nave sin probar, no se dibuja la Luna y todo va centrado en la Tierra, sin marcadores de maniobra, aparece el crédito "Cesium ion" aunque no se usa, móvil sin probar.
-- **2026-11-14 · Fase 7a** — Fase 7 partida en 7a/7b. `engine/solver.py` (`SolverLog`) lee el texto de progreso que GMAT ya escribe en `gmat.log` (formatos de DifferentialCorrector y Yukon tomados de GMAT-src). Con eso el runner emite eventos `solver` por el WS: `start`, una `iteration` por pasada nominal (variables, objetivos con tolerancia y `met`, restricciones, costo) y `end` con converged, failed o initial. No hay ReportFile ocultos nuevos y `results.py` sigue con `SolverIterations=Current`. La tolerancia sale del Achieve del script (default 0.1). Pestaña central "Solver" (`results/SolverPanel.tsx`) con selector de corridas, aviso verde o rojo, gráfica uPlot (log de \|Deseado − Logrado\| para DC, costo y restricciones para Optimize) y tabla. Si no converge sale una línea amarilla en la consola. QA rechazó una vez (la gráfica tapaba la tabla, y salía "1 iteraciones"); se corrigió con `.view:has(> .chart){flex:none}` y `.tableWrap` con min-height 200px. QA APRUEBA: pytest 336 passed, lint y build OK. Hohmann da 12 iteraciones con TOI 2.24028397735 / GOI 1.432966302, igual que GMAT. Con `MaximumIterations=3` sale failed y Yukon converge. Sin solape a 951 y 700 px de alto, y sin errores de consola. Pendientes: los optimizadores que no son Yukon solo imprimen variables; con solvers anidados, el cierre se asigna al último activo del mismo tipo; con ShowProgress=false no hay eventos; el selector con varias corridas no se probó; móvil sin responsive (Fase 8).
-- **2026-11-14 · Fase 7b** — `app/batch.py` (`python -m app.batch --jobs 4`, ~1 min) corre los 88 samples raíz por el mismo camino que la web (runner.create = sanitize + inject) y reescribe `docs/COMPATIBILITY.md`. Un sample sale "plugin" solo si su librería tiene la línea PLUGIN comentada en el startup file del worker (`disabled_plugins`, `PLUGIN_MARKS`). "Escritorio" es `batch.run_desktop`: gmatpy directo con el script original. `tests/test_desktop.py` y `tests/test_batch.py` son `slow` (fuera del pytest normal) y comparan Hohmann, Yukon y MarsBPlane con escritorio (rel 1e-9). QA rechazó una vez porque "plugin" escondía samples de Formation, EventLocator y Estimation que sí corren. Ya corregido, QA APRUEBA: pytest 339 passed, slow 3 passed. Lote: 74 ok, 8 rechazados (GmatFunction, Python, #Include), 3 plugin (ExternalForceModel ×2, MarsGRAM), 2 falta archivo (ruta relativa) y 1 error (Tut_Orbit_Estimation: sanitize reescribe un `TrackingFileSet.FileName` de entrada). Los dos últimos pasan a la Fase 7c, que el usuario agregó: arreglar pendientes de QA y probar más misiones. VF13ad y fmincon no están instalados, así que Optimize solo se probó con Yukon.
-- **2026-11-14 · Fase 7c1** — Fase 7c partida en 7c1/7c2. Cierra los pendientes de QA de las fases 2, 3b, 4b, 5b, 6a, 6b y 7a, cada arreglo de backend o modelo con su prueba pytest. Las rutas de entrada relativas se resuelven en `sanitize._in_path` (absolutas desde `GMAT_HOME/samples`, solo lectura) en vez de cambiar el directorio de trabajo; `TrackingFileSet.FileName` es salida solo si el script tiene un `Simulator`. `runner.prune` borra corridas y carpetas `run-*`/`desk-*`/`val-*` pasada 1 h (`GMAT_WEB_RUN_KEEP`); `schema._isolated` usa `Process` + `Pipe` en vez de `pool._processes`. Frontend: Nuevo vacía todo, diálogo propio `AskDialog` para renombrar/borrar, marcadores en Monaco, 3D sin crédito ion, ForceModel borra `GravityField.<cuerpo>.*`. Lote: 77 ok (antes 74), sin regresiones. QA aprobó (pytest 350/45/1, ThrustHistoryFile y Station_Mask desde la UI, rutas de salida siempre en la corrida, regresión Hohmann/Solver/Resultados OK). Pendientes: los marcadores de Monaco no se limpian al editar a mano (pasa a 7c2); un ThrustHistoryFile o TrackingFileSet sin Simulator puede leer una ruta absoluta del servidor (revisar en Fase 9); fmincon sin probar (no instalado). Las 6 misiones propias de 7c2 ya están escritas en un worktree aparte, por integrar.
-- **2026-11-14 · Fase 7c2** — 6 misiones propias en `backend/tests/missions/` (LEO con arrastre JacchiaRoberts, GEO con Target dentro de For, transferencia lunar, finite burn hasta FuelMass=1, Optimize Yukon con 2 NonlinearConstraint, script con errores en líneas 8 y 13), escritas por un agente en paralelo en un worktree. `make_reference.py` genera `reference.json` con `batch.run_desktop` (ahora acepta `out=`). `test_missions.py` (slow) las corre por runner + sanitize y coinciden con escritorio (rel 1e-8). `app.batch` recorre también las subcarpetas de samples: 118 ok de 162 (raíz 77/88, sin cambios), 28 plugin, 12 rechazados, 4 con archivo faltante por rutas relativas a su subcarpeta (límite documentado), 0 errores. Monaco borra los marcadores al teclear. GOTCHAS: caracteres no ASCII, stop por FuelMass con MaxStep grande, `Luna.Periapsis`. QA aprobó: m1-m5 abren, se editan con formularios, corren, Solver (m2 con selector de 3 corridas) y se reabren con los números de reference.json; m6 marca sus errores; regresión Hohmann OK. Pendientes menores, pasados a Fase 8: eje log del Solver con etiquetas "0", comillas perdidas en HistoricWeatherSource y misiones sin XYPlot.
-- **2026-11-14 · Fase 8** — Hecha y probada por la sesión líder, sin agentes (pedido del usuario), con foco en "Viaje a la Luna". Plantillas con asistente en `frontend/src/templates.ts` + `Dialogs.tsx`: Viaje a la Luna (LEO de 185 km, apuntado grueso con una nave `Sonda`, apuntado fino de RAAN/AOP/TLI, inserción LOI; datos: fecha, radio lunar, días, inclinación), Órbita LEO, Hohmann a GEO y Traza en tierra. Backend: los reportes ocultos llevan la posición de la nave respecto a la Luna (`LunaMJ2000Eq.X/Y/Z`) y `read` omite las naves que nunca se propagan; con eso el 3D dibuja la Luna y su recorrido y tiene `Centro = Luna`. También: recorrido guiado la primera vez, deshacer/rehacer (historial de Monaco, incluye formularios), borrador en localStorage, atajos Ctrl+S / F5 / Ctrl+Z / Ctrl+K, paleta de comandos, validación en vivo (indicador en la barra, mensaje junto al campo, ⚠ en el árbol, mensajes frecuentes de GMAT en español), tablet y móvil solo visor, contraste de Correr/Detener en oscuro. Pendientes de 7c2 cerrados: eje log del Solver en notación científica, XYPlot en `m1`, y GMAT acepta `HistoricWeatherSource` sin comillas (no hay que conservarlas). Verificado: 29 casos de plantilla contra el motor (defecto, mínimos, máximos y 5 fechas lunares de 2025 a 2030) convergen; `m7_viaje_luna` web = escritorio (rel 1e-8; TLI 3.129455786, LOI -0.6438904876); pytest 351 passed, slow 11 passed; lote 118 ok de 162 (raíz 77/88), sin cambios de estado; lint y build OK; en navegador las 4 plantillas corren, deshacer, validación, paleta, borrador y recorrido funcionan, sin errores de consola, sin scroll horizontal a 768 y 390 px, y regresión Hohmann con TOI 2.24028397735 / GOI 1.432966302. Límites: Lighthouse no se pudo correr (descarga bloqueada); en su lugar un script en la página dio 0 botones sin nombre, 0 campos sin etiqueta y 0 textos bajo 4,5:1 en claro y oscuro (procedimiento en `docs/QA.md`). Los errores de la secuencia no se marcan en el árbol de Misión (solo barra y Editor); el 3D no centra en otros cuerpos ni marca maniobras; no hay capturas de móvil reales (medido con iframe).
+- **2026-11-14 · Phase 0** — Repo created with `origin` pointing to `YaxOFF/Gmat-Web`. Chose a Python + `gmatpy` backend (real engine) instead of WebAssembly or a rewrite; frontend React + Vite + TS + Cesium; v1 scope = mission design core; Docker/Portainer + local deploy. Confirmed that `gmatpy` R2026a runs samples with Python 3.14 on Windows and that an Ubuntu R2026a build exists for Docker. Reference C++ source code cloned into `C:\Users\Yaxon\Downloads\GMAT-src` (tag `R2026a`).
+- **2026-11-14 · Phase 1** — FastAPI backend with `ProcessPoolExecutor` (spawn) whose initializer imports `gmatpy`; `GET /api/health` returns the version via worker (`{status:"error"}` if the engine fails). If `GMAT_HOME/bin/api_startup_file.txt` is missing, an equivalent one is generated in `backend/.cache/`. Limits via env: `GMAT_WEB_WORKERS=2`, `GMAT_WEB_TASK_TIMEOUT=60`. Frontend Vite 8 + TS 7 + oxlint (instead of eslint), Zustand, `light-dark()` tokens, strings in `es.ts`. Verified: pytest, lint, build, health through the proxy, shell visible without console errors. Pending: `GMAT_HOME` must be defined (pytest and `dev.ps1` fail without it, on purpose); `dev.sh` only checked with `sh -n`.
+- **2026-11-14 · Phase 2** — Each run is its own spawn process (`engine/runner.py`, cwd `GMAT_HOME/bin`); log via `WS /api/ws/runs/{id}` (log with level and line, progress, done, error); cancel with `DELETE /api/runs/{id}`; timeout and `MAX_RUNS` (429). `sanitize.py` rejects CallPython/Matlab/GmatFunction, System*, Save, `#Include`; rewrites output paths to the run folder; comments out GUI viewers without moving lines. Fixed a race when writing `api_startup_file`. Frontend: Monaco (lazy), samples, open/save, console with clickable errors. ~70 of 88 root samples run clean (missing GmatFunction, Python, MarsGRAM, input files). Pending: clean up run folders and the `runs` dict; in Docker the GMAT install is read-only; error markers in Monaco; full visual review of the UI (only loading without console errors was checked).
+- **2026-11-14 · Phase 3a** — Parser/serializer in `backend/app/script/` with a stable GMAT-style format; nothing is lost (anything not understood, repeated fields, `A = B` copies go to `raw`). `POST /api/script/parse` and `/serialize`; `shared/mission.schema.json` + `frontend/src/model/mission.ts`. `worker.snapshot(path)` loads a script without running it and returns the canonical text of objects and commands. Round trip: 162 samples textually OK; comparison via the engine 115 equal, 1 xfail (copy `SimSatCopy = SimSat` between fields), 46 skip (sanitize or the original does not load). Detail in `docs/ROUNDTRIP_EXCEPTIONS.md`. Phase 3 split: 3b (`/api/schema` schemas) pending; command `args` not filled in; inline comments and blank lines are not preserved.
+- **2026-11-14 · Phase 3b** — `engine/schema.py`: 47 creatable types taken from the engine (`GetListOfViewableItems` per category; PropSetup is published as "Propagator"; from PARAMETER only Variable/String/Array). Each type is created in its own spawn process (some crash the engine when reading read-only fields, which come out with default null). Per field: name, type, readOnly, default, enum, unit, refType. Spacecraft adds state elements from `GetStateElementLabels`; `DisplayStateType` enum filtered with `SetField`. Cache in `backend/.cache/schema/<versión>.json`. `GET /api/schema`, `/api/schema/{type}` (404 if it does not exist). Pending: FminconOptimizer, VF13ad and GroundStation do not show up (the engine does not list them); empty `DateFormat` enum; the timeout cutoff uses `pool._processes` (private API).
+- **2026-11-14 · Phase 4a** — Phase 4 split into 4a/4b. Backend: `POST /api/convert/state` (Spacecraft in worker) and `POST /api/script/validate` (sanitize + isolated LoadScript, errors with line); `/api/schema` adds `category` and `objectType` (cache `*.v2.json`). Frontend: `resources/ResourceTree.tsx` (create/rename with refs/clone/delete with warning) and generic `ResourceForm.tsx`; script↔model sync with a `seq` counter (if parsing fails the last good model is kept); Validate button. Verified: pytest 315 passed, lint and build OK. **Not verified in the browser** (visual review pending). Risks: rename also touches strings and `raw`; create/rename/delete use native `prompt/confirm`; convert only EarthMJ2000Eq; Monaco loses undo when the script is rewritten; no frontend tests for `refs.ts`.
+- **2026-11-14 · Phase 4b** — Dedicated editors in `resources/Editors.tsx` (Spacecraft: orbital state with representation change via `/convert/state`, epoch with `POST /api/convert/epoch`, mass/areas, tanks/thrusters; ForceModel: gravity degree/order, point masses, atmosphere, SRP; Propagator: integrator, steps, FM as a select of ForceModels). The other types still use the generic form (`Field.tsx` extracted). `test_leo.py`: a LEO built only as a model gives the same ReportFile as the hand-written script. QA (separate agent) rejected once: SRP Off left `SRP.*` lines that GMAT rejects; fixed (SRP Off removes its subfields) with a new test. Final QA APPROVES: pytest 318 passed, lint and build OK, conversions match the engine, SRP Off run OK. Pending: mobile layout not responsive (scrollWidth 695 vs 386, goes to Phase 8); New button does not clear the document; rename/delete still use native `prompt/confirm` (not tested by QA); removing a primary body leaves `GravityField.*` fields; the serializer adds the `GMAT ` prefix to edited lines; `/convert/state` only EarthMJ2000Eq; the engine schema does not include GravityField/Drag/integrator steps (defined by hand); not checked whether NRLMSISE00/MSISE86 exist in this version.
+- **2026-11-14 · Phase 5a** — Phase 5 split into 5a/5b. `frontend/src/mission/`: sequence tree with nested blocks, drag/drop (before, after, inside a block, final gap; a block does not go inside itself), ↑/↓, add menu by category, label, delete with a second click, comment out/enable (`% Cmd ...;` is read back as `disabled`, `COMMENTABLE` list duplicated in `parser.py` and `commands.ts`). `args` is a view that `parser._args` extracts from `text` (Propagate, Maneuver, Begin/EndFiniteBurn, Report, Toggle, assignment); the serializer still writes only `text`. Propagate form with a parameter picker from `GET /api/parameters` (315 parameters, isolated process, same cache as /api/schema); the other commands use the line editor. QA (separate agent) APPROVES: pytest 320 passed, lint and build OK; edited Hohmann runs and converges (TOI 2.2403, GOI 1.4330). QA procedures in `docs/QA.md` for reuse. Pending: drag only tested with synthetic events; label and line are committed on blur; native `confirm()/prompt()` in the resource tree; index-based selection may shift if the script is edited by hand; mobile (Phase 8).
+- **2026-11-14 · Phase 5b** — `parser._args` understands Target/Optimize (`{solver, opts}`), Vary/Achieve/Minimize/NonlinearConstraint (`{solver, lhs, op?, rhs?, opts?}`), If/While (`conds` joined with `&`/`|`) and For (empty `step` = `inicio:fin`). There are forms for all of them in `FORMS` (`mission/CommandForm.tsx`), with solver selects filtered by `DC_TYPES`/`OPT_TYPES` (fixed list). Empty options are omitted. `newCommand` uses the first existing resource of each type. `test_hohmann_model.py` rebuilds Hohmann from a model and gives the same numbers as the sample. QA APPROVES: pytest 322 passed, lint and build OK; Hohmann built from scratch using only the menu and forms gives TOI=2.24028397735 and GOI=1.432966302, identical to the sample. Pending: Optimize/Minimize/NonlinearConstraint and Else/While only tested by pytest; ElseIf does not exist in GMAT; the free value rejects `, ; { } % & |` (use the script line); 4b bug: New leaves the old Mission tree until the Editor is edited.
+- **2026-11-14 · Phase 6a** — Phase 6 split into 6a/6b. `engine/results.py`: the runner inserts hidden ReportFiles (`gmatweb_*.csv`, `SolverIterations = Current`) per spacecraft and per XYPlot before `BeginMissionSequence`. With `Current`, GMAT writes only the final pass, so nothing is trimmed and BackProp is kept. `None` does not work because it omits the Target's converged pass. The user's ReportFiles respect `WriteHeaders`. Added `GET /runs/{id}/results` (409 if not finished) and `/files/{name}` (only simple names, no internal ones); the `done` event carries `available`. Building the subscribers with `Construct` crashes RunScript (noted in GOTCHAS). Frontend: the Results tab replaces Plots/Reports, with uPlot XYPlot (zoom, PNG/CSV), a 500-row table (the CSV has all of them) and a 2D ground track in SVG. It is cleared when running or switching documents. QA APPROVES, with one round of fixes (trimmed BackProp, WriteHeaders, stale results): pytest 333 passed, lint and build OK. In Hohmann, /results matches a hand-made ReportFile exactly and /files rejects traversal. Pending: no maneuver epochs; the hidden XYPlot does not follow Toggle; lat/lon always relative to Earth; `Add` is only read on one line; the ground track has no degree labels; Results on mobile untested (Phase 8).
+- **2026-11-14 · Phase 6b** — 3D view in `results/View3D.tsx`, lazy-loaded (4.2 MB chunk, 1.1 MB gzip), with Cesium 1.147 without ion: empty token and local NaturalEarthII base. `vite.config.ts` copies the assets to `public/cesium` (in .gitignore; copied when `npm run dev` starts; delete it if cesium is updated) with `CESIUM_BASE_URL=/cesium/`. Trajectories go in a single SimplePolylineGeometry Primitive in ICRF, and per frame only its modelMatrix changes. The spacecraft uses an INERTIAL SampledPositionProperty (linear); the time is the UTCGregorian of the 1st row + A1 seconds. There is follow spacecraft and inertial camera (postUpdate + computeIcrfToFixedMatrix). QA APPROVES: lint and build OK, pytest 333 passed. Hohmann comes out to scale (apogee ~6.5 R⊕) and Ex_LunarTransfer is framed. 57k points load in ~0.5 s. There are no external requests or console errors, and the viewer does not leak when switching tabs. Pending: fps not measured (Chrome MCP throttles rAF), double click on spacecraft untested, the Moon is not drawn and everything is centered on Earth, no maneuver markers, the "Cesium ion" credit appears even though it is not used, mobile untested.
+- **2026-11-14 · Phase 7a** — Phase 7 split into 7a/7b. `engine/solver.py` (`SolverLog`) reads the progress text that GMAT already writes to `gmat.log` (DifferentialCorrector and Yukon formats taken from GMAT-src). With that the runner emits `solver` events over the WS: `start`, one `iteration` per nominal pass (variables, goals with tolerance and `met`, constraints, cost) and `end` with converged, failed or initial. There are no new hidden ReportFiles and `results.py` stays with `SolverIterations=Current`. The tolerance comes from the script's Achieve (default 0.1). Central "Solver" tab (`results/SolverPanel.tsx`) with run picker, green or red notice, uPlot plot (log of \|Desired − Achieved\| for DC, cost and constraints for Optimize) and table. If it does not converge a yellow line appears in the console. QA rejected once (the plot covered the table, and it showed "1 iteraciones"); fixed with `.view:has(> .chart){flex:none}` and `.tableWrap` with min-height 200px. QA APPROVES: pytest 336 passed, lint and build OK. Hohmann gives 12 iterations with TOI 2.24028397735 / GOI 1.432966302, same as GMAT. With `MaximumIterations=3` it comes out failed and Yukon converges. No overlap at 951 and 700 px height, and no console errors. Pending: optimizers other than Yukon only print variables; with nested solvers, the closing is assigned to the last active one of the same type; with ShowProgress=false there are no events; the picker with several runs was not tested; mobile not responsive (Phase 8).
+- **2026-11-14 · Phase 7b** — `app/batch.py` (`python -m app.batch --jobs 4`, ~1 min) runs the 88 root samples along the same path as the web app (runner.create = sanitize + inject) and rewrites `docs/COMPATIBILITY.md`. A sample is marked "plugin" only if its library has its PLUGIN line commented out in the worker's startup file (`disabled_plugins`, `PLUGIN_MARKS`). "Desktop" is `batch.run_desktop`: gmatpy directly with the original script. `tests/test_desktop.py` and `tests/test_batch.py` are `slow` (outside the normal pytest) and compare Hohmann, Yukon and MarsBPlane with desktop (rel 1e-9). QA rejected once because "plugin" hid Formation, EventLocator and Estimation samples that do run. Now fixed, QA APPROVES: pytest 339 passed, slow 3 passed. Batch: 74 ok, 8 rejected (GmatFunction, Python, #Include), 3 plugin (ExternalForceModel ×2, MarsGRAM), 2 missing file (relative path) and 1 error (Tut_Orbit_Estimation: sanitize rewrites an input `TrackingFileSet.FileName`). The last two move to Phase 7c, which the user added: fix QA leftovers and test more missions. VF13ad and fmincon are not installed, so Optimize was only tested with Yukon.
+- **2026-11-14 · Phase 7c1** — Phase 7c split into 7c1/7c2. Closes the QA leftovers from phases 2, 3b, 4b, 5b, 6a, 6b and 7a, each backend or model fix with its pytest test. Relative input paths are resolved in `sanitize._in_path` (absolute from `GMAT_HOME/samples`, read-only) instead of changing the working directory; `TrackingFileSet.FileName` is an output only if the script has a `Simulator`. `runner.prune` deletes runs and `run-*`/`desk-*`/`val-*` folders after 1 h (`GMAT_WEB_RUN_KEEP`); `schema._isolated` uses `Process` + `Pipe` instead of `pool._processes`. Frontend: New clears everything, own `AskDialog` dialog for rename/delete, markers in Monaco, 3D without the ion credit, ForceModel deletes `GravityField.<cuerpo>.*`. Batch: 77 ok (previously 74), no regressions. QA approved (pytest 350/45/1, ThrustHistoryFile and Station_Mask from the UI, output paths always in the run, Hohmann/Solver/Results regression OK). Pending: Monaco markers are not cleared when editing by hand (moves to 7c2); a ThrustHistoryFile or TrackingFileSet without a Simulator can read an absolute server path (review in Phase 9); fmincon untested (not installed). The 6 own missions for 7c2 are already written in a separate worktree, to be integrated.
+- **2026-11-14 · Phase 7c2** — 6 own missions in `backend/tests/missions/` (LEO with JacchiaRoberts drag, GEO with Target inside For, lunar transfer, finite burn until FuelMass=1, Optimize Yukon with 2 NonlinearConstraint, script with errors on lines 8 and 13), written by an agent in parallel in a worktree. `make_reference.py` generates `reference.json` with `batch.run_desktop` (now accepts `out=`). `test_missions.py` (slow) runs them through runner + sanitize and they match desktop (rel 1e-8). `app.batch` now also walks the samples subfolders: 118 ok of 162 (root 77/88, unchanged), 28 plugin, 12 rejected, 4 with a missing file due to paths relative to their subfolder (documented limit), 0 errors. Monaco clears the markers on typing. GOTCHAS: non-ASCII characters, stop on FuelMass with a large MaxStep, `Luna.Periapsis`. QA approved: m1-m5 open, are edited with forms, run, Solver (m2 with a picker of 3 runs) and reopen with the numbers from reference.json; m6 marks its errors; Hohmann regression OK. Minor leftovers, moved to Phase 8: Solver log axis with "0" labels, quotes lost in HistoricWeatherSource and missions without XYPlot.
+- **2026-11-14 · Phase 8** — Done and tested by the lead session, without agents (user request), with a focus on "Trip to the Moon". Templates with a wizard in `frontend/src/templates.ts` + `Dialogs.tsx`: Trip to the Moon (185 km LEO, coarse targeting with a `Sonda` spacecraft, fine targeting of RAAN/AOP/TLI, LOI insertion; inputs: date, lunar radius, days, inclination), LEO Orbit, Hohmann to GEO and Ground track. Backend: the hidden reports carry the spacecraft position relative to the Moon (`LunaMJ2000Eq.X/Y/Z`) and `read` omits spacecraft that are never propagated; with that the 3D view draws the Moon and its path and has `Centro = Luna`. Also: guided tour the first time, undo/redo (Monaco history, includes forms), draft in localStorage, shortcuts Ctrl+S / F5 / Ctrl+Z / Ctrl+K, command palette, live validation (indicator in the bar, message next to the field, ⚠ in the tree, common GMAT messages in Spanish), tablet and mobile as viewer only, contrast of Run/Stop in dark mode. 7c2 leftovers closed: Solver log axis in scientific notation, XYPlot in `m1`, and GMAT accepts `HistoricWeatherSource` without quotes (no need to keep them). Verified: 29 template cases against the engine (default, minimums, maximums and 5 lunar dates from 2025 to 2030) converge; `m7_viaje_luna` web = desktop (rel 1e-8; TLI 3.129455786, LOI -0.6438904876); pytest 351 passed, slow 11 passed; batch 118 ok of 162 (root 77/88), no status changes; lint and build OK; in the browser the 4 templates run, undo, validation, palette, draft and tour work, no console errors, no horizontal scroll at 768 and 390 px, and Hohmann regression with TOI 2.24028397735 / GOI 1.432966302. Limits: Lighthouse could not be run (download blocked); instead an in-page script found 0 unnamed buttons, 0 unlabeled fields and 0 texts below 4.5:1 in light and dark (procedure in `docs/QA.md`). Sequence errors are not marked in the Mission tree (only bar and Editor); the 3D view does not center on other bodies or mark maneuvers; there are no real mobile screenshots (measured with an iframe).

@@ -7,7 +7,7 @@
 - `backend/app/engine/worker.py`: process pool with `gmatpy`; `submit(fn, ...)`.
 - `frontend/src/main.tsx` and `App.tsx`: shell (bar, tabs, console). The `mission-architect` game opens by default as the home screen (`game` state starts `'on'`); closing it shows the workspace.
 - `frontend/src/store.ts`: single Zustand state.
-- `PLAN.md`: phases, decisions, progress and log of the web port. `PLAN-JUEGO.md`: the same for the "Viaje a la Luna" game (active plan).
+- `PLAN.md`: phases, decisions, progress and log of the web port. `PLAN-JUEGO.md`: the same for the "Trip to the Moon" game (active plan).
 
 ## Concepts → file
 | Concept | Where it lives |
@@ -38,7 +38,7 @@
 | GMAT samples | `backend/app/samples.py` (reads `GMAT_HOME/samples`) |
 | Sample batch and comparison with desktop | `backend/app/batch.py` (`python -m app.batch` regenerates `docs/COMPATIBILITY.md`); `backend/tests/test_desktop.py` (`pytest -m slow`) |
 | Own missions with desktop reference | `backend/tests/missions/` (`m1..m6.script`, `reference.json`, `make_reference.py` regenerates it); `backend/tests/test_missions.py` (`pytest -m slow`) |
-| Mission templates (Viaje a la Luna, LEO, Hohmann to GEO, ground track) and their wizard | `frontend/src/templates.ts` (scripts and limits), `TemplateDialog` in `frontend/src/Dialogs.tsx`, text `es.templates`; lunar one verified against desktop in `backend/tests/missions/m7_viaje_luna.script` |
+| Mission templates (Trip to the Moon, LEO, Hohmann to GEO, ground track) and their wizard | `frontend/src/templates.ts` (scripts and limits), `TemplateDialog` in `frontend/src/Dialogs.tsx`, text `es.templates`; lunar one verified against desktop in `backend/tests/missions/m7_viaje_luna.script` |
 | Command palette (Ctrl+K), guided tour, shortcuts | `Palette` and `Tour` in `frontend/src/Dialogs.tsx`; shortcuts and action list in `App.tsx`; `store.tourSeen` |
 | Live validation and errors located in resource/field | `store.checkLater`, `store.issues`; `frontend/src/model/issues.ts` (`toIssues`, `locate`, `clean`); shown in `IssueChip` (`App.tsx`), `Field.tsx`, `ResourceForm.tsx`, `ResourceTree.tsx`, `ScriptEditor.tsx` |
 | Undo/redo (Monaco history, also for forms) | `gmat.history`, `rev`/`load` effect of `frontend/src/editor/ScriptEditor.tsx` |
@@ -47,6 +47,7 @@
 | Responsive (tablet, mobile viewer only) | `@media` at the end of `frontend/src/App.module.css` |
 | UI text | `frontend/src/i18n/en.ts` (active, English; `es.ts` keeps Spanish with the same keys); the `mission-architect` game writes its text in the components |
 | Usage guide, adding missions, web → original C++ diagnosis | `docs/GUIDE.md` |
+| Sources and credits of real data and 3D models (NASA/USGS datasets, NASA-based GLB models, Cesium sky and Earth) | `NOTICE`, "Real data and 3D models" in `README.md`, `tools/moon/README.md`, `tools/mars/README.md`, `tools/msl/README.md` |
 | Real Moon data (globe, polar map, crater relief) and how to regenerate it | `tools/moon/build_moon.py`, `tools/moon/README.md`; output in `frontend/public/moon/`; used by `realMoon` (`mission-architect/three/stage.ts`), `three/dem.ts` (`loadDem`, `demHeight`, shared by `Rover3D.tsx` and `Edl3D.tsx`), `ui/Mapping.tsx`; crater lat/lon in `mission-architect/data/catalog.ts` (`POLE_MAP_DEG`) |
 | Mars test view ("Try Mars" on the title or `?screen=mars`: real globe + free rover on real sites) and its data | `mission-architect/ui/MarsTest.tsx`, sites `data/mars.ts`, rover world (`World`, `MOON`, `MARS`: DEM folder, ground textures `ground`/`gain`, sky, area `scale`, `storms`, `science`) in `three/world.ts`; sunset sky dome, storm dust, seeded irregular outcrops (`outcropGeometry`), their real ground footprint for collision/shelter (`footprint`), the approaching dust front (`dustWall`) and triplanar rock texture (`triplanarRock`) in `three/mars.ts`; rock collision with sliding (`Obstacle`, `inside`) and the IMU compass (`Compass`, `bearing`) in `Rover3D.tsx`; dust storm cycle and shelter in `Rover3D.tsx` (`STORM`, test shortcut `?storm`, temporary "Dust storm (test)" checkbox via `api.storm`); data from `tools/mars/build_mars.py` (`--sites a,b` rebuilds only those; `tools/mars/README.md`) into `frontend/public/mars/` |
 | Mars landing (EDL cinematic before driving: entry, parachute, heat shield, backshell, powered descent, sky crane, touchdown, flyaway; `?screen=edl&site=<id>`, `&static=1` = docked models) | `mission-architect/three/Edl3D.tsx` (stage timeline `STAGES`, effects, camera that ends on `Rover3D`'s first frame, loading overlay `.edl-loading`); `three/edl.ts` (`loadEdl`, `edlEnvironment`, docked constants `SKYCRANE_Y`, `ROVER_BRIDLE`); `three/EdlStatic.tsx`; GLB cache `cachedGlb` in `three/curiosity.ts` (prefetched by `ui/MarsTest.tsx`); models `frontend/public/models/skycrane.glb`, `aeroshell.glb` exported by `tools/msl/export_edl.py` (`tools/msl/README.md`); plan `PLAN-EDL.md` |
