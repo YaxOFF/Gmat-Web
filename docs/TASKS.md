@@ -51,4 +51,4 @@ Verify: `npm run lint; npm run build` and check in the browser with no console e
 ## Closing a phase
 `PLAN.md` protocol: Progress, Log, commit + push. Then `sh docs/docs.sh stale` and update what it lists (almost always `MAP.md`, `TASKS.md`, `API.md`), with the new `rev` stamp, and `sh docs/docs.sh map`.
 
-Phase 9 (Docker): create `docs/DEPLOY.md` with only the non-obvious (GMAT tarball with sha256, `GMAT_HOME=/opt/gmat`, nginx, `.env`).
+Phase 9 (Docker): create `docs/DEPLOY.md` with only the non-obvious (GMAT tarball with sha256, `GMAT_HOME=/opt/gmat`, one container where FastAPI serves the build, `.env`).
