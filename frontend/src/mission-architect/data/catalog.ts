@@ -52,8 +52,8 @@ PARTS.push(
   { id: 'rbat_6', name: 'Rover battery 6 kWh', group: 'rbattery', massKg: 38, drawW: 0, costM: 11, rel: 0.95, batteryWh: 6000, note: 'Enough to go deep into the shadow and come back.' },
   { id: 'wheels_std', name: 'Standard wheels', group: 'wheels', massKg: 12, drawW: 0, costM: 3, rel: 0.93, note: 'Cheap. Rocks hurt them and soft regolith can trap them (50% to break free).' },
   { id: 'wheels_mesh', name: 'Mesh wheels + active suspension', group: 'wheels', massKg: 18, drawW: 0, costM: 8, rel: 0.97, note: 'Half the damage from rocks, and it can "walk" out of soft ground (85%).' },
-  { id: 'drill_std', name: 'Drill (up to 1 m)', group: 'drill', massKg: 10, drawW: 0, costM: 6, rel: 0.94, note: 'Depths of 25 cm, 50 cm and 1 m.' },
-  { id: 'drill_deep', name: 'Deep drill (up to 2 m)', group: 'drill', massKg: 22, drawW: 0, costM: 14, rel: 0.9, note: 'Adds a 2 m depth: the richest ice, but jams more. Required for mission C.' },
+  { id: 'drill_std', name: 'Drill (1 m)', group: 'drill', massKg: 10, drawW: 0, costM: 6, rel: 0.94, note: 'Drills 1 m into the regolith.' },
+  { id: 'drill_deep', name: 'Deep drill (2 m)', group: 'drill', massKg: 22, drawW: 0, costM: 14, rel: 0.9, note: 'Drills 2 m down: the richest ice, but jams more. Required for mission C.' },
   { id: 'mass_spec', name: 'Mass spectrometer', group: 'rtools', massKg: 7, drawW: 0, costM: 12, rel: 0.95, note: 'Without it a core can only show "hydrogen", never confirmed water.' },
   { id: 'autonav', name: 'Autonomous navigation', group: 'rtools', massKg: 3, drawW: 0, costM: 9, rel: 0.96, note: 'Drive at full speed between relay passes. Without it the rover crawls when out of contact.' },
 )

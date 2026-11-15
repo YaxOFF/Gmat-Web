@@ -24,6 +24,13 @@ export interface CuriosityRig {
   drillPoint(out: THREE.Vector3): THREE.Vector3
   /** 0 = broca en el aire o guardada, 1 = apoyada (y girando si sigue perforando). */
   drillContact(): number
+  /**
+   * Mástil: gira la cabeza (ChemCam) hacia `target` (mundo) o, con null, la devuelve al frente. Devuelve true cuando
+   * ya apunta. Llamar después de `update`.
+   */
+  aim(dt: number, target: THREE.Vector3 | null): boolean
+  /** Lente del ChemCam (mundo): de donde sale el láser. */
+  laserOrigin(out: THREE.Vector3): THREE.Vector3
 }
 
 const SIDES = ['Izq', 'Der'] as const
@@ -88,6 +95,10 @@ export function rigCuriosity(model: THREE.Object3D): CuriosityRig {
 
   let steer = 0
   const arm = armRig(model)
+  // Cabeza del mástil: acimut en Y y elevación en X (girar +X baja lo que está al frente, +Z).
+  const head = model.getObjectByName('Mastil_Cabeza'), lens = model.getObjectByName('ChemCam') ?? head
+  const hv = new THREE.Vector3()
+  let az = 0, elv = 0
 
   return {
     model,
@@ -147,6 +158,19 @@ export function rigCuriosity(model: THREE.Object3D): CuriosityRig {
     drill: (dt, on, ground) => arm.drill(dt, on, ground),
     drillPoint: (out) => arm.point(out),
     drillContact: () => arm.contact(),
+    aim(dt, target) {
+      if (!head?.parent) return true
+      let taz = 0, tel = 0
+      if (target) {
+        head.parent.worldToLocal(hv.copy(target)).sub(head.position)
+        taz = Math.atan2(hv.x, hv.z); tel = Math.atan2(-hv.y, Math.hypot(hv.x, hv.z))
+      }
+      const dAz = Math.atan2(Math.sin(taz - az), Math.cos(taz - az)) // por el lado corto
+      az += dAz * k(dt, 6); elv += (tel - elv) * k(dt, 6)
+      head.rotation.set(elv, az, 0, 'YXZ')
+      return Math.abs(dAz) + Math.abs(tel - elv) < 0.03
+    },
+    laserOrigin: (out) => (lens ? lens.localToWorld(out.set(0, 0, 0.12)) : model.getWorldPosition(out)),
   }
 }
 
