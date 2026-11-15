@@ -31,14 +31,17 @@ import { CoreThumb } from './three/CoreSample'
 import { ROCKS } from './data/samples'
 import { Lab } from './ui/Lab'
 import type { LabResult } from './data/lab'
+import { EdlStatic } from './three/EdlStatic'
+import { Edl3D } from './three/Edl3D'
+import { MARS_SITES } from './data/mars'
 
 type Phase =
   | 'title' | 'intro' | 'setup' | 'orbit' | 'hangar' | 'review'
-  | 'launch' | 'mapping' | 'site' | 'ending' | 'descent' | 'rover' | 'finale' | 'epilogue' | 'lab' | 'report' | 'mars'
+  | 'launch' | 'mapping' | 'site' | 'ending' | 'descent' | 'land' | 'rover' | 'finale' | 'epilogue' | 'lab' | 'report' | 'mars' | 'edl'
 
 const STEP_OF: Record<Phase, number> = {
   title: 0, intro: 0, setup: 0, orbit: 1, hangar: 2, review: 3,
-  launch: 4, mapping: 5, site: 6, ending: 6, descent: 7, rover: 8, finale: 9, epilogue: 9, lab: 9, report: 10, mars: 0,
+  launch: 4, mapping: 5, site: 6, ending: 6, descent: 7, land: 7, rover: 8, finale: 9, epilogue: 9, lab: 9, report: 10, mars: 0, edl: 0,
 }
 // Pantalla anterior del botón "← Back". Solo antes del lanzamiento: después la partida ya tiró dados.
 const PREV: Partial<Record<Phase, Phase>> = { intro: 'title', setup: 'title', orbit: 'setup', hangar: 'orbit', review: 'hangar' }
@@ -49,9 +52,11 @@ const urlSeed = () => Number(new URLSearchParams(location.search).get('seed')) |
 // ?planet=mars elige Marte antes de leer los atajos (así ?rover=jezero&planet=mars encuentra el sitio).
 const URL_PLANET: PlanetId = new URLSearchParams(location.search).get('planet') === 'mars' ? 'mars' : 'moon'
 setPlanet(URL_PLANET)
-// Atajos de prueba: ?rover=cabeus o ?landing=cabeus (y opcional &seed=123); ?screen=mars abre la prueba de Marte
+// Atajos de prueba: ?rover=cabeus o ?landing=cabeus (y opcional &seed=123); ?screen=mars abre la prueba de Marte; ?screen=edl, el aterrizaje en Marte (&site=<id>; &static=1, los modelos quietos)
 const q = (k: string) => { const v = new URLSearchParams(location.search).get(k); return v && CRATER[v] ? v : null }
 const urlRover = () => q('rover') ?? q('landing')
+// Marte: el aterrizaje es la cinemática EDL (sin decisiones ni tirada), siempre exitoso.
+const MARS_LANDING: Landing = { ok: true, batteryPct: 100, integrity: 100, sciMul: 1, label: 'Sky crane touchdown. The rover is on Mars, all systems nominal.' }
 const SCREEN = new URLSearchParams(location.search).get('screen')
 const DEMO_LAUNCH: LaunchOutcome = { status: 'ok', panel: 'success', loi: 'success', events: [
   { kind: 'info', label: 'Mass check', text: '812 kg of 1500 kg. Within capacity.' },
@@ -60,6 +65,8 @@ const DEMO_LAUNCH: LaunchOutcome = { status: 'ok', panel: 'success', loi: 'succe
   { kind: 'roll', label: 'Lunar orbit insertion', p: 0.88, roll: 0.3, result: 'success', text: 'The engine must fire at exactly the right moment.' },
 ] }
 // Partida de ejemplo para revisar pantallas sueltas (?screen=review|mapping|site|report).
+const EDL_STATIC = new URLSearchParams(location.search).has('static')
+const EDL_SITE = MARS_SITES.find((s) => s.id === new URLSearchParams(location.search).get('site')) ?? MARS_SITES[0]
 const DEMO = ['review', 'mapping', 'site', 'report'].includes(SCREEN ?? '')
 const demoDesign = (): Design => ({ ...defaultDesign(), partIds: starterFor('B') })
 const demoMission = () => {
@@ -89,10 +96,11 @@ export default function MissionArchitect({ onInspect, onExit }: {
     cores: [{ kind: 'basalt', seed: 11, pct: 3 }, { kind: 'leopard', seed: 22, pct: 6 }, { kind: 'sulfate', seed: 33, pct: 4 }] } : null)
   const [team, setTeam] = useState<Team>(soloTeam)
   const minBat = useRef(100)
-  const [landing, setLanding] = useState<Landing | null>(null)
+  const [landing, setLanding] = useState<Landing | null>(() => (q('landing') && URL_PLANET === 'mars' ? MARS_LANDING : null))
   const [finale, setFinale] = useState<FinaleResult | null>(null)
   const [lab, setLab] = useState<LabResult | null>(null)
-  const [phase, setPhase] = useState<Phase>(() => (q('rover') ? 'rover' : q('landing') ? 'descent' : SCREEN === 'setup' ? 'setup' : SCREEN === 'launch' ? 'launch' : SCREEN === 'hangar' ? 'hangar' : SCREEN === 'orbit' ? 'orbit' : SCREEN === 'mars' ? 'mars' : SCREEN === 'lab' ? 'lab' : DEMO ? SCREEN as Phase : 'title'))
+  const [edlRun, setEdlRun] = useState(0)
+  const [phase, setPhase] = useState<Phase>(() => (q('rover') ? 'rover' : q('landing') ? (URL_PLANET === 'mars' ? 'land' : 'descent') : SCREEN === 'setup' ? 'setup' : SCREEN === 'launch' ? 'launch' : SCREEN === 'hangar' ? 'hangar' : SCREEN === 'orbit' ? 'orbit' : SCREEN === 'mars' ? 'mars' : SCREEN === 'lab' ? 'lab' : SCREEN === 'edl' ? 'edl' : DEMO ? SCREEN as Phase : 'title'))
   const [design, setDesign] = useState<Design>(() => (DEMO ? demoDesign() : defaultDesign()))
   const [iterations, setIterations] = useState(0)
   const [forced, setForced] = useState(false)
@@ -178,12 +186,13 @@ export default function MissionArchitect({ onInspect, onExit }: {
   return (
     <div className="ma app">
       {phase === 'title' && <button className="btn small ghost ma-exit" onClick={onExit}>← Back to GMAT</button>}
-      {phase !== 'title' && phase !== 'mars' && (
+      {phase !== 'title' && phase !== 'mars' && phase !== 'edl' && (
         <TopBar step={STEP_OF[phase]} steps={mars ? STEP_NAMES.map((n) => (n === 'Finale' ? 'Lab' : n)) : STEP_NAMES}
           canJump={(k) => !!PREV[phase] && !!STEP_PHASE[k]} onJump={(k) => setPhase(STEP_PHASE[k]!)} right={<><span className="hint">{money(budgetLeft)} left</span><span className="seed" title="Same seed = same sites and finds. Share it to replay this game.">seed {seed}</span>{PREV[phase] && <button className="btn small ghost ma-exit" onClick={() => setPhase(PREV[phase]!)}>← Back</button>}<button className="btn small ghost ma-exit" onClick={onExit}>← GMAT</button></>} />
       )}
       {phase === 'title' && <Title onStart={(p) => { choosePlanet(p); setPhase('intro') }} />}
       {phase === 'mars' && <MarsTest onExit={() => setPhase('title')} />}
+      {phase === 'edl' && (EDL_STATIC ? <EdlStatic /> : <Edl3D key={edlRun} site={EDL_SITE} seed={7} onDone={() => setEdlRun((k) => k + 1)} />)}
       {phase === 'intro' && <Dialogue lines={mars ? MARS_INTRO : INTRO} startScene="void" onDone={() => setPhase('setup')} />}
       {phase === 'setup' && <Setup mode={design.mode} team={team} onDone={(mode, t) => { setTeam(t); setDesign({ ...design, mode, partIds: [] }); setPhase('orbit') }} />}
       {phase === 'orbit' && <OrbitPick design={design} onInspect={inspect} onPick={(orbitId) => { setDesign({ ...design, orbitId }); setPhase('hangar') }} />}
@@ -203,11 +212,17 @@ export default function MissionArchitect({ onInspect, onExit }: {
       )}
       {phase === 'site' && mission && <Site mission={mission} design={design} onPick={pickSite} />}
       {phase === 'ending' && mission && site && (
-        <Dialogue lines={(mars ? marsEndingLines : endingLines)(site, (mission.quality[site]?.hydrogen ?? 0) >= 0.4)} startScene="crater" onDone={() => setPhase(design.mode !== 'A' ? 'descent' : 'report')} />
+        <Dialogue lines={(mars ? marsEndingLines : endingLines)(site, (mission.quality[site]?.hydrogen ?? 0) >= 0.4)} startScene="crater" onDone={() => { if (design.mode === 'A') setPhase('report'); else if (mars) { setLanding(MARS_LANDING); setPhase('land') } else setPhase('descent') }} />
       )}
       {phase === 'descent' && site && (
         <Descent3D crater={CRATER[site]} stress={stress} mapped={has('altimeter')} seed={seed} names={team.players === 4 ? team.names : undefined}
-          onDone={(l) => { setLanding(l); setPhase(l.ok ? 'rover' : mars ? 'epilogue' : 'finale') }} />
+          onDone={(l) => { setLanding(l); setPhase(l.ok ? (mars ? 'land' : 'rover') : mars ? 'epilogue' : 'finale') }} />
+      )}
+      {phase === 'land' && site && ( // Marte: cinemática EDL (escudo, paracaídas, grúa) y el rover sigue donde tocó suelo
+        <div className="mars-drive">
+          <Edl3D site={CRATER[site]} seed={seed} start={roverStart} onDone={() => setPhase('rover')} />
+          <button className="btn small mars-skip" onClick={() => setPhase('rover')}>Skip landing ▶</button>
+        </div>
       )}
       {phase === 'rover' && site && (
         <Rover3D crater={CRATER[site]} quality={mission ? mission.quality[site]?.hydrogen ?? 0 : 0.6} seed={seed}

@@ -16,6 +16,8 @@ Con el archivo ubicado, `Grep` del símbolo y `Read` con `offset`. Al terminar u
 
 ## Al empezar cada sesión
 
+En la rama `game/msl-edl` manda `PLAN-EDL.md` (aterrizaje del rover en Marte, fases E0-E7): leer su **Avance**, seguir su **Protocolo por sesión** y no tocar `main`. En las demás ramas:
+
 Hay dos planes. El activo es `PLAN-JUEGO.md` (juego "Viaje a la Luna", fases J0-J6); `PLAN.md` (port web) sigue en su Fase 9 cuando el juego llegue a J4 o el usuario lo pida.
 
 1. Leer `PLAN-JUEGO.md` → **Avance** y tomar la primera fase sin marcar.

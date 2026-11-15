@@ -24,7 +24,7 @@ function tame(model: THREE.Object3D) {
 }
 
 /** Mancha radial suave: la misma textura sirve para humo y fuego. */
-function puffTexture(): THREE.CanvasTexture {
+export function puffTexture(): THREE.CanvasTexture {
   const c = document.createElement('canvas'); c.width = c.height = 64
   const g = c.getContext('2d')!, grad = g.createRadialGradient(32, 32, 0, 32, 32, 32)
   grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(0.5, 'rgba(255,255,255,0.45)'); grad.addColorStop(1, 'rgba(255,255,255,0)')
@@ -111,8 +111,9 @@ function buildSite(rng: Rng, puff: THREE.Texture) {
 /**
  * Reserva fija de partículas (sprites) que se reciclan. Al tocar el suelo el chorro se desvía hacia afuera,
  * como en la plataforma. `look(a, material)` pinta cada una según su edad normalizada `a` (0..1).
+ * `floor` da la altura del suelo y (`cx`, `cz`) el centro desde el que se abre el rebote.
  */
-function puffs(scene: THREE.Scene, n: number, map: THREE.Texture, additive: boolean) {
+export function puffs(scene: THREE.Scene, n: number, map: THREE.Texture, additive: boolean, floor = (_x: number, _z: number) => 0, cx = 0, cz = 0) {
   const group = new THREE.Group(); scene.add(group)
   const all = Array.from({ length: n }, () => {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending }))
@@ -133,9 +134,10 @@ function puffs(scene: THREE.Scene, n: number, map: THREE.Texture, additive: bool
         if (q.age >= q.life) { q.s.visible = false; continue }
         q.v.multiplyScalar(Math.exp(-dt * drag)); q.v.y += lift * dt
         const p = q.s.position.addScaledVector(q.v, dt)
-        if (p.y < 0.5 && q.v.y < 0) { // rebote en el suelo: la velocidad de caída pasa a ser radial
-          const sp = -q.v.y * 0.7, ang = p.x * p.x + p.z * p.z > 0.01 ? Math.atan2(p.z, p.x) + (Math.random() - 0.5) : Math.random() * 6.28
-          q.v.set(Math.cos(ang) * sp, 0.5, Math.sin(ang) * sp); p.y = 0.5
+        const f = floor(p.x, p.z) + 0.5, dx = p.x - cx, dz = p.z - cz
+        if (p.y < f && q.v.y < 0) { // rebote en el suelo: la velocidad de caída pasa a ser radial
+          const sp = -q.v.y * 0.7, ang = dx * dx + dz * dz > 0.01 ? Math.atan2(dz, dx) + (Math.random() - 0.5) : Math.random() * 6.28
+          q.v.set(Math.cos(ang) * sp, 0.5, Math.sin(ang) * sp); p.y = f
         }
         q.s.scale.setScalar(q.size + q.grow * q.age)
         look(q.age / q.life, q.s.material)

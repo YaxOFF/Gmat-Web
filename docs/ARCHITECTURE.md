@@ -1,4 +1,4 @@
-<!-- fuente: backend/app, frontend/src/store.ts | rev: 1ee8d23 -->
+<!-- fuente: backend/app, frontend/src/store.ts | rev: 7b35a0e -->
 # Architecture
 
 ## Decisions
@@ -35,7 +35,7 @@ Form/tree → `setMission` (changes the model immediately) → `POST /api/script
 
 ## Conventions
 - Config only through env (`config.py`), nothing hardcoded.
-- UI text in `frontend/src/i18n/es.ts`.
+- UI text in `frontend/src/i18n/en.ts` (active, English; `es.ts` keeps Spanish with the same keys). The `mission-architect` game keeps its English text inside its components.
 - Styles: CSS modules + `light-dark()` tokens in `index.css`.
 - Frontend linter: oxlint (not eslint).
 - Backend tests with the real engine and `TestClient`; model file: `tests/test_tools.py`. Slow tests with `@pytest.mark.slow` (excluded by `addopts`; `pytest -m slow`). `app/batch.py` is a development tool: the API does not import it.

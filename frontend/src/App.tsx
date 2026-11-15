@@ -127,7 +127,7 @@ export default function App() {
   const resources = useApp((st) => st.mission.resources)
   const select = useApp((st) => st.select)
   const [gallery, setGallery] = useState(false)
-  const [game, setGame] = useState<'off' | 'on' | 'hidden'>(() => /[?&](game|rover|landing|screen)\b/.test(location.search) ? 'on' : 'off') // 'hidden' conserva la partida
+  const [game, setGame] = useState<'off' | 'on' | 'hidden'>('on') // el juego es la portada; 'hidden' conserva la partida
   const [templates, setTemplates] = useState<string | boolean>(false)  // true o el id de la plantilla a abrir
   const [palette, setPalette] = useState(false)
   const [tour, setTour] = useState(() => !tourSeen())

@@ -3,6 +3,8 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { MARS_SITES } from '../data/mars'
 import { mulberry32 } from '../engine/rng'
+import { cachedGlb } from '../three/curiosity'
+import { Edl3D } from '../three/Edl3D'
 import { DEFAULT_ROVER, Rover3D } from '../three/Rover3D'
 import { MARS } from '../three/world'
 import { mountStage, realMoon, stars } from '../three/stage'
@@ -10,12 +12,18 @@ import { mountStage, realMoon, stars } from '../three/stage'
 /** Vista de prueba de Marte (aún sin misión): globo real y rover libre en un sitio con relieve real. */
 export function MarsTest({ onExit }: { onExit: () => void }) {
   const [sel, setSel] = useState(MARS_SITES[0].id)
-  const [driving, setDriving] = useState(false)
+  // Drive: primero el aterrizaje (EDL), después el rover en el mismo punto donde tocó suelo.
+  const [mode, setMode] = useState<'globe' | 'edl' | 'drive'>('globe')
   const site = MARS_SITES.find((s) => s.id === sel)!
-  if (driving) return (
+  // Precarga los GLB mientras se elige sitio: al pulsar "Land" ya están en caché.
+  useEffect(() => { for (const f of ['curiosity_rover.glb', 'skycrane.glb', 'aeroshell.glb']) cachedGlb(f).catch(() => {}) }, [])
+  if (mode !== 'globe') return (
     <div className="mars-drive">
-      <Rover3D crater={site} world={MARS} quality={0.8} seed={7} orbitId="polar_high" start={DEFAULT_ROVER} onDone={() => setDriving(false)} />
-      <button className="btn small ghost mars-back" onClick={() => setDriving(false)}>← Mars globe</button>
+      {mode === 'edl'
+        ? <Edl3D site={site} seed={7} onDone={() => setMode('drive')} />
+        : <Rover3D crater={site} world={MARS} quality={0.8} seed={7} orbitId="polar_high" start={DEFAULT_ROVER} onDone={() => setMode('globe')} />}
+      <button className="btn small ghost mars-back" onClick={() => setMode('globe')}>← Mars globe</button>
+      {mode === 'edl' && <button className="btn small mars-skip" onClick={() => setMode('drive')}>Skip landing ▶</button>}
     </div>
   )
   return (
@@ -32,7 +40,7 @@ export function MarsTest({ onExit }: { onExit: () => void }) {
             <p className="note">{s.blurb}</p>
           </button>
         ))}
-        <button className="btn big" onClick={() => setDriving(true)}>Drive at {site.name} ▶</button>
+        <button className="btn big" onClick={() => setMode('edl')}>Land and drive at {site.name} ▶</button>
       </aside>
     </div>
   )

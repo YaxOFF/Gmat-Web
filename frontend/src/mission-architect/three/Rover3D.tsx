@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { Crater } from '../data/types'
 import { clamp, mulberry32, type Rng } from '../engine/rng'
+import { demHeight, loadDem, noise, SIZE, type Dem } from './dem'
 import { buildLander } from './spacecraft'
 import { loadCuriosity, meshHeight, type CuriosityRig, type HeightFn } from './curiosity'
 import { at, earthMesh, mountStage, stars } from './stage'
+import type { RockField } from './rocks'
 import { MOON, type RoverSite, type World } from './world'
 import { DUST, dust, dustWall, footprint, outcropGeometry, skyDome, triplanarRock } from './mars'
 import type { Rock, RockKind } from './rocks'
@@ -30,7 +32,7 @@ const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown
 const TUBES = 3 // tubos de muestra del rover (Marte)
 /** Roca del campo (rocks.ts) → núcleo del laboratorio (data/samples.ts). Conglomerado y meteorito no dan polvo limpio: sin núcleo. */
 const CORE_OF: Record<string, CoreKind> = { basalt: 'basalt', mudstone: 'mudstone', sulfate: 'sulfate', hematite: 'hematite' }
-const SIZE = 240, RIM = 92, SEG = 200 // × world.scale dentro del componente (Marte usa un área más grande)
+const RIM = 92, SEG = 200 // × world.scale dentro del componente (Marte usa un área más grande); SIZE en dem.ts, ídem
 const REACH = 1.7 // m del centro del Curiosity a su rueda más lejana: radio con que chocan los afloramientos (Marte)
 /** Perforación manual: s con SPACE sostenido y la broca adentro, según la profundidad (m). */
 const drillSecs = (m: number) => 2.5 + m * 2.5
@@ -100,7 +102,7 @@ vec3 untileMacro(vec2 uv) {
 const MACRO = 'diffuseColor *= sampledDiffuseColor;\n\tdiffuseColor.rgb *= untileMacro( vMapUv ) * ( 1.0 - 0.22 * smoothstep( 0.08, 0.4, ' +
   '1.0 - dot( normalize( vNormal ), normalize( ( viewMatrix * vec4( 0.0, 1.0, 0.0, 0.0 ) ).xyz ) ) ) );'
 const FADE = 'vec3 mapN = untileN( normalMap, vNormalMapUv );\n\tmapN.xy *= mix( 1.0, 0.35, smoothstep( 40.0, 160.0, length( vViewPosition ) ) );'
-function untileMaterial(mat: THREE.MeshStandardMaterial) {
+export function untileMaterial(mat: THREE.MeshStandardMaterial) {
   const chunk = (name: keyof typeof THREE.ShaderChunk, ...pairs: [string, string][]) =>
     pairs.reduce((src, [from, to]) => {
       if (!src.includes(from)) console.warn(`untile: ${name} cambió en three.js; el suelo queda sin hex-tiling`)
@@ -139,20 +141,6 @@ function permanentShadow(mat: THREE.Material, key: string) {
   mat.customProgramCacheKey = () => key
 }
 
-/** Relieve real del cráter (LOLA, tools/moon/build_moon.py): n×n alturas en metros sobre una ventana de size_m. */
-interface Dem { n: number; size: number; vex: number; h: Float32Array }
-const dems = new Map<string, Promise<Dem | null>>()
-function loadDem(dir: string, id: string): Promise<Dem | null> {
-  const base = `${import.meta.env.BASE_URL}${dir}/${id}`
-  if (!dems.has(base)) {
-    const get = (ext: string) => fetch(base + ext).then((r) => (r.ok ? r : Promise.reject(new Error(r.statusText))))
-    dems.set(base, Promise.all([get('.json').then((r) => r.json()), get('.bin').then((r) => r.arrayBuffer())])
-      .then(([m, b]) => ({ n: m.n, size: m.size_m, vex: m.vex ?? 1, h: new Float32Array(b) }))
-      .then((d) => (d.h.length === d.n * d.n ? d : null))
-      .catch(() => null)) // sin datos: terreno procedural
-  }
-  return dems.get(base)!
-}
 // Tormentas de polvo (world.storms): calma mínima, promedio entre tormentas, aviso y duración (s); descarga (%/s) y
 // fracción que queda al resguardo de un afloramiento.
 const STORM = { calm: 25, every: 35, warn: 15, dur: [20, 32], drain: 1.1, shelter: 0.15 }
@@ -169,6 +157,26 @@ const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
 const dirName = (b: number) => COMPASS[Math.round(b / 45) % 8]
 const LIGHT_Z = -58 // al sur de esta línea el borde recibe sol; al norte, sombra permanente
 const STEEP: Record<Crater['terrain'], number> = { soft: 0.6, rocky: 1, steep: 1.6, 'very steep': 2.2 }
+type Dep = { x: number; z: number; rich: number; taken: boolean; spike?: boolean }
+
+/** Depósitos de hielo del sitio y su señal. Consume el rng: Edl3D lo llama igual, así sus rocas salen como aquí. */
+export function siteDeposits(rng: Rng, crater: RoverSite, start: RoverStart, world: World) {
+  // Hielo solo en la sombra permanente; menos si se desvió a un sitio más seguro.
+  const deposits: Dep[] = []
+  const want = Math.max(1, Math.round((2 + crater.h * 1.3) * start.sciMul))
+  while (deposits.length < want) {
+    const a = rng() * Math.PI * 2, r = 12 + rng() * (RIM * world.scale - 30), x = Math.cos(a) * r, z = Math.sin(a) * r
+    if (!world.shadow || z > LIGHT_Z + 12) deposits.push({ x, z, rich: crater.ice * (0.4 + rng()) * 1.3, taken: false })
+  }
+  const signalAt = (x: number, z: number) =>
+    clamp(deposits.reduce((s, d) => s + (d.taken ? 0 : d.rich * Math.exp(-((Math.hypot(d.x - x, d.z - z) / 13) ** 2))), 0) / 10, 0, 1)
+  return { deposits, signalAt }
+}
+
+/** Campo de rocas del sitio (RockField en rocks.ts), con el rng justo después de `siteDeposits`. */
+export function siteRocks(rng: Rng, n: (x: number, y: number) => number, height: HeightFn, floor: HeightFn, crater: RoverSite, world: World): RockField {
+  return new world.rocks({ rng, noise: n, height, floor, count: Math.round(ROCKS[crater.terrain] * world.scale ** 2), rim: RIM * world.scale, clear: { x: 0, z: -76, r: 8 } })
+}
 const ROCKS: Record<Crater['terrain'], number> = { soft: 50, rocky: 260, steep: 130, 'very steep': 170 }
 // Pasos del orbitador sobre el cráter (s de juego): la órbita elegida en CML 2 decide el relevo.
 const RELAY: Record<string, { period: number; dur: number }> = {
@@ -183,31 +191,6 @@ const DEPTHS = [
 const tier = (pct: number) => pct > 5 ? { pts: 100, msg: 'RICH VEIN! Viable resource for Artemis.' }
   : pct >= 1 ? { pts: 60, msg: 'WATER ICE CONFIRMED.' }
   : pct > 0 ? { pts: 30, msg: 'Trace ice detected!' } : { pts: 5, msg: 'Dry regolith. No trace of water.' }
-
-/** Ruido de valor sembrado con varias octavas. */
-function noise(rng: Rng) {
-  const N = 64, g = Float32Array.from({ length: N * N }, () => rng())
-  const v = (x: number, y: number) => g[(((y % N) + N) % N) * N + (((x % N) + N) % N)]
-  const s = (t: number) => t * t * (3 - 2 * t)
-  const one = (x: number, y: number) => {
-    const xi = Math.floor(x), yi = Math.floor(y), fx = s(x - xi), fy = s(y - yi)
-    const a = v(xi, yi) + (v(xi + 1, yi) - v(xi, yi)) * fx
-    const b = v(xi, yi + 1) + (v(xi + 1, yi + 1) - v(xi, yi + 1)) * fx
-    return a + (b - a) * fy
-  }
-  return (x: number, y: number) => one(x / 22, y / 22) + one(x / 9, y / 9) * 0.4 + one(x / 3.5, y / 3.5) * 0.12
-}
-
-/** Altura (unidades) desde el DEM: escala uniforme (× vex del sitio), así las pendientes son las reales; el ruido solo da detalle fino. */
-function demHeight(dem: Dem, n: (x: number, y: number) => number, size: number) {
-  const k = (size / dem.size) * dem.vex, last = dem.n - 1, h = dem.h, half = size / 2
-  return (x: number, z: number) => {
-    const c = clamp(((x + half) / size) * last, 0, last - 1e-6), r = clamp(((z + half) / size) * last, 0, last - 1e-6)
-    const c0 = Math.floor(c), r0 = Math.floor(r), fc = c - c0, fr = r - r0, i = r0 * dem.n + c0
-    const m = (h[i] * (1 - fc) + h[i + 1] * fc) * (1 - fr) + (h[i + dem.n] * (1 - fc) + h[i + dem.n + 1] * fc) * fr
-    return m * k + n(x + 500, z + 500) * 0.5
-  }
-}
 
 interface Hud {
   bat: number; need: number; temp: number; heaters: boolean; sig: number; speed: number; slope: number
@@ -278,16 +261,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       return n(x + 500, z + 500) * 3.2 * steep + wall
     }
     const shade = (z: number) => world.shadow ? clamp((z - LIGHT_Z) / 4 + 0.5, 0, 1) : 0 // 0 = sol, 1 = sombra
-    // Hielo solo en la sombra permanente; menos si se desvió a un sitio más seguro.
-    type Dep = { x: number; z: number; rich: number; taken: boolean; spike?: boolean }
-    const deposits: Dep[] = []
-    const want = Math.max(1, Math.round((2 + crater.h * 1.3) * start.sciMul))
-    while (deposits.length < want) {
-      const a = rng() * Math.PI * 2, r = 12 + rng() * (rim - 30), x = Math.cos(a) * r, z = Math.sin(a) * r
-      if (!world.shadow || z > LIGHT_Z + 12) deposits.push({ x, z, rich: crater.ice * (0.4 + rng()) * 1.3, taken: false })
-    }
-    const signalAt = (x: number, z: number) =>
-      clamp(deposits.reduce((s, d) => s + (d.taken ? 0 : d.rich * Math.exp(-((Math.hypot(d.x - x, d.z - z) / 13) ** 2))), 0) / 10, 0, 1)
+    const { deposits, signalAt } = siteDeposits(rng, crater, start, world)
 
     scene.background = new THREE.Color(world.sky ?? 0x000000)
     if (world.sky === undefined) scene.add(stars(rng, 3000, 1500))
@@ -347,9 +321,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
 
     // Rocas: las bajas se trepan; las altas chocan y frenan al rover.
     // Campo de rocas del mundo (RockField en rocks.ts: ubicación, choque y apoyo comunes; aspecto por mundo).
-    const field = new world.rocks({
-      rng, noise: n, height, floor, count: Math.round(ROCKS[crater.terrain] * world.scale ** 2), rim, clear: { x: 0, z: -76, r: 8 },
-    })
+    const field = siteRocks(rng, n, height, floor, crater, world)
     if (world.shadow) permanentShadow(field.mesh.material as THREE.Material, 'rover-rock')
     scene.add(field.mesh)
     // Lo que pisan las ruedas: el suelo más el lomo de las rocas chicas.
@@ -393,9 +365,9 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     loader.load(reg + 'normal.jpg', (t) => { groundMat.normalMap = tile(t, size / TILE); done() })
     loader.load(reg + 'orm.jpg', (t) => { groundMat.aoMap = groundMat.roughnessMap = tile(t, size / TILE); done() }) // R = AO, G = rugosidad
 
-    // Lander en el borde y rover.
+    // Lander en el borde (en Marte no: el rover bajó colgado del SkyCrane, Edl3D) y rover.
     const lander = buildLander(); lander.rotation.y = 0.6
-    lander.position.set(9, height(9, -70), -70); scene.add(lander)
+    lander.position.set(9, height(9, -70), -70); if (world.sky === undefined) scene.add(lander)
 
     // Rover: caja provisional hasta que carga el Curiosity articulado (public/models/curiosity_rover.glb).
     const rover = new THREE.Group(), proxy = new THREE.Group(), metal = new THREE.MeshStandardMaterial({ color: 0xdedfe6, metalness: 0.5, roughness: 0.4 })
@@ -600,7 +572,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     say(iceHunt ? `Touchdown on the sunlit rim of ${crater.name}!`
       : `Touchdown at ${crater.name}. Laser the rocks (F) to identify them, then drill the promising ones.`, iceHunt ? 3 : 5)
     const up3 = new THREE.Vector3(0, 1, 0), nrm = new THREE.Vector3(), qy = new THREE.Quaternion(), camT = new THREE.Vector3(), off = new THREE.Vector3()
-    camera.position.set(0, 8, -86)
+    camera.position.set(0, height(0, -74) + 5.5, -84) // ya en la persecución: el corte desde Edl3D no salta
     // Cámara de perforación (POV junto a la broca) + corte de rayos X + luz de trabajo de la torreta.
     const xray = makeXray(iceHunt ? undefined : 0xffd36a); scene.add(xray.group)
     const work = new THREE.PointLight(0xfff1dc, 0, 4, 1.4); scene.add(work)
