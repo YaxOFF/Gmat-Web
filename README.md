@@ -3,7 +3,7 @@
 **An interactive space-mission game powered by NASA's real flight-dynamics engine.**
 Built by **NasaGang** for the NASA hackathon at UDLAP (November 2026).
 
-![Mission Architect title screen: pick the Moon or Mars](docs/preview/title.jpg)
+![Mission Architect title screen: pick the Moon or Mars](docs/preview/title-ui2.jpg)
 
 Mission Architect runs on top of **GMAT Web**, our web using NASA's General Mission Analysis Tool (GMAT R2026a). The backend is FastAPI on top of `gmatpy` (GMAT's real engine), and the frontend is React + Vite + TypeScript.
 
@@ -11,11 +11,11 @@ Mission Architect runs on top of **GMAT Web**, our web using NASA's General Miss
 
 | | |
 |---|---|
-| ![Hangar: build the spacecraft within budget](docs/preview/hangar.jpg) | ![Atlas V 541 on the pad](docs/preview/launch.jpg) |
+| ![Hangar: build the spacecraft within budget](docs/preview/hangar-ui2.jpg) | ![Atlas V 541 on the pad](docs/preview/launch-ui2.jpg) |
 | Hangar: build the spacecraft within budget | Launch: Atlas V 541 on the pad |
-| ![Moon rover scanning the subsurface for hydrogen](docs/preview/moon-scan.jpg) | ![Moon rover drilling for ice with the X-ray cutaway](docs/preview/moon-drill.jpg) |
+| ![Moon rover scanning the subsurface for hydrogen](docs/preview/moon-scan-ui2.jpg) | ![Moon rover drilling for ice with the X-ray cutaway](docs/preview/moon-drill-ui2.jpg) |
 | Moon: scanning the subsurface for hydrogen | Moon: drilling for ice, with the X-ray cutaway |
-| ![Curiosity-style rover on Mars at Korolev crater](docs/preview/mars-rover.jpg) | ![Mars rover identifying a rock with the ChemCam laser](docs/preview/mars-laser.jpg) |
+| ![Curiosity-style rover on Mars at Korolev crater](docs/preview/mars-rover-ui2.jpg) | ![Mars rover identifying a rock with the ChemCam laser](docs/preview/mars-laser-ui2.jpg) |
 | Mars: the rover at Korolev crater | Mars: a rock identified with the ChemCam laser |
 
 More screenshots in [`docs/screenshots/`](docs/screenshots/).
