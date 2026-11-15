@@ -1,62 +1,62 @@
-# Plan: rediseño UI/UX minimalista y claro
+# Plan: minimalist, light UI/UX redesign
 
-Rama: `ui/redesign-light` (sale de `game/msl-edl`). No tocar `main`.
+Branch: `ui/redesign-light` (branched from `game/msl-edl`). Do not touch `main`.
 
-## Objetivo
-La UI del juego **Mission Architect** (`frontend/src/mission-architect/`) pasa a un estilo claro y minimalista,
-inspirado en la referencia "Welcome, Salung / Schedule": fondo gris cálido, tarjetas casi
-blancas muy redondeadas, sombras suaves, mucho aire, tipografía limpia, botones píldora.
-Colores de acento tomados del logo de la NASA (solo los colores: sin logo ni marca, ver
-restricciones de `CLAUDE.md`).
+## Goal
+The UI of the **Mission Architect** game (`frontend/src/mission-architect/`) moves to a light, minimalist style,
+inspired by the "Welcome, Salung / Schedule" reference: warm gray background, almost-white cards with large
+rounded corners, soft shadows, lots of breathing room, clean typography and pill buttons.
+Accent colors are taken from the NASA logo (colors only: no logo or branding, see the
+restrictions in `CLAUDE.md`).
 
-## Lenguaje visual (tokens)
-| Token | Valor | Uso |
+## Visual language (tokens)
+| Token | Value | Use |
 |---|---|---|
-| `--bg` | `#ECEBE8` | fondo de página (gris cálido) |
-| `--surface` | `#F7F6F4` | tarjetas |
-| `--surface-2` | `#FFFFFF` | tarjeta interior / input / nota destacada |
-| `--line` | `#E2E0DC` | bordes de 1px, divisores |
-| `--text` | `#1A1A1A` | títulos y texto |
-| `--text-muted` | `#8A8885` | subtítulos, estados ("Upcoming") |
-| `--primary` | `#0B3D91` | azul NASA: botón principal, selección, barra lateral de tarjeta |
-| `--primary-soft` | `#0B3D9114` | fondo de chip/selección |
-| `--accent` | `#FC3D21` | rojo NASA: solo un dato clave por pantalla (alerta, indicador, CTA de riesgo) |
-| `--ok` / `--warn` / `--error` | `#2E9E6A` / `#C98A12` / `#FC3D21` | estados |
-| `--radius-lg` / `--radius` / `--radius-pill` | `24px` / `14px` / `999px` | tarjeta / control / botón |
-| `--shadow` | `0 1px 2px #0000000a, 0 8px 24px #0000000d` | elevación única |
-| `--sans` | `Inter`, system-ui | todo el texto (Google Fonts) |
+| `--bg` | `#ECEBE8` | page background (warm gray) |
+| `--surface` | `#F7F6F4` | cards |
+| `--surface-2` | `#FFFFFF` | inner card / input / highlighted note |
+| `--line` | `#E2E0DC` | 1px borders, dividers |
+| `--text` | `#1A1A1A` | headings and text |
+| `--text-muted` | `#8A8885` | subtitles, states ("Upcoming") |
+| `--primary` | `#0B3D91` | NASA blue: primary button, selection, card side bar |
+| `--primary-soft` | `#0B3D9114` | chip/selection background |
+| `--accent` | `#FC3D21` | NASA red: only one key element per screen (alert, indicator, risk CTA) |
+| `--ok` / `--warn` / `--error` | `#2E9E6A` / `#C98A12` / `#FC3D21` | states |
+| `--radius-lg` / `--radius` / `--radius-pill` | `24px` / `14px` / `999px` | card / control / button |
+| `--shadow` | `0 1px 2px #0000000a, 0 8px 24px #0000000d` | single elevation |
+| `--sans` | `Inter`, system-ui | all text (Google Fonts) |
 
-Reglas:
-- Una sola elevación (`--shadow`); los bordes de 1px separan, no las sombras apiladas.
-- Botón principal: píldora azul sólida. Secundario: píldora blanca con borde. Icono: círculo blanco 40px.
-- Tarjetas de lista: barra vertical de 3px a la izquierda (azul; rojo si es alerta), título + estado en gris.
-- Navegación: barra tipo píldora flotante con iconos; el activo en círculo blanco.
-- El rojo se usa poco: un acento por pantalla, como el naranja de la referencia.
-- Sin mayúsculas forzadas, sin `clip-path` diagonales, sin halftone, sin skew.
-- Las escenas 3D (Three/Cesium) conservan su fondo espacial oscuro; solo cambia el marco/HUD que las rodea, que pasa a tarjetas claras translúcidas (`backdrop-filter: blur`).
+Rules:
+- A single elevation (`--shadow`); 1px borders separate elements, not stacked shadows.
+- Primary button: solid blue pill. Secondary: white pill with a border. Icon button: 40px white circle.
+- List cards: 3px vertical bar on the left (blue; red if it is an alert), title + state in gray.
+- Navigation: floating pill-shaped bar with icons; the active item sits in a white circle.
+- Red is used sparingly: one accent per screen, like the orange in the reference.
+- No forced uppercase, no diagonal `clip-path`, no halftone, no skew.
+- The 3D scenes (Three/Cesium) keep their dark space background; only the frame/HUD around them changes, becoming translucent light cards (`backdrop-filter: blur`).
 
-Alcance: solo el juego. El editor GMAT (`App.module.css`, `mission/`, `resources/`, `results/`) no se toca.
+Scope: the game only. The GMAT editor (`App.module.css`, `mission/`, `resources/`, `results/`) is not touched.
 
-## Trabajo (en orden)
-1. **Fuente** — Inter desde Google Fonts en `frontend/index.html`.
-2. **Juego** — `mission-architect/styles.css` (910 líneas): remapear las variables de `.ma`
-   (`--bg --panel --panel2 --line --text --dim --lime --pink --cyan…`) a los tokens nuevos
-   para que todo cambie de golpe; luego limpiar por sección: botones (quitar cortes diagonales),
-   topbar (pasos como píldoras), título, diálogo (globo como tarjeta blanca), hangar, mapeo,
-   reporte, setup. Borrar reglas muertas (`.halftone`, skew).
-3. **Colores fijos en TSX del juego** — `ui/Portrait.tsx`, `ui/Patch.tsx`, `three/Backdrop3D.tsx`,
-   `three/HomeScene.tsx`, `three/CoreSample.tsx` y los `style={{}}` sueltos: pasar a `var(--…)` solo
-   lo que es UI; el arte 3D y los retratos se dejan salvo que choquen con el fondo claro.
-4. **Pulido UX** — espaciado consistente (múltiplos de 8), estados hover/focus/disabled visibles
-   (`:focus-visible` azul), contraste AA del texto gris sobre `--bg`, layout sin scroll horizontal
-   en 1280px y 390px.
+## Work (in order)
+1. **Font** — Inter from Google Fonts in `frontend/index.html`.
+2. **Game** — `mission-architect/styles.css` (910 lines): remap the `.ma` variables
+   (`--bg --panel --panel2 --line --text --dim --lime --pink --cyan…`) to the new tokens
+   so everything changes at once; then clean up section by section: buttons (remove diagonal cuts),
+   top bar (steps as pills), title, dialogue (speech bubble as a white card), hangar, mapping,
+   report, setup. Delete dead rules (`.halftone`, skew).
+3. **Hard-coded colors in the game's TSX** — `ui/Portrait.tsx`, `ui/Patch.tsx`, `three/Backdrop3D.tsx`,
+   `three/HomeScene.tsx`, `three/CoreSample.tsx` and loose `style={{}}`: move only the UI parts to `var(--…)`;
+   3D art and portraits are left alone unless they clash with the light background.
+4. **UX polish** — consistent spacing (multiples of 8), visible hover/focus/disabled states
+   (blue `:focus-visible`), AA contrast for gray text on `--bg`, layout with no horizontal scroll
+   at 1280px and 390px.
 
-## Verificación
-- `cd frontend && npm run build` sin errores.
-- Recorrido en Chrome (Claude in Chrome) del juego completo
-  (título → historia → setup → órbita → hangar → aterrizaje → reporte). Captura de cada pantalla.
-- Sin cambios de lógica ni de textos (`i18n`) salvo que el usuario lo pida.
-- `sh docs/docs.sh stale` y actualizar lo que liste.
+## Verification
+- `cd frontend && npm run build` with no errors.
+- Walk through the full game in Chrome (Claude in Chrome)
+  (title → story → setup → orbit → hangar → landing → report). Screenshot of every screen.
+- No changes to logic or texts (`i18n`) unless the user asks for them.
+- `sh docs/docs.sh stale` and update whatever it lists.
 
-## Fuera de alcance
-Editor GMAT, modo oscuro, nuevas pantallas, cambios de física/motor, rediseño del arte 3D y los retratos.
+## Out of scope
+GMAT editor, dark mode, new screens, physics/engine changes, redesign of the 3D art and portraits.
