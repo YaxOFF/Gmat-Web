@@ -8,7 +8,7 @@ import { PLANET } from '../data/planet'
 const MOON_MODES: { id: MissionMode; icon: string; title: string; q: string; what: string; stars: number; tag?: string }[] = [
   { id: 'A', icon: '', title: 'Map it', q: 'Where is the hydrogen?', what: 'Fly an orbiter, map the south pole and point to the best crater.', stars: 1 },
   { id: 'B', icon: '', title: 'Touch it', q: 'Is it really ice?', what: 'Orbiter + a rover that lands, drives into the dark and drills.', stars: 2, tag: 'Recommended' },
-  { id: 'C', icon: '', title: 'Measure it', q: 'How much ice, and how deep?', what: 'Adds a radar and a 2 m drill. Bigger budget, harder choices.', stars: 3 },
+  { id: 'C', icon: '', title: 'Measure it', q: 'How much ice, and how deep?', what: 'Adds a radar and a 1 m deep drill. Bigger budget, harder choices.', stars: 3 },
 ]
 const MARS_MODES: typeof MOON_MODES = [
   { id: 'A', icon: '', title: 'Map it', q: 'Where did the water flow?', what: 'Fly an orbiter, map the old lakes and rivers and point to the best site.', stars: 1 },

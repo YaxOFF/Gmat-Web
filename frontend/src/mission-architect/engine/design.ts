@@ -104,7 +104,7 @@ export function computeStats(d: Design, iterations = 0): Stats {
   if ((d.mode ?? 'B') !== 'A') {
     for (const g of ROVER_REQUIRED) if (!parts.some((p) => p.group === g)) errors.push(`Mission ${d.mode ?? 'B'} needs a rover part: ${GROUP_LABEL[g]}.`)
   } else if (parts.some((p) => ROVER_GROUPS.includes(p.group))) errors.push('Mission A is orbiter only: remove the Rover Bay parts.')
-  if (d.mode === 'C' && !has(d, 'drill_deep')) errors.push('Mission C needs the deep drill (2 m).')
+  if (d.mode === 'C' && !has(d, 'drill_deep')) errors.push('Mission C needs the deep drill (1 m).')
   if (d.mode === 'C' && !has(d, 'radar')) errors.push(`Mission C needs the ${PART.radar.name} to see what is buried under the surface.`)
   if (slotsUsed > slotsMax && bus) errors.push(`The ${bus.name.toLowerCase()} only has ${slotsMax} instrument slots.`)
   if (has(d, 'radar') && (!has(d, 'panel_gaas') || !has(d, 'bat_2')))

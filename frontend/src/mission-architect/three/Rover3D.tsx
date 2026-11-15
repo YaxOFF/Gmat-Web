@@ -5,7 +5,7 @@ import { clamp, mulberry32, type Rng } from '../engine/rng'
 import { demHeight, loadDem, noise, SIZE, type Dem } from './dem'
 import { buildLander } from './spacecraft'
 import { loadCuriosity, meshHeight, type CuriosityRig, type HeightFn } from './curiosity'
-import { at, earthMesh, mountStage, stars } from './stage'
+import { at, earthMesh, mountStage, realSky } from './stage'
 import type { RockField } from './rocks'
 import { MOON, type RoverSite, type World } from './world'
 import { DUST, dust, dustWall, footprint, outcropGeometry, skyDome, triplanarRock } from './mars'
@@ -43,6 +43,11 @@ const SCAN_T = 2, SCAN_R = 16
 // Marte: Curiosity perfora unos 5 cm de roca (m = hondura que dibuja el corte de rayos X).
 const ROCK_CORE = { label: '5 cm', m: 0.25, cm: 5, mul: 1, cost: 3, jam: 0.04 }
 const MAP_N = 96 // celdas por lado del mapa de hidrógeno
+// Luna (tipo VIPER): el brazo se pliega como torre vertical junto al chasis (TRIDENT), la broca avanza por tramos
+// con lectura del polvo en cada uno, se calienta al perforar, y en la sombra la vista de navegación solo llega
+// hasta el Lidar (LIDAR_R m) o el cono de los faros.
+const TOWER_REACH = 0.45, BITES = 4, BITE_T = 0.6, LIDAR_R = 12
+const SUN_X = 0.0995, SUN_Z = -0.995 // rumbo horizontal del Sol lunar (la luz está en (40, 30, −400))
 // Vista de navegación (G): cuadrícula de peligros de HZ×HZ celdas (2 m) y alcance de las cámaras del mástil.
 const HZ = 120, SEE_R = 40, LABELS = 14 // HZ × world.scale celdas por lado: siguen siendo de 2 m
 const HAZ_RGBA = [[60, 230, 160, 0], [255, 200, 40, 120], [255, 60, 50, 210]] // seguro, precaución, peligro
@@ -186,7 +191,6 @@ const DEPTHS = [
   { label: '25 cm', m: 0.25, mul: 0.6, cost: 3, jam: 0.03 },
   { label: '50 cm', m: 0.5, mul: 1, cost: 4, jam: 0.08 },
   { label: '1 m', m: 1, mul: 1.4, cost: 6, jam: 0.15 },
-  { label: '2 m', m: 2, mul: 1.8, cost: 8, jam: 0.22 },
 ]
 const tier = (pct: number) => pct > 5 ? { pts: 100, msg: 'RICH VEIN! Viable resource for Artemis.' }
   : pct >= 1 ? { pts: 60, msg: 'WATER ICE CONFIRMED.' }
@@ -203,6 +207,10 @@ interface Hud {
   under: string; canDrill: boolean; cores: number
   /** Vista de navegación: activa, rocas que vieron las cámaras y a cuántos metros queda la sugerida (−1 = ninguna). */
   nav: boolean; seen: number; nextD: number; nextDrill: boolean
+  /** Luna: lecturas por tramo (k: 0 seco, 1 trazas, 2 hielo), calor de la broca 0..1, s de enfriado forzado,
+   *  carga solar en %/s (0 = no carga) y gases en vivo del espectrómetro de masas (H2O, H2, CO2; null = nada). */
+  core: null | { pct: number; cm: number; title: string; lost: number; bites: { t: string; k: number }[] }
+  bites: { t: string; k: number }[]; heat: number; hot: number; chg: number; gas: null | [number, number, number]
   /** drilling = SPACE sostenido (drill = avance 0..1). laser: −1 = apagado, 0 = apuntando, 0..1 = analizando. */
   drilling: boolean; laser: number; inRange: boolean; kinds: number; kindsAll: number; scanned: number
   /** Espectro LIBS: k = avance del análisis (1 = roca identificada). */
@@ -264,8 +272,11 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     const { deposits, signalAt } = siteDeposits(rng, crater, start, world)
 
     scene.background = new THREE.Color(world.sky ?? 0x000000)
-    if (world.sky === undefined) scene.add(stars(rng, 3000, 1500))
-    else scene.fog = new THREE.FogExp2(world.sky, 0.0045) // polvo en suspensión: el horizonte se pierde en el cielo
+    // Cielo sin atmósfera: estrellas reales (Tycho-2). Antes eran 3000 puntos al azar sembrados; se siguen sacando
+    // esos 6000 números del rng para que cada semilla dé las mismas rocas y depósitos que antes.
+    const starSky = world.sky === undefined ? realSky() : null
+    if (starSky) { for (let i = 0; i < 6000; i++) rng(); scene.add(starSky) }
+    if (world.sky !== undefined) scene.fog = new THREE.FogExp2(world.sky, 0.0045) // polvo en suspensión: el horizonte se pierde en el cielo
     scene.add(world.sky === undefined ? new THREE.HemisphereLight(0x9aa6c8, 0x050505, 0.35) : new THREE.HemisphereLight(0xe0b48a, 0x3a2418, 0.9))
     const sun = new THREE.DirectionalLight(world.shadow ? 0xfff3dd : 0xffe2c4, world.shadow ? 3.6 : 2.8)
     if (world.shadow) sun.position.set(40, 30, -400); else sun.position.set(-90, 95, 440) // bajo (~12°) y al frente del arranque: atardecer
@@ -276,8 +287,9 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     scene.add(sun)
     const sky = world.storms ? skyDome(sun.position) : null // atardecer de Marte con halo azul; la niebla toma el color del horizonte
     if (sky) scene.add(sky)
-    const earth = earthMesh(18) // ~2° vista desde la Luna (como se ve de verdad desde el polo sur)
-    earth.position.set(-500, 40, -900); if (world.shadow) scene.add(earth)
+    // La Tierra, baja sobre el horizonte norte (se ve al entrar a la sombra) y casi llena con el Sol al sur.
+    const earth = earthMesh(22)
+    earth.position.set(-760, 150, 900); if (world.shadow) scene.add(earth)
 
     // Terreno: borde iluminado al sur, piso en sombra; velo azul = hidrógeno que vio el orbitador.
     const geo = new THREE.PlaneGeometry(size, size, seg, seg); geo.rotateX(-Math.PI / 2)
@@ -387,7 +399,21 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     rover.traverse((o) => { o.castShadow = true })
     scene.add(rover)
     let rig: CuriosityRig | null = null, gone = false
-    loadCuriosity().then((r) => { if (gone) return; rig = r; rover.remove(proxy); rover.add(r.model) }).catch((err) => console.error(err))
+    loadCuriosity().then((r) => {
+      if (gone) return
+      rig = r; rover.remove(proxy); rover.add(r.model)
+      if (!iceHunt) return
+      // Luna: paneles solares verticales a los costados y atrás, para el Sol rasante del polo (como VIPER).
+      const cell = new THREE.MeshStandardMaterial({ color: 0x16296b, metalness: 0.6, roughness: 0.3, emissive: 0x060d2a })
+      const frame = new THREE.MeshStandardMaterial({ color: 0xc9ccd4, metalness: 0.4, roughness: 0.5 })
+      for (const [px, pz, ry] of [[0.6, -0.35, 0], [-0.6, -0.35, 0], [0, -1.02, Math.PI / 2]] as const) {
+        const panel = new THREE.Group()
+        panel.add(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.62, 1.15), cell), new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.68, 1.21), frame))
+        panel.position.set(px, 1.5, pz); panel.rotation.set(0, ry, px ? -Math.sign(px) * 0.14 : 0)
+        panel.traverse((o) => { o.castShadow = true })
+        r.model.add(panel)
+      }
+    }).catch((err) => console.error(err))
 
     // Orbitador cruzando el cielo durante cada ventana de relevo.
     const orb = new THREE.Mesh(new THREE.SphereGeometry(3, 12, 8), new THREE.MeshBasicMaterial({ color: 0x5cc8f0 }))
@@ -396,10 +422,23 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     let beacon: THREE.Mesh | null = null
 
     let x = 0, z = -74, yaw = 0, speed = 0, bat = start.batteryPct, temp = 20, heaters = true
-    const depth = start.deep ? 3 : 2 // hondura fija: la del taladro instalado (1 m, o 2 m con el taladro profundo)
+    const depth = start.deep ? 2 : 1 // hondura fija: la del taladro instalado (50 cm, o 1 m con el profundo: el tope real de VIPER)
     let prog = 0, drilling = false, holeX = Infinity, holeZ = Infinity, contact = 0
     let laserT = 0, aimed = false, aimT = 0, zapT = 0, libsT = 0, scannedN = 0, scanT = 0, cores = 0, mapDirty = true
     let drillRock: Rock | null = null
+    let spaceLock = false // tras terminar (o sobrecalentar) hay que soltar SPACE: la repetición de tecla no reinicia el taladro
+    let coreT = 0, coreInfo: Hud['core'] = null
+    let iceTop = 0.5, biteT = 0, bitT = 0, hotT = 0, sublim = 0, chg = 0
+    const bites: { t: string; k: number }[] = []
+    // Lectura del polvo que sube la broca al llegar a la fracción f del hoyo. Con espectrómetro de masas da el
+    // agua estimada; sin él solo se ve si el polvo trae escarcha.
+    const reading = (f: number) => {
+      const cm = Math.round(f * cur().cm)
+      const est = xIce > 0 && f >= iceTop ? xIce * (1 - sublim) * Math.min(1, (f - iceTop) / (1 - iceTop) + 0.25) : 0
+      if (!start.massSpec) return { t: `${cm} cm · ${est > 0 ? 'frost in the cuttings' : 'dry cuttings'}`, k: est > 0 ? 2 : 0 }
+      if (est > 0) return { t: `${cm} cm · water ice ~${est.toFixed(1)}%`, k: 2 }
+      return xIce > 0 && f >= iceTop - 1 / BITES ? { t: `${cm} cm · traces of water vapor`, k: 1 } : { t: `${cm} cm · dry regolith`, k: 0 }
+    }
     let nav = false, navK = 0, pathT = 0, seenN = 0, next: Rock | null = null, shown: Rock[] = []
     const scans: { x: number; z: number }[] = [], holes: { x: number; z: number; wet: boolean }[] = []
     const flags = new Map<Rock, THREE.Mesh>() // rocas analizadas que conviene perforar
@@ -456,7 +495,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         else say('Still stuck. Try again (R): each attempt costs battery.')
       }
     }
-    const up = (e: KeyboardEvent) => { keys.delete(e.code); if (GAME_KEYS.has(e.code) && visible()) { e.preventDefault(); e.stopPropagation() } }
+    const up = (e: KeyboardEvent) => { keys.delete(e.code); if (e.code === 'Space') spaceLock = false; if (GAME_KEYS.has(e.code) && visible()) { e.preventDefault(); e.stopPropagation() } }
     ;(document.activeElement as HTMLElement | null)?.blur?.()
     addEventListener('keydown', down, true); addEventListener('keyup', up, true)
 
@@ -633,13 +672,21 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     // La cuadrícula usa la misma malla del terreno (mismos UV), así queda pegada al relieve.
     const gridMat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-      uniforms: { haz: { value: hazTex }, rover: { value: new THREE.Vector2() }, n: { value: hz }, gain: { value: 0 } },
+      uniforms: {
+        haz: { value: hazTex }, rover: { value: new THREE.Vector2() }, n: { value: hz }, gain: { value: 0 },
+        fwd: { value: new THREE.Vector2(0, 1) }, lamp: { value: 1 }, lightZ: { value: world.shadow ? LIGHT_Z : 1e6 }, lidar: { value: LIDAR_R },
+      },
       vertexShader: 'varying vec2 vUv; varying vec2 vW; void main() { vUv = uv; vec4 w = modelMatrix * vec4( position, 1.0 ); vW = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }',
       fragmentShader: `uniform sampler2D haz; uniform vec2 rover; uniform float n; uniform float gain; varying vec2 vUv; varying vec2 vW;
+        uniform vec2 fwd; uniform float lamp; uniform float lightZ; uniform float lidar;
         void main() {
           vec2 f = abs( fract( vUv * n ) - 0.5 ); float line = smoothstep( 0.455, 0.5, max( f.x, f.y ) );
           vec4 h = texture2D( haz, vUv );
-          float a = ( h.a * 0.5 + line * 0.6 ) * ( 1.0 - smoothstep( 30.0, 60.0, distance( vW, rover ) ) ) * gain;
+          vec2 to = vW - rover; float d = length( to );
+          // En la sombra permanente las cámaras no ven: queda el Lidar cercano y lo que alumbran los faros.
+          float cone = lamp * smoothstep( 0.80, 0.88, dot( to / max( d, 0.001 ), fwd ) ) * ( 1.0 - smoothstep( 36.0, 45.0, d ) );
+          float seen = mix( 1.0, max( 1.0 - smoothstep( lidar - 2.0, lidar + 1.0, d ), cone ), smoothstep( lightZ - 2.0, lightZ + 2.0, vW.y ) );
+          float a = ( h.a * 0.5 + line * 0.6 ) * ( 1.0 - smoothstep( 30.0, 60.0, d ) ) * seen * gain;
           if ( a < 0.01 ) discard;
           gl_FragColor = vec4( h.rgb, a );
         }`,
@@ -802,7 +849,10 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
 
         // Energía y temperatura.
         bat -= dt * (drain() + Math.abs(speed) * 0.07) * kB
-        if (!dark && storm < 0.3) bat = Math.min(100, bat + dt * 1.4 * (1 - panelDust) * kB) // el polvo tapa los paneles
+        // Carga solar. En la Luna el Sol es rasante: los paneles laterales rinden más con el rover de costado al Sol
+        // (2 %/s) que de frente o de espaldas (0.8 %/s). En Marte el polvo tapa los paneles y la tormenta corta la carga.
+        chg = dark || storm >= 0.3 ? 0 : (world.shadow ? 0.8 + 1.2 * Math.abs(Math.cos(yaw) * SUN_X - Math.sin(yaw) * SUN_Z) : 1.4) * (1 - panelDust)
+        if (chg > 0) bat = Math.min(100, bat + dt * chg * kB)
         if (world.storms) {
           stormT -= dt
           if (phase === 'calm' && stormT <= 0 && (forceNext || rng() < dt / STORM.every)) {
@@ -832,12 +882,15 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         // Marte: solo rocas (la que quede bajo la broca), una vez cada una.
         if (jamT > 0) jamT -= dt
         const D = cur()
-        const holding = keys.has('Space') && laserT === 0 && scanT === 0
-        let want = holding && jamT <= 0 && Math.abs(speed) < 0.8
+        const holding = keys.has('Space') && !spaceLock && laserT === 0 && scanT === 0
+        if (hotT > 0) hotT -= dt
+        if (holding && hotT > 0 && toastT <= 0) say('The bit is too hot. Let it cool for a moment.', 1.5)
+        let want = holding && jamT <= 0 && hotT <= 0 && Math.abs(speed) < 0.8
         if (want && !drilling) {
           const quiet = toastT <= 0
           if (iceHunt) {
             if (!dark && world.shadow) { want = false; if (quiet) say('Nothing to find on the sunlit rim: drive into the shadow first.') }
+            else if (holes.some((k) => Math.hypot(k.x - x, k.z - z) < 1)) { want = false; if (quiet) say('This spot is already drilled. Move at least 1 m away.', 2.5) }
           } else {
             drillRock = field.under(dp.x, dp.z, DRILL_R)
             if (pending) { want = false; if (quiet) say('Seal or discard the last core first.', 2.5) }
@@ -847,18 +900,39 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         }
         if (want && !drilling) {
           if (Math.hypot(x - holeX, z - holeZ) > 0.25) { prog = 0; holeX = x; holeZ = z }
-          if (prog === 0) { xIce = iceHunt ? sampleAt(D.mul).pct : 0; xray.reset() } // los rayos X muestran el hielo que hay ahí
+          if (prog === 0) {
+            // Hoyo nuevo: cuánto hielo hay y desde qué fracción del hoyo aparece (fija por lugar; no consume el rng).
+            xIce = iceHunt ? sampleAt(D.mul).pct : 0; iceTop = 0.2 + hash2(x * 7.1, z * 3.3) * 0.55
+            xray.reset(iceHunt ? iceTop : 0.25); bites.length = 0; sublim = 0 // los rayos X muestran ese mismo hielo
+          }
           libsT = 0
         }
         drilling = want
         if (!drilling && prog > 0 && Math.hypot(x - holeX, z - holeZ) > 0.25) prog = 0 // se fue del hoyo: avance perdido
-        if (drilling && (rig ? contact >= 1 : true)) {
-          const step = dt / drillSecs(D.m)
+        // Por tramos (como TRIDENT): cada 1/BITES del hoyo la broca se detiene un momento a sacar el polvo y da una lectura.
+        const cutting = drilling && biteT <= 0 && (rig ? contact >= 1 : true)
+        if (biteT > 0) biteT -= dt
+        // La broca se calienta al cortar (más en hielo) y se enfría al parar; soltar SPACE la enfría más rápido.
+        if (!cutting) bitT = Math.max(0, bitT - dt * (drilling ? 0.2 : 0.5))
+        if (cutting) {
+          const step = dt / drillSecs(D.m), before = prog
           prog += step; bat -= D.cost * kB * step // la energía se gasta a medida que avanza
           drill.position.y = -0.05 - Math.sin(t * 20) * 0.08
+          if (iceHunt && prog < 1) {
+            const inIce = xIce > 0 && prog >= iceTop
+            bitT += dt * (0.17 + (inIce ? 0.12 : 0))
+            const b = Math.floor(prog * BITES)
+            if (b > Math.floor(before * BITES)) { const r = reading(b / BITES); bites.push(r); biteT = BITE_T; beep(r.k === 2 ? 1500 : r.k === 1 ? 1000 : 600) }
+            if (bitT >= 1) {
+              // Sobrecalentada: se detiene sola unos segundos y, si ya estaba en hielo, parte se sublima.
+              bitT = 1; hotT = 2.5; drilling = false; spaceLock = true
+              if (inIce) { sublim = Math.min(0.6, sublim + 0.15); say('Bit overheated! Part of the ice sublimated (−15% water). Drill in shorter bursts.', 4) }
+              else say('Bit overheated. Let it cool, then keep drilling in shorter bursts.', 3)
+            }
+          }
           if (prog >= 1) {
             // Hoyo terminado: el taladro se detiene solo; hay que soltar y volver a apretar SPACE para el siguiente.
-            prog = 0; drilling = false; holeX = holeZ = Infinity; keys.delete('Space'); drill.position.y = 0.2
+            prog = 0; drilling = false; holeX = holeZ = Infinity; spaceLock = true; drill.position.y = 0.2
             if (rng() < D.jam) { jamT = 15; bat -= 2 * kB; say('Jammed drill! Freeing it takes 15 s (−2% battery).') }
             else if (!iceHunt) {
               // Marte: el polvo de la roca va a CheMin y SAM; esa roca no se vuelve a perforar.
@@ -881,10 +955,11 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
             }
             else if (temp < -30 && rng() < 0.35) say('Instrument fault from the cold — sample lost. Turn the heaters on.')
             else {
-              const { pct, dep } = sampleAt(D.mul)
+              const core = sampleAt(D.mul), dep = core.dep, pct = +(core.pct * (1 - sublim)).toFixed(1) // lo sublimado se perdió
               record(pct); mark(pct > 0)
               if (dep) dep.taken = true
               holes.push({ x, z, wet: pct > 0 }); mapDirty = true
+              coreInfo = { pct, cm: D.cm, title: start.massSpec || !pct ? tier(pct).msg : 'Hydrogen detected (unconfirmed).', lost: Math.round(sublim * 100), bites: [...bites, reading(1)] }; coreT = 14
               if (pct > 0) beep(1400)
               say(verdict(pct) + ' Stored until the next relay pass.')
               if (pct > 0 && !anomaly) {
@@ -924,6 +999,8 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
           }
         }
         if (libsT > 0) libsT -= dt
+        if (coreT > 0) coreT -= dt
+        if (drilling) coreT = 0
         // Luna: escaneo del subsuelo. Deja nítido en el mapa lo que hay a SCAN_R m (el orbitador solo da manchas gruesas).
         if (scanT > 0) {
           scanT -= dt
@@ -988,6 +1065,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
               : 'Press G for the navigation cameras: they tag the rocks, show hazards and suggest a safe route.')
             : !dark && !entered ? 'Drive north (W) across the orange line. The ice is in the permanent shadow.'
             : !dark && st.wet > 0 ? 'Safe in the sunlight. End the mission, or recharge and go back in.'
+            : !dark && bat < 99 && chg < 1.6 ? 'Recharging slowly: park side-on to the Sun so the side panels face it.'
             : !dark ? 'Recharging in the sun. Head back into the shadow when ready.'
             : bat < need + 12 ? 'Battery is getting low: turn back south to the light now.'
             : sig > 0.2 ? 'Strong signal! Stop (S) and hold SPACE to drill here.'
@@ -1003,6 +1081,9 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
             integ, stuck, teleop: !start.autonav && !link, extended: st.extended,
             lcam: lpov > 0.5, pov: pov > 0.5, xray: xOn, xcm: +(clamp(prog, 0, 1) * cur().cm).toFixed(1), xmax: cur().cm, xice: xSeen,
             under, canDrill, cores,
+            core: coreT > 0 ? coreInfo : null,
+            bites: [...bites], heat: bitT, hot: Math.max(0, hotT), chg,
+            gas: iceHunt && start.massSpec && sig > 0.04 ? [sig * (0.85 + Math.random() * 0.15), sig * (0.4 + Math.random() * 0.2), sig * (0.2 + Math.random() * 0.15)] : null,
             nav, seen: seenN, nextD: next ? Math.hypot(next.x - x, next.z - z) : -1, nextDrill: !!next && flags.has(next),
             laser: scanT > 0 ? 1 - scanT / SCAN_T : laserT > 0 ? (aimed ? 1 - laserT / LASER_T : 0) : -1, inRange: !!cand,
             clean: 1 - panelDust, tubes: tubes.length, stuckHint: stuckT > 2.5 || stuck,
@@ -1024,7 +1105,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       if (rig) {
         // Suspensión procedural: cada rueda busca el suelo y el chasis queda en el promedio de los rockers.
         rig.update(dt, rover, x, z, yaw, paused ? 0 : speed, paused ? 0 : steer, surface)
-        rig.drill(dt, drilling, drillGround)
+        rig.drill(dt, drilling, drillGround, iceHunt ? TOWER_REACH : undefined)
         if (rig.aim(dt, laserT > 0 ? hit : null) && laserT > 0) aimed = true
         rig.laserOrigin(lo)
       } else {
@@ -1079,6 +1160,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       fpPos.set(x + sy * 0.95, rover.position.y + 2.15, z + cy * 0.95)
       fpLook.set(x + sy * 12, rover.position.y + 0.3, z + cy * 12)
       gridMesh.visible = navK > 0.02; gridMat.uniforms.gain.value = kn; gridMat.uniforms.rover.value.set(x, z)
+      gridMat.uniforms.fwd.value.set(sy, cy); gridMat.uniforms.lamp.value = lamp.visible ? 1 : 0
       camera.position.copy(chase).lerp(fpPos, kn).lerp(povPos, k)
       look.copy(chaseLook).lerp(fpLook, kn).lerp(povLook, k)
       // Cámara del láser: junto a la roca, del lado contrario al rover, con la chispa adelante y el mástil al fondo.
@@ -1125,7 +1207,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         sky.material.uniforms.uFrom.value.set(fromX(), fromZ())
       }
     }
-    return Object.assign(tick, { cleanup: () => { gone = true; labBox?.replaceChildren(); removeEventListener('keydown', down, true); removeEventListener('keyup', up, true); void audio?.close() } })
+    return Object.assign(tick, { cleanup: () => { gone = true; (starSky?.userData.dispose as (() => void) | undefined)?.(); labBox?.replaceChildren(); removeEventListener('keydown', down, true); removeEventListener('keyup', up, true); void audio?.close() } })
   }), [crater, world, iceHunt, quality, seed, orbitId, start, dem])
 
   const h = hud
@@ -1146,8 +1228,14 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       {h && !final && (h.drilling || h.drill > 0) && (
         <div className="rv-hold">
           <small>{!h.drilling ? `PAUSED AT ${Math.round(h.drill * 100)}% · HOLD SPACE TO RESUME` : h.xray || h.drill > 0 ? `DRILLING · ${h.xcm} / ${h.xmax} cm · KEEP HOLDING SPACE` : 'DEPLOYING ARM · KEEP HOLDING SPACE'}</small>
-          <div className="rv-hold-bar"><i style={{ width: `${Math.min(100, h.drill * 100)}%` }} /></div>
+          <div className="rv-hold-bar"><i style={{ width: `${Math.min(100, h.drill * 100)}%` }} />{iceHunt && [1, 2, 3].map((k) => <em key={k} style={{ left: `${k * 25}%` }} />)}</div>
           <b>{Math.round(h.drill * 100)}%</b>
+          {iceHunt && (
+            <>
+              <div className={`rv-heat${h.heat > 0.8 ? ' hot' : ''}`}><span>BIT TEMP{h.hot > 0 ? ` · COOLING ${h.hot.toFixed(1)} s` : h.heat > 0.8 ? ' · RELEASE SPACE TO COOL' : ''}</span><div><i style={{ width: `${Math.min(100, h.heat * 100)}%` }} /></div></div>
+              {h.bites.length > 0 && <ul className="rv-bites">{h.bites.map((b) => <li key={b.t} className={`k${b.k}`}>{b.t}</li>)}</ul>}
+            </>
+          )}
         </div>
       )}
       {h && !final && h.laser >= 0 && (
@@ -1176,7 +1264,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       {h && (
         <div className="rv-hud">
           <h3>BUSCADOR · {crater.name}</h3>
-          <div className="rv-row"><span>Battery</span><b>{h.bat.toFixed(0)}%{h.shadow || h.storm === 'EXPOSED' || h.storm === 'sheltered' ? '' : ' charging'}</b></div>
+          <div className="rv-row"><span>Battery</span><b>{h.bat.toFixed(0)}%{h.chg > 0 ? ` charging ${h.chg.toFixed(1)}%/s` : ''}</b></div>
           <div className="rv-bar rv-bat">
             <i style={{ width: `${h.bat}%`, background: h.trapped || h.bat < h.need + 5 ? 'var(--red)' : undefined }} />
             {h.need > 0 && <em style={{ left: `${Math.min(h.need, 100)}%` }} title="Battery needed to return to the light" />}
@@ -1212,11 +1300,30 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         </div>
       )}
       <div ref={labelsRef} className="rv-labels" hidden />
+      {h?.core && !final && (
+        <div className="rv-libs gas core">
+          <small>CORE RESULT · {h.core.cm} cm HOLE</small>
+          <h4>{h.core.title}</h4>
+          <p className="min">{h.core.pct > 0 ? `${h.core.pct}% water by weight` : 'No water in this core'}{h.core.lost > 0 ? ` · ${h.core.lost}% lost to bit heat` : ''}</p>
+          <ul className="rv-bites">{h.core.bites.map((b) => <li key={b.t} className={`k${b.k}`}>{b.t}</li>)}</ul>
+          <p>This hole is done. Stored until the next relay pass.</p>
+        </div>
+      )}
+      {h?.gas && !h.core && !final && !h.pov && (
+        <div className="rv-libs gas">
+          <small>MASS SPECTROMETER · LIVE VOLATILES</small>
+          <div className="rv-spec">
+            {(['H₂O', 'H₂', 'CO₂'] as const).map((el, i) => <div key={el}><i style={{ height: `${Math.round(Math.min(1, h.gas![i]) * 100)}%` }} /><span>{el}</span></div>)}
+          </div>
+          <p>Gases rising from the regolith. Sweep the area to find where the water peak is strongest before drilling.</p>
+        </div>
+      )}
       {h?.nav && !final && !h.pov && !h.lcam && (
         <div className="rv-nav">
           <b>● NAVCAM · HAZARD VIEW</b>
           <span><i className="n-safe" /> clear</span><span><i className="n-warn" /> caution</span><span><i className="n-bad" /> hazard</span>
           {!iceHunt && <span><i className="n-path" /> suggested route{h.nextD >= 0 ? ` · ${h.nextDrill ? 'drill target' : 'rock to scan'} ${h.nextD.toFixed(0)} m` : ' · no rock in sight'}</span>}
+          {iceHunt && h.shadow && <span>in the dark: lidar {LIDAR_R} m + headlights <kbd>L</kbd></span>}
           <span><kbd>G</kbd> close</span>
         </div>
       )}

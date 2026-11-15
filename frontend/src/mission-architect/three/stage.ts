@@ -53,6 +53,37 @@ export function stars(rng: Rng, n = 2500, r = 3000): THREE.Points {
   return new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false }))
 }
 
+const TEX = `${import.meta.env.BASE_URL}cesium/Assets/Textures/`
+
+/**
+ * Cielo real: el mapa de estrellas Tycho-2 que trae Cesium (cubo en ejes ecuatoriales, con la Vía Láctea y las
+ * constelaciones donde están de verdad). Va pegado a la cámara y al fondo de todo. El cubo se muestrea con la
+ * dirección tal cual, como hace Cesium; `scene.background` de three invierte X y dejaría el cielo en espejo.
+ * La matriz lleva el "arriba" del mundo al polo sur de la eclíptica, que es el cenit del polo sur lunar: el Sol
+ * y la Tierra quedan cerca del horizonte, como allá. Si las imágenes no cargan, el fondo queda negro.
+ */
+export function realSky(gain = 1.5): THREE.Mesh {
+  const tex = new THREE.CubeTextureLoader().load(['px', 'mx', 'py', 'my', 'pz', 'mz'].map((f) => `${TEX}SkyBox/tycho2t3_80_${f}.jpg`))
+  tex.colorSpace = THREE.SRGBColorSpace
+  const mat = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthTest: false, depthWrite: false, fog: false,
+    uniforms: {
+      sky: { value: tex }, gain: { value: gain },
+      // Columnas = ejes X, Y, Z del mundo vistos en el cielo ecuatorial (Y = polo sur de la eclíptica).
+      toSky: { value: new THREE.Matrix3().set(1, 0, 0, 0, 0.3978, 0.9175, 0, -0.9175, 0.3978) },
+    },
+    vertexShader: 'varying vec3 vDir; void main() { vDir = position; gl_Position = projectionMatrix * vec4( mat3( viewMatrix ) * position, 1.0 ); gl_Position.z = gl_Position.w; }',
+    fragmentShader: `uniform samplerCube sky; uniform float gain; uniform mat3 toSky; varying vec3 vDir;
+      void main() { gl_FragColor = vec4( textureCube( sky, toSky * normalize( vDir ) ).rgb * gain, 1.0 );
+        #include <colorspace_fragment>
+      }`,
+  })
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), mat)
+  mesh.frustumCulled = false; mesh.renderOrder = -1000
+  mesh.userData.dispose = () => tex.dispose()
+  return mesh
+}
+
 /** Cambia la textura del material por el cuerpo real: Luna (color LROC + relieve LOLA, tools/moon/build_moon.py)
  *  o Marte con `dir = 'mars'` (Viking + HRSC/MOLA, tools/mars/build_mars.py). Si los archivos no cargan, se queda la procedural. */
 export function realMoon(mat: THREE.MeshStandardMaterial, dir = 'moon'): void {

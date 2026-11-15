@@ -13,7 +13,8 @@ export interface Xray {
    */
   update(dt: number, p: THREE.Vector3, on: boolean, progress: number, depth: number, ice: number): boolean
   /** Vuelve a sembrar estratos y hielo para una perforación nueva. */
-  reset(): void
+  /** `from` = fracción del hoyo (0..1) desde la que aparece el hielo. */
+  reset(from?: number): void
 }
 
 const CORE_R = 0.17, SHAFT_R = 0.022, ICE_MAX = 70, DUST = 60, MOON_G = 1.62
@@ -73,10 +74,10 @@ export function makeXray(crystal = 0x38e1ff): Xray {
   group.add(xr, dust)
 
   let fade = 0, spin = 0, iceN = 0
-  const reset = () => {
+  const reset = (from = 0.25) => {
     strata.offset.y = Math.random()
     // Profundidades 0..1 (fracción del hoyo), ordenadas; radio dentro del núcleo.
-    const ds = Array.from({ length: ICE_MAX }, () => 0.25 + Math.random() * 0.75).sort((a, b) => a - b)
+    const ds = Array.from({ length: ICE_MAX }, () => from + Math.random() * (1 - from)).sort((a, b) => a - b)
     ds.forEach((d, i) => {
       const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * CORE_R * 0.85
       iceDepth[i] = d; icePos.set([Math.cos(a) * r, 0, Math.sin(a) * r], i * 3)
