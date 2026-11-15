@@ -14,6 +14,7 @@ const CommandForm = lazy(() => import('./mission/CommandForm'))
 const Results = lazy(() => import('./results/Results'))
 const SolverPanel = lazy(() => import('./results/SolverPanel'))
 const View3D = lazy(() => import('./results/View3D')) // Cesium pesa varios MB: solo al abrir la pestaña 3D
+const Journey3D = lazy(() => import('./results/Journey3D'))
 const Game = lazy(() => import('./mission-architect/App')) // juego Mission Architect: three.js solo al abrirlo
 const goto = (line: number) => import('./editor/gmat').then((m) => m.revealLine(line))
 const history = (what: 'undo' | 'redo') => void import('./editor/gmat').then((m) => m.history(what))
@@ -231,6 +232,7 @@ export default function App() {
         {centerTab === 'results' && <Suspense fallback={null}><Results /></Suspense>}
         {centerTab === 'solver' && <Suspense fallback={null}><SolverPanel /></Suspense>}
         {centerTab === 'view3d' && <Suspense fallback={null}><View3D /></Suspense>}
+        {centerTab === 'journey' && <Suspense fallback={null}><Journey3D /></Suspense>}
       </main>
       <Console />
       {gallery && <SampleGallery onClose={() => setGallery(false)} />}
