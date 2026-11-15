@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { Crater } from '../data/types'
 import { clamp, mulberry32, type Rng } from '../engine/rng'
 import { mountStage, stars } from './stage'
@@ -7,6 +8,90 @@ import { mountStage, stars } from './stage'
 export interface RoverResult { samples: number; wet: number; waterG: number; bestPct: number; seed: number }
 
 const SIZE = 240, HALF = SIZE / 2, RIM = 92
+// Regolito "moon_03" (Poly Haven, CC0): un mosaico cada TILE unidades; GAIN compensa que la difusa es oscura.
+const TILE = 12, GAIN = 1.8
+
+// Hex-tiling (Mikkelsen, "Practical Real-Time Hex-Tiling", JCGT 2022): el plano se parte en hexágonos y cada uno
+// muestrea la textura con su propio giro y desplazamiento; cada píxel mezcla los 3 más cercanos, así no hay período.
+// textureGrad con las derivadas giradas evita costuras de mip; la normal se gira de vuelta para que la luz cuadre.
+const UNTILE = /* glsl */ `
+const float HEX_SQ3 = 1.7320508, HEX_DENS = 0.6, HEX_GAIN = 4.0;
+float untileHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float untileNoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(untileHash(i), untileHash(i + vec2(1, 0)), f.x), mix(untileHash(i + vec2(0, 1)), untileHash(i + 1.0), f.x), f.y);
+}
+vec2 hexHash2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
+void hexGrid(vec2 st, out vec3 w, out vec2 v1, out vec2 v2, out vec2 v3) {
+  vec2 sk = mat2(1.0, -0.57735027, 0.0, 1.15470054) * (st * 2.0 * HEX_SQ3);
+  vec2 b = floor(sk); vec3 t = vec3(fract(sk), 0.0); t.z = 1.0 - t.x - t.y;
+  float s = step(0.0, -t.z), s2 = 2.0 * s - 1.0;
+  w = pow(vec3(-t.z * s2, s - t.y * s2, s - t.x * s2), vec3(HEX_GAIN)); // exponente: transiciones cortas, sin lavar el contraste
+  w /= w.x + w.y + w.z;
+  v1 = b + vec2(s, s); v2 = b + vec2(s, 1.0 - s); v3 = b + vec2(1.0 - s, s);
+}
+void hexXf(vec2 v, vec2 uv, out vec2 uvo, out mat2 R) {
+  float a = hexHash2(v).x * 6.2831853, c = cos(a), s = sin(a);
+  R = mat2(c, s, -s, c);
+  vec2 cen = vec2(v.x + 0.5 * v.y, 0.8660254 * v.y) / (2.0 * HEX_SQ3 * HEX_DENS);
+  uvo = R * (uv - cen) + cen + hexHash2(v + 17.0);
+}
+vec4 untile(sampler2D t, vec2 uv) {
+  vec3 w; vec2 v1, v2, v3, u; mat2 R; hexGrid(uv * HEX_DENS, w, v1, v2, v3);
+  vec2 dx = dFdx(uv), dy = dFdy(uv);
+  hexXf(v1, uv, u, R); vec4 acc = w.x * textureGrad(t, u, R * dx, R * dy);
+  hexXf(v2, uv, u, R); acc += w.y * textureGrad(t, u, R * dx, R * dy);
+  hexXf(v3, uv, u, R); acc += w.z * textureGrad(t, u, R * dx, R * dy);
+  return acc;
+}
+vec3 untileN(sampler2D t, vec2 uv) {
+  vec3 w; vec2 v1, v2, v3, u; mat2 R; hexGrid(uv * HEX_DENS, w, v1, v2, v3);
+  vec2 dx = dFdx(uv), dy = dFdy(uv); vec3 n;
+  hexXf(v1, uv, u, R); n = textureGrad(t, u, R * dx, R * dy).xyz * 2.0 - 1.0; n.xy = transpose(R) * n.xy; vec3 acc = w.x * n;
+  hexXf(v2, uv, u, R); n = textureGrad(t, u, R * dx, R * dy).xyz * 2.0 - 1.0; n.xy = transpose(R) * n.xy; acc += w.y * n;
+  hexXf(v3, uv, u, R); n = textureGrad(t, u, R * dx, R * dy).xyz * 2.0 - 1.0; n.xy = transpose(R) * n.xy; acc += w.z * n;
+  return normalize(acc);
+}
+// Variación grande: manchas de ~3 a 8 mosaicos entre regolito viejo (oscuro, frío) y fresco (claro, cálido).
+vec3 untileMacro(vec2 uv) {
+  float m = untileNoise(uv * 0.12) * 0.65 + untileNoise(uv * 0.37 + 9.1) * 0.35;
+  return mix(vec3(0.8, 0.81, 0.85), vec3(1.14, 1.09, 1.02), m);
+}
+`
+// Pendiente (vNormal frente al "arriba" del mundo) y distancia se calculan en main: esos varyings aún no existen en <common>.
+const MACRO = 'diffuseColor *= sampledDiffuseColor;\n\tdiffuseColor.rgb *= untileMacro( vMapUv ) * ( 1.0 - 0.22 * smoothstep( 0.08, 0.4, ' +
+  '1.0 - dot( normalize( vNormal ), normalize( ( viewMatrix * vec4( 0.0, 1.0, 0.0, 0.0 ) ).xyz ) ) ) );'
+const FADE = 'vec3 mapN = untileN( normalMap, vNormalMapUv );\n\tmapN.xy *= mix( 1.0, 0.35, smoothstep( 40.0, 160.0, length( vViewPosition ) ) );'
+function untileMaterial(mat: THREE.MeshStandardMaterial) {
+  const chunk = (name: keyof typeof THREE.ShaderChunk, ...pairs: [string, string][]) =>
+    pairs.reduce((src, [from, to]) => {
+      if (!src.includes(from)) console.warn(`untile: ${name} cambió en three.js; el suelo queda sin hex-tiling`)
+      return src.replace(from, to)
+    }, THREE.ShaderChunk[name])
+  mat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\n' + UNTILE)
+      .replace('#include <map_fragment>', chunk('map_fragment', ['texture2D( map, vMapUv )', 'untile( map, vMapUv )'], ['diffuseColor *= sampledDiffuseColor;', MACRO]))
+      .replace('#include <normal_fragment_maps>', chunk('normal_fragment_maps', ['vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;', FADE]))
+      .replace('#include <aomap_fragment>', chunk('aomap_fragment', ['texture2D( aoMap, vAoMapUv )', 'untile( aoMap, vAoMapUv )']))
+      .replace('#include <roughnessmap_fragment>', chunk('roughnessmap_fragment', ['texture2D( roughnessMap, vRoughnessMapUv )', 'untile( roughnessMap, vRoughnessMapUv )']))
+  }
+}
+
+/** Relieve real del cráter (LOLA, tools/moon/build_moon.py): n×n alturas en metros sobre una ventana de size_m. */
+interface Dem { n: number; size: number; h: Float32Array }
+const dems = new Map<string, Promise<Dem | null>>()
+function loadDem(id: string): Promise<Dem | null> {
+  if (!dems.has(id)) {
+    const base = `${import.meta.env.BASE_URL}moon/craters/${id}`
+    const get = (ext: string) => fetch(base + ext).then((r) => (r.ok ? r : Promise.reject(new Error(r.statusText))))
+    dems.set(id, Promise.all([get('.json').then((r) => r.json()), get('.bin').then((r) => r.arrayBuffer())])
+      .then(([m, b]) => ({ n: m.n, size: m.size_m, h: new Float32Array(b) }))
+      .then((d) => (d.h.length === d.n * d.n ? d : null))
+      .catch(() => null)) // sin datos: terreno procedural
+  }
+  return dems.get(id)!
+}
 const STEEP: Record<Crater['terrain'], number> = { soft: 0.6, rocky: 1, steep: 1.6, 'very steep': 2.2 }
 const ROCKS: Record<Crater['terrain'], number> = { soft: 50, rocky: 260, steep: 130, 'very steep': 170 }
 
@@ -24,6 +109,17 @@ function noise(rng: Rng) {
   return (x: number, y: number) => one(x / 22, y / 22) + one(x / 9, y / 9) * 0.4 + one(x / 3.5, y / 3.5) * 0.12
 }
 
+/** Altura (unidades) desde el DEM: escala uniforme, así las pendientes son las reales; el ruido solo da detalle fino. */
+function demHeight(dem: Dem, n: (x: number, y: number) => number) {
+  const k = SIZE / dem.size, last = dem.n - 1, h = dem.h
+  return (x: number, z: number) => {
+    const c = clamp(((x + HALF) / SIZE) * last, 0, last - 1e-6), r = clamp(((z + HALF) / SIZE) * last, 0, last - 1e-6)
+    const c0 = Math.floor(c), r0 = Math.floor(r), fc = c - c0, fr = r - r0, i = r0 * dem.n + c0
+    const m = (h[i] * (1 - fc) + h[i + 1] * fc) * (1 - fr) + (h[i + dem.n] * (1 - fc) + h[i + dem.n + 1] * fc) * fr
+    return m * k + n(x + 500, z + 500) * 0.5
+  }
+}
+
 interface Hud { bat: number; sig: number; speed: number; slope: number; samples: number; waterG: number; drill: number; toast: string; over: boolean }
 
 /** Fase 2: el rover baja al cráter elegido y busca hielo con su espectrómetro de neutrones. */
@@ -36,11 +132,18 @@ export function Rover3D({ crater, quality, seed, onDone }: {
   const [sound, setSound] = useState(true)
   const soundRef = useRef(sound)
   useEffect(() => { soundRef.current = sound }, [sound])
+  const [loaded, setLoaded] = useState<{ id: string; dem: Dem | null } | null>(null)
+  const dem = loaded?.id === crater.id ? loaded.dem : undefined // undefined = cargando
+  useEffect(() => {
+    let on = true
+    void loadDem(crater.id).then((d) => { if (on) setLoaded({ id: crater.id, dem: d }) })
+    return () => { on = false }
+  }, [crater.id])
 
-  useEffect(() => mountStage(host.current!, ({ scene, camera, el }) => {
+  useEffect(() => dem === undefined ? undefined : mountStage(host.current!, ({ scene, camera, el, renderer }) => {
     const rng = mulberry32(seed ^ Math.imul(crater.id.length, 0x9e3779b1))
     const n = noise(rng), steep = STEEP[crater.terrain]
-    const height = (x: number, z: number) => {
+    const height = dem ? demHeight(dem, n) : (x: number, z: number) => {
       const r = Math.hypot(x, z)
       const rim = r > RIM - 20 ? Math.pow((r - (RIM - 20)) / 20, 2) * 9 * steep : 0
       return n(x + 500, z + 500) * 3.2 * steep + rim
@@ -69,25 +172,50 @@ export function Rover3D({ crater, quality, seed, onDone }: {
     const pos = geo.attributes.position, col = new Float32Array(pos.count * 3)
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), z = pos.getZ(i); pos.setY(i, height(x, z))
-      const g = 0.42 + n(x * 3, z * 3) * 0.12, h = signalAt(x, z) * quality * 0.8
-      col.set([g * (1 - h * 0.6), g * (1 - h * 0.2), g + h * 0.35], i * 3)
+      const g = 0.84 + n(x * 3, z * 3) * 0.24, h = signalAt(x, z) * quality * 0.8 // × color del material
+      col.set([g * (1 - h * 0.6), g * (1 - h * 0.2), g + h * 0.7], i * 3)
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals()
-    const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }))
+    // Empieza en gris 0.5 (igual que antes); al cargar la textura pasa a GAIN. Sin textura se queda el gris.
+    const groundMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, color: new THREE.Color(0.5, 0.5, 0.5) })
+    untileMaterial(groundMat)
+    const ground = new THREE.Mesh(geo, groundMat)
     ground.receiveShadow = true; ground.castShadow = true; scene.add(ground)
 
     // Rocas: colisionan y frenan al rover.
     const rockN = ROCKS[crater.terrain], rocks: { x: number; z: number; r: number }[] = []
-    const rockMesh = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0x77777f, roughness: 1, flatShading: true }), rockN)
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3()
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), v0 = new THREE.Vector3(), tint = new THREE.Color()
+    // Roca irregular: icosaedro subdividido deformado con el mismo ruido; tono medio del regolito (sin GAIN).
+    const rockGeo = mergeVertices(new THREE.IcosahedronGeometry(1, 2).deleteAttribute('normal').deleteAttribute('uv'))
+    const rp = rockGeo.attributes.position
+    for (let i = 0; i < rp.count; i++) {
+      v0.fromBufferAttribute(rp, i).multiplyScalar(0.7 + n(v0.x * 2.3 + v0.z * 1.1 + 40, v0.y * 2.3 - v0.z * 1.7 + 40) * 0.3)
+      rp.setXYZ(i, v0.x, v0.y, v0.z)
+    }
+    rockGeo.computeVertexNormals()
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0x8a8277, roughness: 1 })
+    const rockMesh = new THREE.InstancedMesh(rockGeo, rockMat, rockN)
     for (let i = 0; i < rockN; i++) {
       const a = rng() * Math.PI * 2, r = 8 + rng() * (RIM - 12), x = Math.cos(a) * r, z = Math.sin(a) * r
       const s = 0.3 + Math.pow(rng(), 3) * 2.6
       rocks.push({ x, z, r: s })
-      q.setFromEuler(new THREE.Euler(rng() * 3, rng() * 3, rng() * 3))
-      rockMesh.setMatrixAt(i, m4.compose(v.set(x, height(x, z) + s * 0.3, z), q, new THREE.Vector3(s, s * (0.6 + rng() * 0.5), s)))
+      q.setFromEuler(new THREE.Euler((rng() - 0.5) * 0.6, rng() * 6.3, (rng() - 0.5) * 0.6)) // apoyada: poco ladeo
+      const sy = s * (0.5 + rng() * 0.4)
+      rockMesh.setMatrixAt(i, m4.compose(v.set(x, height(x, z) - sy * (0.25 + rng() * 0.15), z), q, new THREE.Vector3(s * (0.8 + rng() * 0.4), sy, s * (0.8 + rng() * 0.4)))) // semienterrada
+      rockMesh.setColorAt(i, tint.setScalar(0.85 + rng() * 0.25))
     }
     rockMesh.castShadow = true; rockMesh.receiveShadow = true; scene.add(rockMesh)
+
+    // Texturas en mosaico (RepeatWrapping): el suelo se ve continuo; las rocas usan una sola copia.
+    const reg = `${import.meta.env.BASE_URL}moon/regolith/`, loader = new THREE.TextureLoader(), aniso = renderer.capabilities.getMaxAnisotropy()
+    const tile = (t: THREE.Texture, reps: number) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(reps, reps); t.anisotropy = aniso; return t }
+    const done = () => { groundMat.needsUpdate = true }
+    loader.load(reg + 'diff.jpg', (t) => {
+      t.colorSpace = THREE.SRGBColorSpace
+      groundMat.map = tile(t, SIZE / TILE); groundMat.color.setScalar(GAIN); done()
+    })
+    loader.load(reg + 'normal.jpg', (t) => { groundMat.normalMap = tile(t, SIZE / TILE); done() })
+    loader.load(reg + 'orm.jpg', (t) => { groundMat.aoMap = groundMat.roughnessMap = tile(t, SIZE / TILE); done() }) // R = AO, G = rugosidad
 
     // Rover.
     const rover = new THREE.Group(), metal = new THREE.MeshStandardMaterial({ color: 0xdedfe6, metalness: 0.5, roughness: 0.4 })
@@ -204,7 +332,7 @@ export function Rover3D({ crater, quality, seed, onDone }: {
       camera.lookAt(camT.x, camT.y + 1.2, camT.z)
     }
     return Object.assign(tick, { cleanup: () => { removeEventListener('keydown', down); removeEventListener('keyup', up); void audio?.close() } })
-  }), [crater, quality, seed])
+  }), [crater, quality, seed, dem])
 
   return (
     <div className="rover">
@@ -219,7 +347,7 @@ export function Rover3D({ crater, quality, seed, onDone }: {
         <div className="rv-row"><span>Samples</span><b>{hud.samples}</b></div>
         <div className="rv-row"><span>Water found</span><b>{hud.waterG} g</b></div>
         {hud.drill > 0 && <div className="rv-drill"><i style={{ width: `${(1 - hud.drill) * 100}%` }} /></div>}
-        <p className="hint">Blue tint = hydrogen your orbiter mapped (map quality {Math.round(quality * 100)}%). Seed {seed}</p>
+        <p className="hint">Blue tint = hydrogen your orbiter mapped (map quality {Math.round(quality * 100)}%). Seed {seed}{dem ? ' · Real LOLA relief' : ''}</p>
       </div>
       <div className="rv-keys">
         <div><kbd>W A S D</kbd> drive</div>

@@ -44,6 +44,14 @@ export function stars(rng: Rng, n = 2500, r = 3000): THREE.Points {
   return new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false }))
 }
 
+/** Cambia la textura del material por la Luna real (color LROC + relieve LOLA, tools/moon/build_moon.py).
+ *  Si los archivos no cargan, se queda la procedural. */
+export function realMoon(mat: THREE.MeshStandardMaterial): void {
+  const base = `${import.meta.env.BASE_URL}moon/`, loader = new THREE.TextureLoader()
+  loader.load(base + 'color.jpg', (t) => { t.colorSpace = THREE.SRGBColorSpace; mat.map = t; mat.needsUpdate = true })
+  loader.load(base + 'height.png', (t) => { mat.bumpMap = t; mat.bumpScale = 3; mat.needsUpdate = true })
+}
+
 /** Textura equirectangular de Luna con cráteres aleatorios (sembrada). */
 export function moonTexture(rng: Rng): THREE.CanvasTexture {
   const c = document.createElement('canvas'); c.width = 1024; c.height = 512

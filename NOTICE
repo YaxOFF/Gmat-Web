@@ -7,3 +7,11 @@ Version 2.0: https://www.apache.org/licenses/LICENSE-2.0
 
 GMAT no se redistribuye en este repositorio; debe instalarse por separado.
 Este proyecto no está afiliado ni respaldado por los autores de GMAT.
+
+Datos de la Luna (frontend/public/moon/, generados con tools/moon/build_moon.py), de dominio público:
+- Color LROC y relieve LOLA global: NASA Scientific Visualization Studio, "CGI Moon Kit"
+  (https://svs.gsfc.nasa.gov/4720).
+- Relieve polar LOLA (LDEM_80S_80MPP_ADJ): NASA Planetary Geodesy Data Archive
+  (https://pgda.gsfc.nasa.gov/products/90), Barker et al.
+- Coordenadas de cráteres: USGS/IAU Gazetteer of Planetary Nomenclature.
+- Textura de regolito "moon_03" del suelo del rover: Poly Haven (https://polyhaven.com), CC0.

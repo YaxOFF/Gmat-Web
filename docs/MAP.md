@@ -44,5 +44,6 @@
 | Responsive (tablet, mobile viewer only) | `@media` at the end of `frontend/src/App.module.css` |
 | UI text | `frontend/src/i18n/es.ts` |
 | Usage guide, adding missions, web → original C++ diagnosis | `docs/GUIDE.md` |
+| Real Moon data (globe, polar map, crater relief) and how to regenerate it | `tools/moon/build_moon.py`, `tools/moon/README.md`; output in `frontend/public/moon/`; used by `realMoon` (`mission-architect/three/stage.ts`), `Rover3D.tsx` (`loadDem`, `demHeight`), `ui/Mapping.tsx`; crater lat/lon in `mission-architect/data/catalog.ts` (`POLE_MAP_DEG`) |
 
 Symbols: `grep` in `docs/SYMBOLS.tsv` (generate with `sh docs/docs.sh map`).

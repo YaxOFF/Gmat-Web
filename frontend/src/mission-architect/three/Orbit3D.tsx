@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CRATERS } from '../data/catalog'
 import { mulberry32 } from '../engine/rng'
 import { MOON_R_KM, ORBIT_ELEMENTS } from '../gmat'
-import { mountStage, moonTexture, stars } from './stage'
+import { mountStage, moonTexture, realMoon, stars } from './stage'
 
 /** Vista esquemática de la órbita alrededor de la Luna (la trayectoria exacta sale de GMAT). */
 export function Orbit3D({ orbitId, seed = 7, highlight }: { orbitId: string; seed?: number; highlight?: string | null }) {
@@ -14,13 +14,14 @@ export function Orbit3D({ orbitId, seed = 7, highlight }: { orbitId: string; see
     scene.add(stars(rng))
     scene.add(new THREE.AmbientLight(0x404458, 0.6))
     const sun = new THREE.DirectionalLight(0xffffff, 2.4); sun.position.set(5, 0.4, 2); scene.add(sun)
-    const moon = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), new THREE.MeshStandardMaterial({ map: moonTexture(rng), roughness: 1 }))
+    const mat = new THREE.MeshStandardMaterial({ map: moonTexture(rng), roughness: 1 })
+    realMoon(mat)
+    const moon = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), mat)
     scene.add(moon)
-    // Cráteres candidatos alrededor del polo sur (mapa polar 0..100 → ~8° del polo).
+    // Cráteres candidatos en su lat/lon real. En la UV de SphereGeometry lon 0 = +x y lon +90° = −z.
     for (const c of CRATERS) {
-      const dx = (c.x - 50) / 50, dy = (c.y - 50) / 50
-      const lat = -Math.PI / 2 + Math.hypot(dx, dy) * 0.14, lon = Math.atan2(dy, dx)
-      const p = new THREE.Vector3(Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon))
+      const lat = (c.lat * Math.PI) / 180, lon = (c.lon * Math.PI) / 180
+      const p = new THREE.Vector3(Math.cos(lat) * Math.cos(lon), Math.sin(lat), -Math.cos(lat) * Math.sin(lon))
       const on = c.id === highlight
       const dot = new THREE.Mesh(new THREE.SphereGeometry(on ? 0.03 : 0.018), new THREE.MeshBasicMaterial({ color: on ? 0xd7ff3a : 0x38e1ff }))
       dot.position.copy(p.multiplyScalar(1.003)); moon.add(dot)

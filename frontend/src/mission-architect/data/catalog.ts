@@ -79,17 +79,26 @@ export const LAUNCHERS: Launcher[] = [
 ]
 export const LAUNCHER: Record<string, Launcher> = Object.fromEntries(LAUNCHERS.map((l) => [l.id, l]))
 
-// Cabeus ≈ 5.6 % está inspirado en la medición de LCROSS; el resto son valores de juego.
+/** Mapa polar 0..100 = ±POLE_MAP_DEG desde el polo sur (lo comparten Mapping, Orbit3D y tools/moon/build_moon.py). */
+export const POLE_MAP_DEG = 6
+/** lat/lon reales → posición en el mapa polar, visto desde el sur: x = cos(lon), y = sin(lon) con y hacia abajo. */
+const polar = (lat: number, lon: number) => {
+  const r = ((90 + lat) / POLE_MAP_DEG) * 50, a = (lon * Math.PI) / 180
+  return { lat, lon, x: 50 + r * Math.cos(a), y: 50 + r * Math.sin(a) }
+}
+
+// Posiciones: centros reales (USGS Gazetteer). Cabeus ≈ 5.6 % está inspirado en la medición de LCROSS; el resto
+// (hidrógeno, temperatura, riesgo) son valores de juego.
 export const CRATERS: Crater[] = [
-  { id: 'shackleton', name: 'Shackleton', h: 1.2, ice: 1.0, tempC: -180, terrain: 'steep', risk: 3, slopeDeg: 22, x: 50, y: 48,
+  { id: 'shackleton', name: 'Shackleton', h: 1.2, ice: 1.0, tempC: -180, terrain: 'steep', risk: 3, slopeDeg: 22, ...polar(-89.67, 129.78),
     blurb: 'Famous, right at the pole, steep walls.' },
-  { id: 'cabeus', name: 'Cabeus', h: 5.6, ice: 5.0, tempC: -230, terrain: 'soft', risk: 1, slopeDeg: 6, x: 28, y: 70,
+  { id: 'cabeus', name: 'Cabeus', h: 5.6, ice: 5.0, tempC: -230, terrain: 'soft', risk: 1, slopeDeg: 6, ...polar(-85.33, -42.13),
     blurb: 'Where LCROSS crashed in 2009. Smooth floor.' },
-  { id: 'haworth', name: 'Haworth', h: 4.1, ice: 3.4, tempC: -210, terrain: 'rocky', risk: 3.5, slopeDeg: 14, x: 70, y: 66,
+  { id: 'haworth', name: 'Haworth', h: 4.1, ice: 3.4, tempC: -210, terrain: 'rocky', risk: 3.5, slopeDeg: 14, ...polar(-87.45, -5.17),
     blurb: 'Lots of hydrogen, but boulders everywhere.' },
-  { id: 'gerlache', name: 'de Gerlache', h: 0.4, ice: 0.1, tempC: -170, terrain: 'soft', risk: 0.8, slopeDeg: 5, x: 36, y: 24,
+  { id: 'gerlache', name: 'de Gerlache', h: 0.4, ice: 0.1, tempC: -170, terrain: 'soft', risk: 0.8, slopeDeg: 5, ...polar(-88.48, -88.34),
     blurb: 'Easy and safe. Not much to find.' },
-  { id: 'faustini', name: 'Faustini', h: 2.6, ice: 2.0, tempC: -220, terrain: 'very steep', risk: 4, slopeDeg: 31, x: 74, y: 30,
+  { id: 'faustini', name: 'Faustini', h: 2.6, ice: 2.0, tempC: -220, terrain: 'very steep', risk: 4, slopeDeg: 31, ...polar(-87.18, 84.31),
     blurb: 'Promising and brutal. Very steep walls.' },
 ]
 export const CRATER: Record<string, Crater> = Object.fromEntries(CRATERS.map((c) => [c.id, c]))
