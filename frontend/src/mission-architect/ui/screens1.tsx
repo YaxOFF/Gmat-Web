@@ -1,3 +1,6 @@
+import { mulberry32 } from '../engine/rng'
+import { southPoleImage } from '../three/stage'
+import { CHARS } from '../data/chars'
 import { Orbit3D } from '../three/Orbit3D'
 import { Ship3D } from '../three/Ship3D'
 import { useMemo, useState } from 'react'
@@ -18,14 +21,17 @@ export function Title({ onStart }: { onStart: () => void }) {
   return (
     <div className="title-screen">
       <div className="halftone" />
-      <div className="title-moon" />
+      <img className="title-moon" src={southPoleImage(mulberry32(7))} alt="" />
       <div className="title-inner">
-        <div className="kicker">NASA SPACE APPS 2026 · SPACE MISSION DESIGN GAME</div>
+        <div className="kicker">A space mission design game</div>
         <h1>MISSION<br /><b>ARCHITECT</b></h1>
         <p className="tag">Episode 1 · Water on the Moon</p>
-        <p className="sub">Design a spacecraft with a tight budget, launch it, and find out <em>why</em> it worked or failed.</p>
+        <p className="sub">There may be frozen water hiding in the darkest craters of the Moon. You have a budget, a rocket and one shot. Design the spacecraft, fly it, and find the ice.</p>
+        <ol className="how">
+          {['Design', 'Launch', 'Map', 'Land', 'Explore'].map((t, i) => <li key={t}><span>0{i + 1}</span>{t}</li>)}
+        </ol>
         <button className="btn big" onClick={onStart}>START MISSION ▶</button>
-        <p className="hint">1 or 4 players · 20–30 min · click, Space or → advances the story</p>
+        <p className="hint">Solo or a team of 4 · about 25 minutes · real orbit physics from NASA GMAT</p>
       </div>
     </div>
   )
@@ -35,38 +41,53 @@ export function Title({ onStart }: { onStart: () => void }) {
 
 export function OrbitPick({ design, onPick, onInspect }: { design: Design; onPick: (orbitId: string) => void; onInspect: (orbitId: string) => void }) {
   const [sel, setSel] = useState(design.orbitId)
-  const bar = (v: number, max: number) => <div className="mini"><i style={{ width: `${(v / max) * 100}%` }} /></div>
+  const dots = (n: number, good: boolean) => <span className={`dots ${good ? 'good' : 'cost'}`}>{'●'.repeat(n)}<i>{'●'.repeat(3 - n)}</i></span>
+  const INFO: Record<string, { best: string; maps: number; fuel: number; dark: number; talk: number; plain: string }> = {
+    polar_low: { best: 'The sharpest maps', maps: 3, fuel: 3, dark: 3, talk: 3,
+      plain: 'Flying low gives you crisp maps, but the Moon\'s lumpy gravity keeps pulling Selene down. You will burn a lot of fuel to stay up, so you need the big tank.' },
+    polar_high: { best: 'A safe, balanced first mission', maps: 2, fuel: 2, dark: 2, talk: 2,
+      plain: 'A little higher, a lot calmer. Good maps, moderate fuel, and regular contact with a rover later. The easiest choice if this is your first time.' },
+    polar_ellip: { best: 'Saving fuel and helping a rover', maps: 1, fuel: 1, dark: 1, talk: 2,
+      plain: 'Swoops low over the south pole and far away elsewhere. Very cheap on fuel and great for long rover chats, but the maps are blurrier.' },
+  }
+  const o = ORBITS.find((x) => x.id === sel)!
+  const info = INFO[sel]
   return (
-    <div className="page">
-      <h2>Choose the orbit <small>Initial feasibility · CML 2</small></h2>
-      <p className="lead">The orbit shapes everything else. No orbit is best: each one trades something away.</p>
-      <div className="orbit-grid">
-        {ORBITS.map((o) => (
-          <button key={o.id} className={`card orbit ${sel === o.id ? 'sel' : ''}`} onClick={() => setSel(o.id)}>
-            <div className="orbit-art">
-              <svg viewBox="0 0 200 120"><circle cx="100" cy="150" r="90" fill="#b9bdc9" />
-                <ellipse cx="100" cy="60" rx={o.id === 'polar_ellip' ? 92 : o.id === 'polar_high' ? 70 : 58} ry={o.id === 'polar_ellip' ? 46 : 26} fill="none" stroke="#d7ff3a" strokeWidth="2" strokeDasharray="6 4" />
-              </svg>
-            </div>
-            <h3>{o.name}</h3>
-            <div className="alt">{o.altitude} · period {o.periodMin} min</div>
-            <div className="spec"><span>Map sharpness</span>{bar(o.res, 1.5)}</div>
-            <div className="spec"><span><Term k="dv">Fuel needed</Term></span>{bar(o.dvInsertion + o.dvKeeping, 1250)}</div>
-            <div className="spec"><span><Term k="eclipse">Eclipse</Term> per orbit</span><b>{o.eclipseMin} min</b></div>
-            <div className="spec"><span>Rover relay</span><b className="small">{o.relay}</b></div>
-            <p className="note">{o.note}</p>
-          </button>
-        ))}
+    <div className="page orbit2">
+      <h2>Choose the orbit</h2>
+      <p className="lead">Where Selene circles the Moon. Every orbit is a trade: there is no perfect one.</p>
+      <div className="orbit-layout">
+        <div className="orbit-stage big">
+          <span className="tagline">{o.name} orbit · drag to rotate · scroll to zoom</span>
+          <Orbit3D orbitId={sel} partIds={design.partIds} />
+        </div>
+        <div className="orbit-list">
+          {ORBITS.map((x) => {
+            const k = INFO[x.id]
+            return (
+              <button key={x.id} className={`pick orbit-pick ${sel === x.id ? 'sel' : ''}`} aria-pressed={sel === x.id} onClick={() => setSel(x.id)}>
+                {x.id === 'polar_high' && <em className="tag2">Good first pick</em>}
+                <b>{x.name}</b>
+                <span className="q2">Best for: {k.best}</span>
+                <div className="orbit-rows">
+                  <span>Map detail</span>{dots(k.maps, true)}
+                  <span><Term k="dv">Fuel</Term> it eats</span>{dots(k.fuel, false)}
+                  <span><Term k="eclipse">Time in shadow</Term></span>{dots(k.dark, false)}
+                  <span>Rover contact</span>{dots(k.talk, true)}
+                </div>
+              </button>
+            )
+          })}
+        </div>
       </div>
-      <div className="orbit-stage">
-        <span className="tagline">Schematic view · drag to rotate, scroll to zoom</span>
-        <Orbit3D orbitId={sel} partIds={design.partIds} />
+      <div className="orbit-explain">
+        <b>What this means:</b> {info.plain}
+        <span className="hint"> Altitude {o.altitude} · one lap every {o.periodMin} min · {o.eclipseMin} min in shadow per lap.</span>
       </div>
       <div className="actions">
-        <button className="btn ghost" onClick={() => onInspect(sel)}>Inspect in GMAT ↗</button>
-        <button className="btn big" onClick={() => onPick(sel)}>Lock orbit → Hangar</button>
+        <button className="btn ghost" onClick={() => onInspect(sel)} title="Opens a real GMAT script of this orbit in the workspace and runs it">See the real physics in GMAT ↗</button>
+        <button className="btn big" onClick={() => onPick(sel)}>Use this orbit → build the spacecraft</button>
       </div>
-      <p className="hint">Game values. "Inspect in GMAT" opens a real GMAT script of this orbit (lunar gravity, 3 days) in the workspace and runs it.</p>
     </div>
   )
 }
@@ -115,7 +136,7 @@ export function Hangar({ design, setDesign, iterations, onSubmit }: {
                   <span className={p.rel < 0.9 ? 'low' : ''}>rel {pct(p.rel)}</span>
                 </div>
                 <p>{p.note}</p>
-                {p.cards?.length ? <em>⚠ adds: {p.cards.map((c) => CARD[c].name).join(', ')}</em> : null}
+                {p.cards?.length ? <em>adds: {p.cards.map((c) => CARD[c].name).join(', ')}</em> : null}
               </button>
             )
           })}
@@ -135,17 +156,17 @@ export function Hangar({ design, setDesign, iterations, onSubmit }: {
           </div>
         </div>
         <div className="actions">
-          <button className="btn ghost" onClick={() => setDesign({ ...design, partIds: starterFor(design.mode) })}>Suggested starter</button>
+          <button className="btn ghost" onClick={() => setDesign({ ...design, partIds: starterFor(design.mode, design.orbitId) })}>Suggested starter</button>
           <button className="btn ghost" onClick={() => setDesign({ ...design, partIds: [] })}>Clear</button>
           <button className="btn big" disabled={stats.errors.length > 0} onClick={onSubmit}>Submit to design review ▶</button>
         </div>
         {stats.errors.length > 0 && (
-          <ul className="errors">{stats.errors.map((e) => <li key={e}>✖ {e}</li>)}</ul>
+          <ul className="errors">{stats.errors.map((e) => <li key={e}>{e}</li>)}</ul>
         )}
         <p className="hint">Iterations used: {iterations}/{MAX_ITERATIONS} · each costs ${ITERATION_COST_M}M of reserve.</p>
       </main>
 
-      <aside className="col side">
+      <aside className="col side" tabIndex={0} aria-label="Live resources">
         <h3>Live resources</h3>
         <Meter label="MASS (kg)" value={stats.massKg} max={stats.capacityKg} tone={mass.status === 'ok' ? 'ok' : mass.status === 'warn' ? 'warn' : 'bad'} hint="Total spacecraft mass against the rocket's capacity." />
         <Meter label={`BUDGET ($M) · MISSION ${design.mode}`} value={Math.max(0, stats.budgetM - stats.budgetLeftM)} max={stats.budgetM} text={`$${Math.round(stats.budgetM - stats.budgetLeftM)}M / $${stats.budgetM}M`} tone={cls(stats.checks[2].status)} />
@@ -160,8 +181,8 @@ export function Hangar({ design, setDesign, iterations, onSubmit }: {
           ))}
         </ul>
 
-        <h3><Term k="deck">Ship's deck</Term> <small>{deck.length} cards</small></h3>
-        <ul className="deck">
+        <h3><Term k="deck">Trouble deck</Term> <small>{deck.length} things that can go wrong</small></h3>
+        <ul className="deck" tabIndex={0} aria-label="Trouble deck">
           {deck.map((e, k) => (
             <li key={k} className={CARD[e.cardId].level}><b>{CARD[e.cardId].name}</b><small>{e.because}</small></li>
           ))}
@@ -187,24 +208,47 @@ export function Review({ design, iterations, onApprove, onIterate, onForce }: {
   const [done, setDone] = useState(false)
 
   if (!done) return <Dialogue lines={lines} onDone={() => setDone(true)} startScene="review" />
+  const FRIENDLY: Record<string, [string, string]> = {
+    mass: ['', 'Light enough for the rocket'],
+    power: ['', 'Enough power, even in the Moon\'s shadow'],
+    budget: ['', 'Money left for surprises'],
+    science: ['', 'Can answer the science question'],
+    data: ['', 'Can send all the data home'],
+  }
+  const failed = items.filter((i) => !i.pass).length
   return (
-    <div className="page narrow">
-      <h2>Design review <small>{passed ? 'Approved' : 'Rejected'}</small></h2>
-      <ul className="checks big">
-        {items.map((i) => <li key={i.id} className={i.pass ? 'ok' : 'fail'}><span>{i.pass ? '✔' : '✖'}</span><div><b>{i.label}</b><small>{i.say}</small></div></li>)}
+    <div className="page narrow review2">
+      <div className={`verdict ${passed ? 'ok' : 'no'}`}>
+        <span>{passed ? 'GO' : 'NO GO'}</span>
+        <div>
+          <h2>{passed ? 'Approved for launch!' : 'Not ready yet'}</h2>
+          <p>{passed ? 'The review panel signed off on your design. Time to fly.' : `The panel found ${failed} problem${failed === 1 ? '' : 's'}. You can fix the design or take the risk and launch anyway.`}</p>
+        </div>
+      </div>
+      <ul className="checks2">
+        {items.map((i) => {
+          const [, label] = FRIENDLY[i.id] ?? ['', i.label]
+          return (
+            <li key={i.id} className={i.pass ? 'ok' : 'fail'}>
+              <span className="ic">{String(items.indexOf(i) + 1).padStart(2, '0')}</span>
+              <div><b>{label}</b><small>{i.say}</small><em>Checked by {CHARS[i.reviewer as keyof typeof CHARS]?.name ?? 'the panel'} · rule: {i.label}</em></div>
+              <span className="mark">{i.pass ? 'PASS' : 'FIX'}</span>
+            </li>
+          )
+        })}
       </ul>
       {passed ? (
-        <div className="actions"><button className="btn big" onClick={onApprove}>Proceed to launch ▶</button></div>
+        <div className="actions"><button className="btn big" onClick={onApprove}>Go to the launch pad </button></div>
       ) : (
         <div className="choice">
           <div className="card">
-            <h3>Iterate</h3>
-            <p>Go back to the hangar. −${ITERATION_COST_M}M of reserve, −10 stress. {iterations >= MAX_ITERATIONS ? 'No iterations left.' : `${MAX_ITERATIONS - iterations} left.`}</p>
-            <button className="btn" disabled={iterations >= MAX_ITERATIONS} onClick={onIterate}>Back to hangar</button>
+            <h3>Fix the design</h3>
+            <p>Back to the hangar to change parts. Costs ${ITERATION_COST_M}M but calms the team (−10 stress). {iterations >= MAX_ITERATIONS ? 'No more tries left.' : `${MAX_ITERATIONS - iterations} tries left.`}</p>
+            <button className="btn" disabled={iterations >= MAX_ITERATIONS} onClick={onIterate}>Back to the hangar</button>
           </div>
           <div className="card danger">
-            <h3>Force the launch</h3>
-            <p>+15 stress and 2 extra major trouble cards. If the mass is over capacity, the rocket will not lift.</p>
+            <h3>Launch anyway</h3>
+            <p>Risky: the spacecraft starts more stressed and with 2 extra big problems waiting. If it is too heavy, the rocket will not even lift off.</p>
             <button className="btn warn" onClick={onForce}>Launch anyway</button>
           </div>
         </div>

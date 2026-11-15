@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CHARS, type CharId, type Line, type Mood, type SceneId } from '../data/chars'
-import { Portrait, SceneArt } from './Art'
+import { Backdrop3D } from '../three/Backdrop3D'
+import { Portrait } from './Art'
 
 interface Step {
   line: Exclude<Line, { t: 'bg' }>
@@ -88,8 +89,8 @@ export function Dialogue({ lines, onDone, startScene = 'void', skipLabel = 'Skip
   return (
     <div className="dlg" onClick={advance}>
       <div className="dlg-scene" key={step.scene}>
-        <SceneArt id={step.scene} />
-        <div className="halftone" />
+        <Backdrop3D id={step.scene} />
+        <div className="dlg-vignette" />
       </div>
 
       <div className="dlg-cast">

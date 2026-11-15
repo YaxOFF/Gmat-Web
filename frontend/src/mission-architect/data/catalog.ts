@@ -124,10 +124,14 @@ export const STARTER_PARTS = [
   'comp_hard', 'shield', 'neutron', 'camera',
 ]
 
-export function starterFor(mode: MissionMode): string[] {
-  if (mode === 'A') return [...STARTER_PARTS]
+/** Diseño sugerido que pasa la revisión para la misión y la órbita elegidas. */
+export function starterFor(mode: MissionMode, orbitId = 'polar_high'): string[] {
+  let ids = [...STARTER_PARTS]
+  if (orbitId === 'polar_low') ids = ids.map((id) => (id === 'tank_s' ? 'tank_l' : id)) // la órbita baja pide 1,200 m/s
+  if (mode === 'C') ids = ids.map((id) => (id === 'bat_1' ? 'bat_2' : id)) // el radar (150 W) necesita 2 kWh en el eclipse
+  if (mode === 'A') return ids
   const rover = ['lander', 'rbat_6', 'wheels_std', 'mass_spec']
-  return mode === 'B' ? [...STARTER_PARTS, ...rover, 'drill_std'] : [...STARTER_PARTS, ...rover, 'drill_deep', 'radar']
+  return mode === 'B' ? [...ids, ...rover, 'drill_std'] : [...ids, ...rover, 'drill_deep', 'radar']
 }
 
 export const GLOSSARY: Record<string, string> = {

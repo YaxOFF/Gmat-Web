@@ -101,7 +101,7 @@ export function Launch3D({ launch, seed, partIds, onDone }: { launch: LaunchOutc
         <div>MISSION CONTROL</div>
         {shown.map((e, i) => (
           <div key={i} className="hint" style={{ color: e.result === 'fail' ? 'var(--red)' : e.result === 'partial' ? 'var(--amber)' : 'var(--green)' }}>
-            › {e.label}{e.p != null ? ` · needed <${Math.round(e.p * 100)}, rolled ${Math.round((e.roll ?? 0) * 100)} → ${e.result?.toUpperCase()}` : ''}<br /><span style={{ color: 'var(--dim)' }}>{e.text}</span>
+            › {e.label}{e.p != null ? ` · ${Math.round(e.p * 100)}% chance → ${e.result?.toUpperCase()}` : ''}<br /><span style={{ color: 'var(--dim)' }}>{e.text}</span>
           </div>
         ))}
       </div>

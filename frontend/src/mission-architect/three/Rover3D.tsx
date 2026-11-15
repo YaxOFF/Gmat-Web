@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { Crater } from '../data/types'
 import { clamp, mulberry32, type Rng } from '../engine/rng'
+import { buildLander } from './spacecraft'
 import { at, mountStage, stars } from './stage'
 
 export type RoverEnding = 'return' | 'last' | 'frozen' | 'dead'
@@ -51,7 +52,7 @@ function noise(rng: Rng) {
 interface Hud {
   bat: number; need: number; temp: number; heaters: boolean; sig: number; speed: number; slope: number
   samples: number; stored: number; sent: number; drill: number; depth: number; jam: number
-  integ: number; stuck: boolean; teleop: boolean; extended: boolean
+  integ: number; stuck: boolean; teleop: boolean; extended: boolean; goal: string
   relay: number; link: boolean; spike: number; shadow: boolean; trapped: boolean; canReturn: boolean; toast: string
 }
 type Final = null | { kind: 'choice' } | { kind: 'terminal'; ending: RoverEnding; lines: string[] }
@@ -145,13 +146,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
     rockMesh.castShadow = true; rockMesh.receiveShadow = true; scene.add(rockMesh)
 
     // Lander en el borde y rover.
-    const lander = new THREE.Group(), gold = new THREE.MeshStandardMaterial({ color: 0xd9a441, metalness: 0.7, roughness: 0.35 })
-    lander.add(at(new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.8, 1.4, 8), gold), 0, 1.6, 0))
-    for (let i = 0; i < 4; i++) {
-      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2), gold)
-      leg.position.set(Math.cos(i * 1.57) * 1.6, 0.8, Math.sin(i * 1.57) * 1.6); leg.rotation.set(Math.sin(i * 1.57) * 0.4, 0, -Math.cos(i * 1.57) * 0.4)
-      lander.add(leg)
-    }
+    const lander = buildLander(); lander.rotation.y = 0.6
     lander.position.set(9, height(9, -70), -70); scene.add(lander)
 
     const rover = new THREE.Group(), metal = new THREE.MeshStandardMaterial({ color: 0xdedfe6, metalness: 0.5, roughness: 0.4 })
@@ -164,7 +159,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
       const w = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.3, 14), new THREE.MeshStandardMaterial({ color: 0x333338 }))
       w.rotation.z = Math.PI / 2; w.position.set(sx * 0.95, 0.32, sz); rover.add(w); wheels.push(w)
     }
-    const drill = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.02, 0.8), new THREE.MeshStandardMaterial({ color: 0xff3d81 }))
+    const drill = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.02, 0.8), new THREE.MeshStandardMaterial({ color: 0xef6f6c }))
     drill.position.set(0, 0.2, -1.1); rover.add(drill)
     const lamp = new THREE.SpotLight(0xe8f4ff, 60, 45, 0.55, 0.5, 1.4); lamp.position.set(0, 1.9, 1); lamp.castShadow = true
     lamp.target.position.set(0, -1, 12); rover.add(lamp, lamp.target)
@@ -172,7 +167,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
     scene.add(rover)
 
     // Orbitador cruzando el cielo durante cada ventana de relevo.
-    const orb = new THREE.Mesh(new THREE.SphereGeometry(3, 12, 8), new THREE.MeshBasicMaterial({ color: 0xd7ff3a }))
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(3, 12, 8), new THREE.MeshBasicMaterial({ color: 0x5cc8f0 }))
     scene.add(orb)
     const relay = RELAY[orbitId] ?? RELAY.polar_high
     let beacon: THREE.Mesh | null = null
@@ -267,7 +262,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
         say('Extended mission approved: +4 cycles. New hydrogen targets deeper in the crater.', 5)
       },
     }
-    say(`Touchdown on the sunlit rim of ${crater.name}. The ice is in the dark beyond the orange line.`, 5)
+    say(`Touchdown on the sunlit rim of ${crater.name}!`, 3)
     const up3 = new THREE.Vector3(0, 1, 0), nrm = new THREE.Vector3(), qy = new THREE.Quaternion(), camT = new THREE.Vector3(), off = new THREE.Vector3()
     camera.position.set(0, 8, -86)
 
@@ -341,7 +336,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
                 anomaly = true
                 const sx = (rng() - 0.5) * 60, sz = 52
                 deposits.push({ x: sx, z: sz, rich: crater.ice * 2.2 + 4, taken: false, spike: true })
-                beacon = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 60, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xff3d81, transparent: true, opacity: 0.25, side: THREE.DoubleSide }))
+                beacon = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 60, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xef6f6c, transparent: true, opacity: 0.25, side: THREE.DoubleSide }))
                 beacon.position.set(sx, height(sx, sz) + 30, sz); scene.add(beacon)
                 setTimeout(() => say(`ANOMALOUS READING: a massive hydrogen spike ${Math.round(Math.hypot(sx - x, sz - z))} m deeper inside (pink beacon). Go for it, or head back to recharge?`, 7), 3600)
               }
@@ -372,7 +367,17 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
         if (hudT <= 0) {
           hudT = 0.1
           const spike = deposits.find((d) => d.spike && !d.taken)
+          const goal = trapped ? 'No way back to the light. Make the remaining power count.'
+            : stuck ? 'Stuck! Press R to rock the wheels free.'
+            : !dark && !entered ? 'Drive north (W) across the orange line. The ice is in the permanent shadow.'
+            : !dark && st.wet > 0 ? 'Safe in the sunlight. End the mission, or recharge and go back in.'
+            : !dark ? 'Recharging in the sun. Head back into the shadow when ready.'
+            : bat < need + 12 ? 'Battery is getting low: turn back south to the light now.'
+            : sig > 0.2 ? 'Strong signal! Stop (S) and press SPACE to drill here.'
+            : st.wet > 0 ? 'Ice found! Keep exploring, or drive back south to the light to finish.'
+            : 'Follow the neutron signal: the bar fills and the beeps speed up near ice.'
           setHud({
+            goal,
             bat, need, temp, heaters, sig, speed, slope, samples: st.samples, stored: stored.length, sent: st.waterG,
             drill: drillT / 1.6, depth, jam: Math.max(0, jamT), relay: inWin ? 0 : relay.period - relay.dur - ph, link,
             spike: spike ? Math.hypot(spike.x - x, spike.z - z) : -1, shadow: dark, trapped,
@@ -402,7 +407,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
       {h && (
         <div className="rv-hud">
           <h3>BUSCADOR · {crater.name}</h3>
-          <div className="rv-row"><span>Battery</span><b>{h.bat.toFixed(0)}%{h.shadow ? '' : ' ☀ charging'}</b></div>
+          <div className="rv-row"><span>Battery</span><b>{h.bat.toFixed(0)}%{h.shadow ? '' : ' charging'}</b></div>
           <div className="rv-bar rv-bat">
             <i style={{ width: `${h.bat}%`, background: h.trapped || h.bat < h.need + 5 ? 'var(--red)' : undefined }} />
             {h.need > 0 && <em style={{ left: `${Math.min(h.need, 100)}%` }} title="Battery needed to return to the light" />}
@@ -425,10 +430,11 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone }: {
         <div><kbd>L</kbd> lights · <kbd>C</kbd> top view · <kbd>R</kbd> unstick</div>
         <button className="btn small ghost" onClick={() => setSound(!sound)}>{sound ? 'Sound on' : 'Sound off'}</button>
       </div>
+      {h && !final && <div className="rv-goal" role="status"><small>WHAT TO DO</small>{h.goal}</div>}
       {h?.toast && !final && <div className="rv-toast">{h.toast}</div>}
       {h?.canReturn && !final && (
         <div className="rv-end">
-          <button className="btn big" onClick={() => api.current?.finish('return')}>Back in the light — end mission ☀</button>
+          <button className="btn big" onClick={() => api.current?.finish('return')}>Back in the light — end mission </button>
           {start.canExtend && !h.extended && <button className="btn big ghost" onClick={() => api.current?.extend()}>Request extended mission (+4 cycles)</button>}
         </div>
       )}

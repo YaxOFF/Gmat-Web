@@ -2,39 +2,14 @@ import { useState } from 'react'
 import { MODE_BUDGET_M, MODE_MULT, BUDGET_M } from '../data/catalog'
 import type { MissionMode } from '../data/types'
 import { ROLES, type Role, type Team } from '../engine/roles'
+import { MissionPatch } from './Patch'
 
-const MODES: { id: MissionMode; q: string; what: string; diff: string }[] = [
-  { id: 'A', q: '"Where is there hydrogen?"', what: 'Orbiter only. Map the south pole and pick the best site for a future rover.', diff: 'Easy' },
-  { id: 'B', q: '"Is it really ice?"', what: 'Orbiter + lander + rover with a drill. Land, drive into the dark and confirm the ice.', diff: 'Normal · recommended' },
-  { id: 'C', q: '"How much ice, and how deep?"', what: 'Orbiter with SAR radar + rover with the 2 m deep drill. Measure the deposit.', diff: 'Hard' },
+const MODES: { id: MissionMode; icon: string; title: string; q: string; what: string; stars: number; tag?: string }[] = [
+  { id: 'A', icon: '', title: 'Map it', q: 'Where is the hydrogen?', what: 'Fly an orbiter, map the south pole and point to the best crater.', stars: 1 },
+  { id: 'B', icon: '', title: 'Touch it', q: 'Is it really ice?', what: 'Orbiter + a rover that lands, drives into the dark and drills.', stars: 2, tag: 'Recommended' },
+  { id: 'C', icon: '', title: 'Measure it', q: 'How much ice, and how deep?', what: 'Adds a radar and a 2 m drill. Bigger budget, harder choices.', stars: 3 },
 ]
-
-/** La "servilleta": boceto a mano de la misión elegida. Aparece también en el reporte final. */
-export function Napkin({ mode, small }: { mode: MissionMode; small?: boolean }) {
-  return (
-    <svg className={`napkin ${small ? 'small' : ''}`} viewBox="0 0 320 220" key={mode}>
-      <rect width="320" height="220" fill="#f4efe1" />
-      <path d="M160 0 V220 M0 110 H320" stroke="#e2dccb" strokeWidth="2" />
-      <g fill="none" stroke="#1d2a6b" strokeWidth="2.4" strokeLinecap="round" className="ink">
-        <path d="M70 150 a60 60 0 1 0 120 0 a60 60 0 1 0 -120 0" />
-        <path d="M95 135 q6 -8 14 0 M140 175 q5 -6 12 0 M150 120 q4 -5 9 0" />
-        <ellipse cx="130" cy="150" rx="95" ry="38" transform="rotate(-18 130 150)" strokeDasharray="6 5" />
-        <path d="M205 96 h18 v12 h-18 z M196 102 h-12 M232 102 h12" />
-        {mode === 'C' && <path d="M214 110 q-10 12 0 24 M220 110 q-16 16 0 32" stroke="#c0245c" />}
-        {mode !== 'A' && <>
-          <path d="M214 118 C 220 160, 180 190, 150 205" strokeDasharray="3 4" stroke="#c0245c" />
-          <path d="M142 200 h18 l4 6 h-26 z M145 210 a3 3 0 1 0 0.1 0 M157 210 a3 3 0 1 0 0.1 0" />
-          {mode === 'C' && <path d="M166 204 v14" stroke="#c0245c" strokeWidth="3" />}
-        </>}
-      </g>
-      <g className="ink-text" fill="#1d2a6b" fontSize="13">
-        <text x="12" y="22">Selene → lunar orbit</text>
-        <text x="12" y="40">{mode === 'A' ? 'map H at the S. pole' : mode === 'B' ? '+ Buscador: drill the ice!' : '+ radar + 2 m drill'}</text>
-        <text x="236" y="210">MISSION {mode}</text>
-      </g>
-    </svg>
-  )
-}
+const FLOW = ['Pick an orbit', 'Build the spacecraft', 'Launch', 'Map the craters', 'Land & explore']
 
 export function Setup({ mode, team, onDone }: {
   mode: MissionMode; team: Team; onDone: (mode: MissionMode, team: Team) => void
@@ -46,43 +21,66 @@ export function Setup({ mode, team, onDone }: {
     players: n,
     names: n === 1 ? { Director: 'You', Systems: 'You', Science: 'You', Comms: 'You' } : { Director: 'Player 1', Systems: 'Player 2', Science: 'Player 3', Comms: 'Player 4' },
   })
+  const pick = MODES.find((x) => x.id === m)!
   return (
-    <div className="page setup">
-      <h2>The cocktail napkin <small>Briefing · CML 1</small></h2>
-      <div className="setup-grid">
-        <section>
-          <h3>1 · The team</h3>
-          <div className="actions" style={{ justifyContent: 'flex-start' }}>
-            <button className={`btn small ${t.players === 1 ? '' : 'ghost'}`} onClick={() => setPlayers(1)}>1 player (all roles)</button>
-            <button className={`btn small ${t.players === 4 ? '' : 'ghost'}`} onClick={() => setPlayers(4)}>4 players (one role each)</button>
+    <div className="page setup2">
+      <h2>Plan your mission</h2>
+      <p className="lead">Three quick choices and you are ready to design your spacecraft.</p>
+
+      <section className="step">
+        <h3><i>01</i> Who is playing?</h3>
+        <div className="pick-row">
+          <button className={`pick ${t.players === 1 ? 'sel' : ''}`} aria-pressed={t.players === 1} onClick={() => setPlayers(1)}>
+            <span className="pick-icon">1 player</span><b>Solo</b><small>You make every decision.</small>
+          </button>
+          <button className={`pick ${t.players === 4 ? 'sel' : ''}`} aria-pressed={t.players === 4} onClick={() => setPlayers(4)}>
+            <span className="pick-icon">4 players</span><b>Team of 4</b><small>Each person takes a role. Pass the mouse when it is your turn.</small>
+          </button>
+        </div>
+        {t.players === 4 && (
+          <div className="crew">
+            {ROLES.map((r) => (
+              <label key={r.id} className="crew-card" style={{ borderColor: r.color }}>
+                <span><span className="code">{r.icon}</span> {r.title}</span>
+                <input value={t.names[r.id]} onChange={(e) => setName(r.id, e.target.value)} maxLength={16} aria-label={`${r.title} name`} />
+                <small>Goal: {r.main[1]}</small>
+              </label>
+            ))}
           </div>
-          {ROLES.map((r) => (
-            <div key={r.id} className="role" style={{ borderColor: r.color }}>
-              <div className="role-head"><span>{r.icon} <b>{r.title}</b></span>
-                {t.players === 4 && <input value={t.names[r.id]} onChange={(e) => setName(r.id, e.target.value)} maxLength={16} />}</div>
-              <div className="hint">Mission: <b>{r.main[0]}</b> — {r.main[1]}</div>
-              {t.players === 4 && <div className="hint secret">Secret (keep it to yourself): <b>{r.secret[0]}</b> — {r.secret[1]}</div>}
-            </div>
-          ))}
-        </section>
-        <section>
-          <h3>2 · The question</h3>
+        )}
+        {t.players === 1 && (
+          <details className="goals">
+            <summary>Bonus goals you can earn</summary>
+            <ul>{ROLES.map((r) => <li key={r.id}><span className="code">{r.icon}</span> <b>{r.main[0]}</b>: {r.main[1]}</li>)}</ul>
+          </details>
+        )}
+      </section>
+
+      <section className="step">
+        <h3><i>02</i> What do you want to find out?</h3>
+        <div className="pick-row three">
           {MODES.map((x) => (
-            <button key={x.id} className={`card mode ${m === x.id ? 'sel' : ''}`} onClick={() => setM(x.id)}>
-              <div className="mode-head"><b>Mission {x.id}</b><span>{x.diff} · score ×{MODE_MULT[x.id]}</span></div>
-              <div className="mode-q">{x.q}</div>
-              <p>{x.what}</p>
-              <span className="hint">Budget ${BUDGET_M + MODE_BUDGET_M[x.id]}M</span>
+            <button key={x.id} className={`pick mode2 ${m === x.id ? 'sel' : ''}`} aria-pressed={m === x.id} onClick={() => setM(x.id)}>
+              {x.tag && <em className="tag2">{x.tag}</em>}
+              <span className="pick-icon">Mission {x.id}</span>
+              <b>{x.title}</b>
+              <span className="q2">"{x.q}"</span>
+              <small>{x.what}</small>
+              <span className="meta2">Difficulty {x.stars}/3 · ${BUDGET_M + MODE_BUDGET_M[x.id]}M budget · points ×{MODE_MULT[x.id]}</span>
             </button>
           ))}
-        </section>
-        <section>
-          <h3>3 · The sketch</h3>
-          <Napkin mode={m} />
-          <p className="hint">Every real mission starts like this: a sketch on a napkin. It goes into your final report.</p>
-          <div className="actions"><button className="btn big" onClick={() => onDone(m, t)}>Approve the napkin → Orbit</button></div>
-        </section>
-      </div>
+        </div>
+      </section>
+
+      <section className="step final">
+        <MissionPatch mode={m} size={200} />
+        <div>
+          <h3><i>03</i> Your mission patch</h3>
+          <p>Every real mission gets one. Yours says: <b>{pick.title}</b> — {pick.q.toLowerCase()}</p>
+          <ol className="flow">{FLOW.slice(0, m === 'A' ? 4 : 5).map((f) => <li key={f}>{f}</li>)}</ol>
+          <button className="btn big" onClick={() => onDone(m, t)}>Start designing →</button>
+        </div>
+      </section>
     </div>
   )
 }

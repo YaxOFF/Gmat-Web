@@ -42,7 +42,7 @@ export function Finale3D({ kind, crater, seed, partIds, onDone }: {
     const sc = buildSpacecraft(partIds.filter((id) => id !== 'lander')); sc.scale.setScalar(0.02)
     scene.add(sc)
     const trail: THREE.Vector3[] = []
-    const line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xd7ff3a }))
+    const line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x5cc8f0 }))
     scene.add(line)
     // Pluma: partículas que salen del polo sur al impactar.
     const N = 600, pp = new Float32Array(N * 3), vel: THREE.Vector3[] = []

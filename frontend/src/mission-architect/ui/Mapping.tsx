@@ -1,10 +1,12 @@
+import { mulberry32 } from '../engine/rng'
+import { southPoleImage } from '../three/stage'
 import { Orbit3D } from '../three/Orbit3D'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CARD } from '../data/cards'
 import { CRATERS, CRATER, CYCLES, ORBIT } from '../data/catalog'
 import type { Layer } from '../data/types'
 import {
-  aggMods, baseQuality, beginCycle, eclipseMult, respond, respondP, runCycle,
+  aggMods, baseQuality, beginCycle, respond, respondP, runCycle,
   type CyclePlan, type CycleReport, type Ctx, type Mission,
 } from '../engine/mission'
 import { knownFromQuality, LAYER_LABEL, observe } from '../engine/observe'
@@ -26,25 +28,23 @@ function PoleMap({ m, ctx, targets, focus, onToggle, onFocus, small }: {
 }) {
   return (
     <svg className={`polemap ${small ? 'small' : ''}`} viewBox="0 0 100 100">
-      <defs>
-        <radialGradient id="moonfill" cx="40%" cy="35%"><stop offset="0" stopColor="#c9ccd8" /><stop offset="1" stopColor="#5a5f73" /></radialGradient>
-      </defs>
-      <circle cx="50" cy="50" r="47" fill="url(#moonfill)" stroke="#d7ff3a" strokeWidth="0.6" />
-      <circle cx="50" cy="50" r="30" fill="none" stroke="#0006" strokeWidth="0.3" strokeDasharray="1 1.5" />
-      <circle cx="50" cy="50" r="15" fill="none" stroke="#0006" strokeWidth="0.3" strokeDasharray="1 1.5" />
-      <text x="50" y="97" textAnchor="middle" fontSize="3" fill="#0008">SOUTH POLE · view from above</text>
+      <image href={southPoleImage(mulberry32(7))} x="3" y="3" width="94" height="94" />
+      <circle cx="50" cy="50" r="47" fill="none" stroke="#26314f" strokeWidth="0.8" />
+      <circle cx="50" cy="50" r="30" fill="none" stroke="#ffffff30" strokeWidth="0.3" strokeDasharray="1 1.5" />
+      <circle cx="50" cy="50" r="15" fill="none" stroke="#ffffff30" strokeWidth="0.3" strokeDasharray="1 1.5" />
+      <text x="50" y="97" textAnchor="middle" fontSize="3" fill="#e8ecf6aa">SOUTH POLE · view from above</text>
       {CRATERS.map((c) => {
         const q = m.quality[c.id]?.hydrogen
         const k = knownFromQuality(q)
         const sel = targets.includes(c.id)
-        const color = k === 'exact' ? '#7dff6b' : k === 'range' ? '#ffb020' : '#2b2f3f'
+        const color = k === 'exact' ? '#62d394' : k === 'range' ? '#ffa94d' : '#1a2033'
         const hot = k !== 'none' && ctx.stats.layers.includes('hydrogen')
         const size = k === 'none' ? 5 : 3.5 + Math.min(c.h, 6) * 0.6
         return (
           <g key={c.id} className="node" onClick={() => onToggle(c.id)} onMouseEnter={() => onFocus(c.id)} style={{ cursor: 'pointer' }}>
-            <circle cx={c.x} cy={c.y} r={size + 2.5} fill="none" stroke={sel ? '#ff3d81' : focus === c.id ? '#fff' : 'transparent'} strokeWidth="1" strokeDasharray={sel ? '0' : '1.5 1'} />
+            <circle cx={c.x} cy={c.y} r={size + 2.5} fill="none" stroke={sel ? '#ef6f6c' : focus === c.id ? '#fff' : 'transparent'} strokeWidth="1" strokeDasharray={sel ? '0' : '1.5 1'} />
             <circle cx={c.x} cy={c.y} r={size} fill={color} opacity={hot ? 0.92 : 0.8} stroke="#000a" strokeWidth="0.5" />
-            <text x={c.x} y={c.y + size + 5} textAnchor="middle" fontSize="3.2" fill="#10121b" fontWeight="700">{c.name}</text>
+            <text x={c.x} y={c.y + size + 5} textAnchor="middle" fontSize="3.2" fill="#fff" fontWeight="700" paintOrder="stroke" stroke="#0a0f1c" strokeWidth="0.8">{c.name}</text>
             {k === 'none' && <text x={c.x} y={c.y + 1.2} textAnchor="middle" fontSize="4" fill="#7b8099">?</text>}
           </g>
         )
@@ -113,17 +113,17 @@ export function Mapping({ ctx, mission, setMission, rng, onFinish }: {
   const canRun = plan.calibrate || plan.targets.length > 0
   const finished = report && m.cycle > CYCLES
   const qPreview = baseQuality(orbit.res) * mods.qMul * (plan.targets.length === 2 ? 0.65 : 1) * (plan.eclipseSave ? 0.8 : 1) + m.qBonus
-  const logTail = m.log.slice(-6)
   const stored = Math.round(m.storedGb * 10) / 10
 
   return (
     <div className="mapping">
       <aside className="col">
-        <h3>Cycle <b>{cycle}</b> / {CYCLES}</h3>
-        <p className="hint"><Term k="eclipse">Eclipse</Term> season {m.cycle >= 3 ? `ON ×${eclipseMult(m.cycle)}` : 'starts in cycle 3'}</p>
+        <h3>Mapping pass {cycle} of {CYCLES}</h3>
+        <div className="passes">{Array.from({ length: CYCLES }, (_, i) => <i key={i} className={i + 1 < cycle ? 'done' : i + 1 === cycle ? 'now' : ''} />)}</div>
+        <p className="hint">{m.cycle >= 3 ? <><Term k="eclipse">Eclipse</Term> season: longer dark periods, the battery works harder.</> : <>From pass 3 the <Term k="eclipse">eclipses</Term> get longer.</>}</p>
 
-        <h3>Trouble cards</h3>
-        {m.cards.filter((c) => !c.resolved).length === 0 && <p className="hint">No active cards. Quiet cycle.</p>}
+        <h3>Problems on board</h3>
+        {m.cards.filter((c) => !c.resolved).length === 0 && <p className="hint">All quiet. Nothing is going wrong right now.</p>}
         <ul className="cards">
           {m.cards.filter((c) => !c.resolved).map((c) => {
             const d = CARD[c.id]
@@ -132,7 +132,7 @@ export function Mapping({ ctx, mission, setMission, rng, onFinish }: {
                 <div className="card-head"><b>{d.name}</b><span>{d.level}</span></div>
                 <p>{d.text}</p>
                 <small>From: {d.source}</small>
-                {d.timer ? <small className="timer">⏱ {Math.max(0, d.timer - c.age)} cycle(s) left</small> : null}
+                {d.timer ? <small className="timer">⏱ {Math.max(0, d.timer - c.age)} pass(es) to fix it</small> : null}
                 {d.response && !report && (
                   <button className="btn small" disabled={c.tried} onClick={() => doRespond(c.uid)}>
                     {c.tried ? 'Already tried' : `${d.response.role}: ${d.response.label} (${pct(respondP(m, c.uid))})`}
@@ -147,7 +147,7 @@ export function Mapping({ ctx, mission, setMission, rng, onFinish }: {
       <main className="col center">
         <PoleMap small={!!report} m={m} ctx={ctx} targets={plan.targets} focus={focus} onToggle={toggle} onFocus={setFocus} />
         <div className="map3d">
-          <span className="tagline">Selene over the south pole · lime = targets this cycle · drag to rotate</span>
+          <span className="tagline">Selene over the south pole · gold = craters you will scan · drag to rotate</span>
           <Orbit3D orbitId={design.orbitId} highlight={focus} targets={plan.targets} partIds={design.partIds} />
         </div>
         {!report && <div className="plan">
@@ -163,12 +163,12 @@ export function Mapping({ ctx, mission, setMission, rng, onFinish }: {
             <input type="checkbox" checked={plan.eclipseSave} onChange={(e) => setPlan({ ...plan, eclipseSave: e.target.checked })} />
             Instruments off in eclipse (battery safer, quality −20%)
           </label>
-          <button className="btn big" disabled={!canRun} onClick={run}>Run cycle {cycle} ▶</button>
+          <button className="btn big" disabled={!canRun} onClick={run}>Scan the selected craters ▶</button>
         </div>}
 
         {report && (
           <div className="result">
-            <h3>Cycle {report.cycle} result</h3>
+            <h3>Pass {report.cycle} results</h3>
             <div className="res-grid">
               <div><small>Quality</small><b>{report.calibrated ? '—' : pct(report.quality)}</b></div>
               <div><small>Science</small><b>+{report.sciencePts}</b></div>
@@ -176,7 +176,7 @@ export function Mapping({ ctx, mission, setMission, rng, onFinish }: {
               <div><small>Battery low</small><b>{Math.round(report.batteryMinPct)}%</b></div>
             </div>
             {report.revealed.length > 0 && (
-              <ul className="revealed">{report.revealed.map((r, k) => <li key={k} className={r.known}>{r.crater}: {LAYER_LABEL[r.layer]} {r.known === 'exact' ? '✔ exact' : '≈ rough'}</li>)}</ul>
+              <ul className="revealed">{report.revealed.map((r, k) => <li key={k} className={r.known}>{r.crater}: {LAYER_LABEL[r.layer]} {r.known === 'exact' ? 'exact' : '≈ rough'}</li>)}</ul>
             )}
             <Strip lines={debrief(report, m.cards.length > 0)} />
             <button className="btn big" onClick={finished ? onFinish : () => { setReport(null); setPlan({ targets: [], calibrate: false, eclipseSave: false }) }}>
@@ -192,13 +192,10 @@ export function Mapping({ ctx, mission, setMission, rng, onFinish }: {
         <Meter label="RECORDER (Gb)" value={stored} max={stats.storageGb} tone={stored / Math.max(1, stats.storageGb) > 0.8 ? 'bad' : 'ok'} hint="Data waiting to be sent home." />
         <Meter label="DATA SENT" value={m.transmittedGb} max={Math.max(1, m.generatedGb)} text={`${m.transmittedGb.toFixed(0)} / ${m.generatedGb.toFixed(0)} Gb`} tone="info" hint="Science only counts for the fraction that reaches Earth." />
         <Meter label="FUEL (m/s)" value={Math.max(0, m.dvLeft)} max={Math.max(1, stats.dvTankMs)} text={`${Math.round(m.dvLeft)} m/s`} tone={m.dvLeft < 50 ? 'bad' : 'ok'} />
-        <p className="hint">Predicted map quality this cycle: <b>{pct(Math.max(0, Math.min(1, qPreview)))}</b> (≥75% exact · ≥40% rough)</p>
+        <p className="hint">Expected map quality: <b>{pct(Math.max(0, Math.min(1, qPreview)))}</b> (≥75% exact · ≥40% rough)</p>
         <Dossier m={m} id={focus} />
       </aside>
 
-      <footer className="console">
-        {logTail.length === 0 ? <span>[SELENE] NOMINAL.</span> : logTail.map((l, k) => <div key={k} className={`k-${l.kind}`}>{l.text}</div>)}
-      </footer>
     </div>
   )
 }

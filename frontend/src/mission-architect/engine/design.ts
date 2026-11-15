@@ -128,7 +128,7 @@ export function computeStats(d: Design, iterations = 0): Stats {
       why: 'Surprises cost money. Real programs hold back at least 10%.',
     },
     {
-      id: 'science', label: 'Science traceability', value: layers.includes('hydrogen') ? 'Hydrogen instrument ✓' : 'No hydrogen instrument',
+      id: 'science', label: 'Science traceability', value: layers.includes('hydrogen') ? 'Hydrogen instrument ' : 'No hydrogen instrument',
       status: layers.includes('hydrogen') ? (layers.includes('terrain') ? 'ok' : 'warn') : 'fail',
       why: 'The mission asks "where is the hydrogen?". Only the neutron spectrometer answers that. Without a camera you cannot judge landing terrain.',
     },

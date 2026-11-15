@@ -1,3 +1,5 @@
+import { mulberry32 } from '../engine/rng'
+import { southPoleImage } from '../three/stage'
 import type { ReactNode } from 'react'
 import { useMemo, useState } from 'react'
 import { CRATERS, ORBIT } from '../data/catalog'
@@ -21,8 +23,18 @@ export function Site({ mission, design, onPick }: { mission: Mission; design: De
   if (talk) return <Dialogue lines={lines} onDone={() => setTalk(false)} startScene="lab" />
   return (
     <div className="page">
-      <h2>Pick the landing site <small>Act II</small></h2>
+      <h2>Pick the landing site <small>Act II · click a crater on the map or in the table</small></h2>
       <p className="lead">This is what Selene's data says. A "?" is a bet. Phase 2's rover lands on the sunlit rim of the crater you choose.</p>
+      <div className="site-layout">
+      <svg className="site-map" viewBox="0 0 100 100" aria-label="South pole map">
+        <image href={southPoleImage(mulberry32(7))} x="3" y="3" width="94" height="94" />
+        {CRATERS.map((c) => (
+          <g key={c.id} onClick={() => setSel(c.id)} style={{ cursor: 'pointer' }}>
+            <circle cx={c.x} cy={c.y} r={sel === c.id ? 7 : 5} fill="#0a0f1c99" stroke={sel === c.id ? '#5cc8f0' : '#e8ecf6aa'} strokeWidth={sel === c.id ? 1.4 : 0.6} />
+            <text x={c.x} y={c.y + 11} textAnchor="middle" fontSize="3.6" fill="#fff" fontWeight="700" paintOrder="stroke" stroke="#0a0f1c" strokeWidth="0.8">{c.name}</text>
+          </g>
+        ))}
+      </svg>
       <div className="table-wrap">
         <table className="matrix">
           <thead><tr><th></th><th>Hydrogen</th><th>Terrain</th><th>Slopes</th><th>Temperature</th><th>Relay from {orbit.name.toLowerCase()}</th></tr></thead>
@@ -41,9 +53,11 @@ export function Site({ mission, design, onPick }: { mission: Mission; design: De
           </tbody>
         </table>
       </div>
+      </div>
+      {design.mode === 'A' && <p className="hint">You are flying Mission A (orbiter only), so no rover lands this time. Pick "Touch it" when planning the mission to drive Buscador.</p>}
       <div className="actions">
         <button className="btn big" disabled={!sel} onClick={() => sel && onPick(sel)}>
-          {sel ? `Send the rover to ${CRATERS.find((c) => c.id === sel)!.name} ▶` : 'Select a crater'}
+          {!sel ? 'Select a crater' : design.mode === 'A' ? `Recommend ${CRATERS.find((c) => c.id === sel)!.name} for a future rover ▶` : `Send the rover to ${CRATERS.find((c) => c.id === sel)!.name} ▶`}
         </button>
       </div>
     </div>
@@ -78,14 +92,14 @@ export function Report({ ending, mission, score, siteId, onRetry, onNew, extra }
 
       <div className="report-grid">
         <section>
-          <h3>Score</h3>
+          <h3>How your score adds up</h3>
           <table className="score">
             <tbody>
               <tr><td>Science that reached Earth ({pct(score.transmitFraction)} of data)</td><td>{score.science}</td></tr>
-              <tr><td>Budget left × 2</td><td>{score.budget}</td></tr>
-              <tr><td>100 − final stress</td><td>{score.stress}</td></tr>
+              <tr><td>Money left over (×2)</td><td>{score.budget}</td></tr>
+              <tr><td>Spacecraft health at the end</td><td>{score.stress}</td></tr>
               <tr><td>Landing-site bonus{siteId ? ` (${ siteTier(siteId) })` : ''}</td><td>{score.site}</td></tr>
-              <tr><td>Chose with hydrogen data</td><td>{score.informed}</td></tr>
+              <tr><td>Picked the site using hydrogen data</td><td>{score.informed}</td></tr>
               <tr className="total"><td>Total</td><td>{score.total}</td></tr>
             </tbody>
           </table>
@@ -93,10 +107,10 @@ export function Report({ ending, mission, score, siteId, onRetry, onNew, extra }
         </section>
 
         <section>
-          <h3>Cause line <small>what your decisions caused</small></h3>
+          <h3>Why things happened <small>your choices and what they led to</small></h3>
           <ol className="causes">
             {log.length === 0 && <li>Nothing flew, so nothing happened.</li>}
-            {log.map((l, k) => <li key={k} className={`k-${l.kind}`}>{l.text}</li>)}
+            {log.map((l, k) => <li key={k} className={`k-${l.kind}`}>{l.text.replace(/^Cycle (\d+):/, 'Mapping pass $1:').replace(/^Hangar:/, 'In the hangar:')}</li>)}
           </ol>
         </section>
 
@@ -115,7 +129,7 @@ export function Report({ ending, mission, score, siteId, onRetry, onNew, extra }
         <button className="btn big" onClick={onRetry}>Retry with this design</button>
         <button className="btn ghost" onClick={onNew}>New game</button>
       </div>
-      <p className="hint">Numbers are game values for balance. Real-data values (GMAT orbits, LRO/LCROSS) are tagged in <code>data/</code> as they are added.</p>
+      <p className="hint">Numbers are simplified for the game. The orbits themselves can be checked with real physics in GMAT.</p>
     </div>
   )
 }
