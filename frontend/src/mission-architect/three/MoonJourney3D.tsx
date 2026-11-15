@@ -40,13 +40,13 @@ export function MoonJourney3D({ launch, orbitId, onDone }: { launch: LaunchOutco
         if (tr) setSource(tr === live ? 'live' : 'cached')
         return tr
       },
-      ctl: ctl.current, labels: labels.current, flash: () => flash.current,
+      ctl: ctl.current, labels: labels.current, flash: () => flash.current, finale: true,
       onHud: (h) => setHud((p) => ({ ...p, ...h })),
     })
     return off
   }, [orbitId])
 
-  // Lanzamiento bueno: al terminar el viaje pasa solo al Act 1 (deja ver "ORBIT ACHIEVED" un momento).
+  // Lanzamiento bueno: al terminar la llegada a la Luna pasa solo al Act 1.
   const ok = launch.status === 'ok'
   const done = useRef(onDone)
   useEffect(() => { done.current = onDone })
@@ -60,9 +60,9 @@ export function MoonJourney3D({ launch, orbitId, onDone }: { launch: LaunchOutco
   const reached = (p: Phase) => ORDER.indexOf(hud.phase) >= ORDER.indexOf(p)
   // Las tarjetas de Mission Control aparecen cuando la escena llega a su momento.
   const when = (label: string) => label === 'Launch' ? reached('liftoff') : label === 'Solar array deployment' ? reached('tli')
-    : label === 'Lunar orbit insertion' ? reached('loi') || (launch.status === 'lost' && hud.done) : true
+    : label === 'Lunar orbit insertion' ? reached('loi') || !!hud.arrival : true
   const shown = launch.events.filter((e) => when(e.label))
-  const tag = hud.count != null ? `T−${hud.count}` : launch.status === 'lost' && hud.done ? 'SIGNAL LOST' : hud.phase === 'orbit' ? 'ORBIT ACHIEVED' : ''
+  const tag = hud.count != null ? `T−${hud.count}` : !hud.arrival ? '' : ok ? 'ORBIT ACHIEVED' : 'SIGNAL LOST'
   const km = (v: number) => `${Math.round(v).toLocaleString('en-US')} km`
   return (
     <div className="rover">
@@ -82,7 +82,7 @@ export function MoonJourney3D({ launch, orbitId, onDone }: { launch: LaunchOutco
         </div>
         {hud.layer && <div className="hint" style={{ color: 'var(--amber)' }}>{LAYER[hud.layer]}</div>}
         <div className="hint" style={{ color: 'var(--dim)' }}>
-          {hud.cine ? 'Launch and ascent: illustration' : source === 'live' ? 'Trajectory: computed live by GMAT' : 'Trajectory: saved GMAT run (engine offline)'}
+          {hud.cine ? 'Launch and ascent: illustration' : hud.arrival ? 'Arrival: illustration' : source === 'live' ? 'Trajectory: computed live by GMAT' : 'Trajectory: saved GMAT run (engine offline)'}
         </div>
         {shown.map((e, i) => (
           <div key={i} className="hint" style={{ color: e.result === 'fail' ? 'var(--red)' : e.result === 'partial' ? 'var(--amber)' : 'var(--green)' }}>
@@ -90,7 +90,7 @@ export function MoonJourney3D({ launch, orbitId, onDone }: { launch: LaunchOutco
           </div>
         ))}
         <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', pointerEvents: 'auto' }}>
-          {hud.cine
+          {hud.arrival ? null : hud.cine
             ? <button className="btn small ghost" onClick={() => { c.seekCine = ASC_END }}>Skip launch</button>
             : <>
                 {(['follow', 'system', 'moon'] as const).map((k) => (

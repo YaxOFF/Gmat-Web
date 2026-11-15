@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { LaunchOutcome } from '../engine/mission'
 import { mulberry32 } from '../engine/rng'
-import { liftoff, mslCraft } from './liftoff'
-import { mountStage, moonTexture } from './stage'
+import { liftoff } from './liftoff'
+import { mountStage } from './stage'
 
-const T_LIFT = 5, T_EVENT = 2.4, T_SPACE = 13, T_END = 19
+const T_LIFT = 5, T_EVENT = 2.4
 
-/** Lanzamiento y crucero: cuenta regresiva, ascenso y la inserción lunar, con las tiradas del motor del juego. */
+/** Lanzamiento que falla en la plataforma (masa o tirada de despegue). Si despega bien, el juego usa MoonJourney3D. */
 export function Launch3D({ launch, seed, onDone }: { launch: LaunchOutcome; seed: number; onDone: () => void }) {
   const host = useRef<HTMLDivElement>(null)
   const [t, setT] = useState(0)
@@ -19,24 +19,16 @@ export function Launch3D({ launch, seed, onDone }: { launch: LaunchOutcome; seed
   useEffect(() => mountStage(host.current!, ({ scene, camera }) => {
     const rng = mulberry32(seed)
     const L = liftoff(scene, rng)
-    const { sky, starMat, pad, rocket, fire, smoke } = L
+    const { rocket } = L
     const boom = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), new THREE.MeshBasicMaterial({ color: 0xffb020, transparent: true, opacity: 0 }))
     scene.add(boom)
-
-    // Escena de espacio: Luna y la nave en crucero.
-    const space = new THREE.Group(); space.visible = false; scene.add(space)
-    const moon = new THREE.Mesh(new THREE.SphereGeometry(30, 64, 48), new THREE.MeshStandardMaterial({ map: moonTexture(rng), roughness: 1 }))
-    moon.position.set(0, 0, -120); space.add(moon)
-    const craft = mslCraft(() => L.st.gone)
-    const burn = craft.userData.burn as THREE.Mesh
-    space.add(craft)
 
     let time = 0
     const tick = (dt: number) => {
       if (!L.st.ready) { camera.position.set(30, 9, 42); camera.lookAt(0, 13, 0); return } // la cuenta espera al modelo
       time += dt; setT(time)
       const fly = time > T_LIFT && time < failAt
-      if (time < T_SPACE) {
+      {
         const k = Math.max(0, time - T_LIFT)
         const y = fly ? k * k * 1.6 : rocket.position.y
         const vy = fly ? k * 3.2 : 0
@@ -49,24 +41,13 @@ export function Launch3D({ launch, seed, onDone }: { launch: LaunchOutcome; seed
         }
         L.climb(y)
         camera.position.set(30, Math.max(9, y * 0.85 + 9), 42); camera.lookAt(0, y + 13, 0)
-      } else if (launch.status !== 'launch_failure') {
-        pad.visible = rocket.visible = fire.group.visible = smoke.group.visible = false; space.visible = true; sky.set(0x000000); scene.fog = null; starMat.opacity = 1
-        const k = time - T_SPACE
-        if (launch.status === 'ok') {
-          craft.position.set(Math.sin(k * 0.5) * 42, 6 - k * 0.6, -120 + Math.cos(k * 0.5) * 42)
-          burn.visible = k > 1.5 && k < 4
-        } else { craft.position.set(-40 + k * 14, 8, -100 + k * 4); burn.visible = false }
-        craft.lookAt(moon.position); craft.rotateY(Math.PI)
-        const out = craft.position.clone().sub(moon.position).normalize()
-        camera.position.copy(craft.position).addScaledVector(out, 9).add(new THREE.Vector3(3, 4, 0))
-        camera.lookAt(craft.position)
       }
     }
     return Object.assign(tick, { cleanup: () => { L.st.gone = true } })
   }), [launch, seed, failAt])
 
-  const end = launch.status === 'launch_failure' ? failAt + 2.5 : T_END
-  const tag = t < T_LIFT ? `T−${Math.ceil(T_LIFT - t)}` : t < T_SPACE || t > T_SPACE + 3 || launch.status === 'launch_failure' ? '' : launch.status === 'ok' ? 'ORBIT ACHIEVED' : 'SIGNAL LOST'
+  const end = failAt + 2.5
+  const tag = t < T_LIFT ? `T−${Math.ceil(T_LIFT - t)}` : ''
   return (
     <div className="rover">
       <div ref={host} className="view3d" />
@@ -80,7 +61,7 @@ export function Launch3D({ launch, seed, onDone }: { launch: LaunchOutcome; seed
           </div>
         ))}
       </div>
-      {t > end && <div className="rv-end"><button className="btn big" onClick={onDone}>{launch.status === 'ok' ? 'Begin mapping →' : 'Mission report →'}</button></div>}
+      {t > end && <div className="rv-end"><button className="btn big" onClick={onDone}>Mission report →</button></div>}
     </div>
   )
 }

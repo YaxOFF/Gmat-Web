@@ -2,7 +2,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import type { Rng } from '../engine/rng'
-import { at, stars } from './stage'
+import { at, moonTexture, realMoon, stars } from './stage'
 
 /** El GLB está en metros reales (cohete de 58 m): escala a la escena y altura de la cubierta sobre el suelo. */
 const SCALE = 0.4, PAD_Y = 6.5 * SCALE
@@ -236,4 +236,27 @@ export function mslCraft(gone: () => boolean, scale = MSL_SCALE): THREE.Group {
   const burn = at(new THREE.Mesh(new THREE.ConeGeometry(0.8 * scale, 4.8 * scale, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.8 })), 0, 0, -MSL_MID * scale - 2.4 * scale)
   burn.rotation.x = -Math.PI / 2; craft.add(burn); craft.userData.burn = burn
   return craft
+}
+
+/**
+ * Llegada a la Luna, la escena final del lanzamiento: Luna grande, la nave la rodea (`ok`) o pasa de largo (LOI
+ * fallida) y la cámara va detrás con la Luna de fondo. Trae sus luces y estrellas. `update(k)`: k = segundos de escena.
+ */
+export function arrival(rng: Rng, gone: () => boolean) {
+  const group = new THREE.Group(); group.visible = false
+  group.add(stars(rng), new THREE.HemisphereLight(0xcfe2ff, 0x6b6a55, 1.1))
+  const sun = new THREE.DirectionalLight(0xfff2dc, 2.4); sun.position.set(60, 90, 80); group.add(sun)
+  const mat = new THREE.MeshStandardMaterial({ map: moonTexture(rng), roughness: 1 }); realMoon(mat)
+  const moon = at(new THREE.Mesh(new THREE.SphereGeometry(30, 64, 48), mat), 0, 0, -120); group.add(moon)
+  const craft = mslCraft(gone); group.add(craft)
+  ;(craft.userData.burn as THREE.Mesh).visible = false // la LOI ya se vio en el viaje
+  const out = new THREE.Vector3(), lift = new THREE.Vector3(3, 4, 0)
+  const update = (k: number, ok: boolean, camera: THREE.Camera) => {
+    if (ok) craft.position.set(Math.sin(k * 0.5) * 42, 6 - k * 0.6, -120 + Math.cos(k * 0.5) * 42)
+    else craft.position.set(-40 + k * 14, 8, -100 + k * 4)
+    craft.lookAt(moon.position); craft.rotateY(Math.PI)
+    out.copy(craft.position).sub(moon.position).normalize()
+    camera.position.copy(craft.position).addScaledVector(out, 9).add(lift); camera.lookAt(craft.position)
+  }
+  return { group, update }
 }

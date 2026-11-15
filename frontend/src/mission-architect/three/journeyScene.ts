@@ -5,12 +5,13 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { ShipResult } from '../../model/results'
 import { mulberry32 } from '../engine/rng'
-import { liftoff, mslCraft } from './liftoff'
+import { arrival, liftoff, mslCraft } from './liftoff'
 import { moonTexture, mountStage, realMoon, stars } from './stage'
 
 const R_EARTH = 6378.1363, R_MOON = 1737.4 // km, los radios de GMAT
 const OMEGA = 7.2921159e-5 // rad/s, giro sidéreo: solo para pintar la Tierra entre muestras
 export const T_LIFT = 5, PAD_END = 12, ASC_END = 34 // segundos de la cinemática
+const ARRIVAL = 6 // segundos de la escena de llegada a la Luna
 const DAY_SKY = new THREE.Color(0.56, 0.75, 0.93), SPACE = new THREE.Color(0)
 const ATLAS_KM = 0.058, MSL_KM = 0.008 // largo de los modelos, para escalarlos según la distancia de la cámara
 const LAYERS = [ // altitud (km) donde empieza cada capa
@@ -28,6 +29,8 @@ export const LABELS = ['earth', 'moon', 'tli', 'loi', 'straight'] as const
 export type Hud = {
   phase: Phase; layer: Layer | null; T: number; tEnd: number; alt: number; dMoon: number | null; speed: number | null
   count: number | null; playing: boolean; cine: boolean; done: boolean
+  /** En la escena de llegada a la Luna (solo con `finale`). */
+  arrival?: boolean
 }
 /** Mando compartido con la interfaz: la escena lo lee en cada cuadro. `stopAtPeri`: termina en el periselenio sin LOI. */
 export type Ctl = { T: number; playing: boolean; speed: number; cam: Cam; camChanged: boolean; straight: boolean; seekCine: number | null; stopAtPeri: boolean }
@@ -141,6 +144,8 @@ export type JourneyOpts = {
   labels: Partial<Record<(typeof LABELS)[number], HTMLElement | null>>
   flash: () => HTMLElement | null
   onHud: (h: Partial<Hud>) => void
+  /** Al terminar la trayectoria, la escena de llegada a la Luna (el juego); `done` llega al final de esa escena. */
+  finale?: boolean
 }
 
 /** Monta la escena en `el` y devuelve el limpiador. */
@@ -157,6 +162,8 @@ export function mountJourney(el: HTMLElement, o: JourneyOpts): () => void {
 
     // --- Escena a escala real (km), armada al primer uso con la trayectoria que haya ---
     const world = new THREE.Group(); world.visible = false; scene.add(world)
+    const arr = o.finale ? arrival(rng, gone) : null
+    if (arr) scene.add(arr.group)
     let W: ReturnType<typeof build> | null = null
     function build(tr: Track) {
       const far = stars(rng, 4000, 1e6); world.add(far)
@@ -225,7 +232,7 @@ export function mountJourney(el: HTMLElement, o: JourneyOpts): () => void {
     }
     const layerAt = (alt: number) => [...LAYERS].reverse().find((l) => alt >= l.at)?.key ?? null
 
-    let cine = 0, wall = 0, burnUntil = 0, lastHud = 0, started = false
+    let cine = 0, wall = 0, burnUntil = 0, lastHud = 0, started = false, fin = 0
     const place = (key: (typeof LABELS)[number], p: THREE.Vector3 | null, show = true) => {
       const lab = o.labels[key]
       if (!lab) return
@@ -240,7 +247,7 @@ export function mountJourney(el: HTMLElement, o: JourneyOpts): () => void {
     const tick = (dt: number) => {
       wall += dt
       const c = o.ctl
-      if (c.seekCine != null) { cine = c.seekCine; c.seekCine = null; started = false; controls.enabled = false; c.playing = false }
+      if (c.seekCine != null) { cine = c.seekCine; c.seekCine = null; started = false; fin = 0; controls.enabled = false; c.playing = false }
       if (!L.st.ready) { camera.position.set(30, 9, 42); camera.lookAt(0, 13, 0); return } // la cuenta espera al modelo
       let hud: Partial<Hud>
       const flash = o.flash()
@@ -281,7 +288,16 @@ export function mountJourney(el: HTMLElement, o: JourneyOpts): () => void {
           const m0 = W.moonAt(0); if (m0) W.moon.position.copy(m0)
           hud = { phase: 'ascent', count: null, alt, layer: layerAt(alt), cine: true, done: false }
         }
+      } else if (arr && started && c.T >= W.tEnd) {
+        // Llegada a la Luna: corte con destello a la Luna grande; la nave la rodea (o pasa de largo) con la cámara detrás.
+        fin += dt
+        if (flash) flash.style.opacity = String(Math.max(0, 1 - fin / 0.6))
+        world.visible = false; arr.group.visible = true; controls.enabled = false
+        scene.background = sky.set(0); near(true); camera.up.copy(Y)
+        arr.update(fin, !c.stopAtPeri, camera)
+        hud = { arrival: true, cine: false, done: fin >= ARRIVAL }
       } else {
+        if (arr) arr.group.visible = false
         if (!started) { // empieza el tramo de GMAT
           started = true; c.T = 0; c.playing = true; burnUntil = wall + 2.5
           W.rocket.visible = false; W.craft.visible = true; controls.enabled = true
@@ -325,7 +341,7 @@ export function mountJourney(el: HTMLElement, o: JourneyOpts): () => void {
 
         const tP = W.tP
         const phase: Phase = c.T < 1800 ? 'tli' : !M ? 'coast' : c.T < tP - 8 * 3600 ? 'coast' : c.T < tP - 600 ? 'approach' : c.stopAtPeri ? 'approach' : c.T < tP + 3 * 3600 ? 'loi' : 'orbit'
-        hud = { phase, count: null, layer: null, alt: P.length() - R_EARTH, dMoon: M ? P.distanceTo(M) - R_MOON : null, speed: V.length(), cine: false, done: c.T >= W.tEnd }
+        hud = { phase, count: null, layer: null, alt: P.length() - R_EARTH, dMoon: M ? P.distanceTo(M) - R_MOON : null, speed: V.length(), cine: false, done: !arr && c.T >= W.tEnd }
         place('moon', M)
         place('tli', W.tr.pos[0])
         place('loi', W.iP >= 0 && !c.stopAtPeri ? W.tr.pos[W.iP] : null)
@@ -333,7 +349,7 @@ export function mountJourney(el: HTMLElement, o: JourneyOpts): () => void {
       }
       if (W) W.far.position.copy(camera.position)
       place('earth', world.visible && W ? W.earth.position : null)
-      if (cine < ASC_END) for (const k of ['moon', 'tli', 'loi', 'straight'] as const) place(k, null)
+      if (cine < ASC_END || fin > 0) for (const k of ['moon', 'tli', 'loi', 'straight'] as const) place(k, null)
       if (wall - lastHud > 0.1) { lastHud = wall; o.onHud({ ...hud, T: c.T, tEnd: W?.tEnd ?? 0, playing: c.playing }) }
     }
     return Object.assign(tick, { cleanup: () => { L.st.gone = true; controls.dispose() } })
