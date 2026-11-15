@@ -1,4 +1,4 @@
-<!-- fuente: backend/app, frontend/src, shared | rev: e76b7b9 -->
+<!-- fuente: backend/app, frontend/src, shared | rev: 1a95f8e -->
 # Map
 
 ## Entry points

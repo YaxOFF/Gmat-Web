@@ -1,4 +1,4 @@
-<!-- fuente: backend/app/main.py, backend/app/engine/runner.py, backend/app/engine/schema.py, frontend/src/model/schema.ts | rev: 7b35a0e -->
+<!-- fuente: backend/app/main.py, backend/app/engine/runner.py, backend/app/engine/schema.py, frontend/src/model/schema.ts | rev: 1a95f8e -->
 # API (prefix `/api`)
 
 | Method and path | Body | Response |

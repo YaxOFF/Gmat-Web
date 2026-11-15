@@ -1,4 +1,4 @@
-<!-- fuente: docker-compose.yml, Dockerfile, .dockerignore, .env.example, backend/app/main.py | rev: 8739818 -->
+<!-- fuente: docker-compose.yml, Dockerfile, .dockerignore, .env.example, backend/app/main.py | rev: 1a95f8e -->
 # Deployment with Docker
 
 One container (`app`): Vite build + FastAPI + GMAT engine. uvicorn serves `/api` and the game's static files.
