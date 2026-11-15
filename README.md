@@ -10,20 +10,21 @@ Mission Architect runs on top of **GMAT Web**, our web using NASA's General Miss
 ## Table of contents
 
 1. [About the project](#about-the-project)
-2. [The challenge](#the-challenge)
-3. [How it works](#how-it-works)
-4. [Benefits and intended impact](#benefits-and-intended-impact)
-5. [What makes it creative](#what-makes-it-creative)
-6. [Factors we considered](#factors-we-considered)
-7. [Tech stack](#tech-stack)
-8. [Repository structure](#repository-structure)
-9. [Getting started](#getting-started)
-10. [Playing the game](#playing-the-game)
-11. [Tests](#tests)
-12. [Configuration](#configuration-environment-variables)
-13. [Real data and 3D models](#real-data-and-3d-models)
-14. [Documentation](#documentation)
-15. [License](#license)
+2. [Preview](#preview)
+3. [The challenge](#the-challenge)
+4. [How it works](#how-it-works)
+5. [Benefits and intended impact](#benefits-and-intended-impact)
+6. [What makes it creative](#what-makes-it-creative)
+7. [Factors we considered](#factors-we-considered)
+8. [Tech stack](#tech-stack)
+9. [Repository structure](#repository-structure)
+10. [Getting started](#getting-started)
+11. [Playing the game](#playing-the-game)
+12. [Tests](#tests)
+13. [Configuration](#configuration-environment-variables)
+14. [Real data and 3D models](#real-data-and-3d-models)
+15. [Documentation](#documentation)
+16. [License](#license)
 
 ---
 
@@ -32,6 +33,17 @@ Mission Architect runs on top of **GMAT Web**, our web using NASA's General Miss
 Mission Architect is a browser game that lets students run a complete space mission, from concept to operations. It is built on Gmat-Web, our web using NASA's General Mission Analysis Tool (GMAT). Players pick a mission: water-ice prospecting at the lunar south pole (based on LCROSS and VIPER), or a rock and mineral hunt on Mars (based on Curiosity and Perseverance). From there they launch on an Atlas V and follow a transfer trajectory that GMAT computes live. They choose a landing site on a 3D globe built from real elevation data and make decisions during descent. Then they drive a rover with real instruments, all while managing battery, solar power, communication delays, dust storms, instrument time and only three sample tubes.
 
 Every choice has consequences that the player can see, so the trade-offs mission engineers face stop being abstract. Because a real flight-dynamics tool and real NASA data sit underneath, students learn how actual missions work, not a simplified cartoon. Mission design is usually locked behind expert software. Mission Architect turns it into something students can play, experiment with and learn from.
+
+## Preview
+
+| | |
+|---|---|
+| ![Title screen: pick the Moon or Mars](docs/preview/title.jpg) | ![Hangar: build the spacecraft within budget](docs/preview/hangar.jpg) |
+| Title screen: pick the Moon or Mars | Hangar: build the spacecraft within budget |
+| ![Atlas V 541 on the pad](docs/preview/launch.jpg) | ![Moon rover scanning the subsurface for hydrogen](docs/preview/moon-scan.jpg) |
+| Atlas V 541 on the pad | Moon: scanning the subsurface for hydrogen |
+| ![Moon rover drilling for ice with the X-ray cutaway](docs/preview/moon-drill.jpg) | ![Mars rover identifying a rock with the ChemCam laser](docs/preview/mars-laser.jpg) |
+| Moon: drilling for ice, with the X-ray cutaway | Mars: a rock identified with the ChemCam laser |
 
 ## The challenge
 
