@@ -1,3 +1,4 @@
+import { Orbit3D } from '../three/Orbit3D'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CARD } from '../data/cards'
 import { CRATERS, CRATER, CYCLES, ORBIT } from '../data/catalog'
@@ -149,6 +150,10 @@ export function Mapping({ ctx, mission, setMission, rng, onFinish }: {
 
       <main className="col center">
         <PoleMap small={!!report} m={m} ctx={ctx} targets={plan.targets} focus={focus} onToggle={toggle} onFocus={setFocus} />
+        <div className="map3d">
+          <span className="tagline">Selene over the south pole · lime = targets this cycle · drag to rotate</span>
+          <Orbit3D orbitId={design.orbitId} highlight={focus} targets={plan.targets} partIds={design.partIds} />
+        </div>
         {!report && <div className="plan">
           <div className="plan-row">
             <b>Targets:</b> {plan.targets.length ? plan.targets.map((t) => CRATER[t].name).join(' + ') : 'click up to 2 craters'}

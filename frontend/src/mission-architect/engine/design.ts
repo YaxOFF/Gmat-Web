@@ -1,6 +1,6 @@
 import {
   BUDGET_M, DSN_WINDOWS_PER_CYCLE, ITERATION_COST_M, LAUNCHER, ORBIT, PART,
-  OPTIONAL_SINGLE, REQUIRED_SINGLE, GROUP_LABEL,
+  OPTIONAL_SINGLE, REQUIRED_SINGLE, GROUP_LABEL, MODE_BUDGET_M, ROVER_GROUPS, ROVER_REQUIRED,
 } from '../data/catalog'
 import { BASE_DECK } from '../data/cards'
 import type { Check, Design, Group, Layer, Part } from '../data/types'
@@ -22,6 +22,7 @@ export interface Stats {
   dvTankMs: number
   dvNeededMs: number
   costM: number // piezas + lanzador + iteraciones
+  budgetM: number // presupuesto total de la misión elegida
   budgetLeftM: number
   reserve: number // budgetLeft / BUDGET
   slotsUsed: number
@@ -81,8 +82,9 @@ export function computeStats(d: Design, iterations = 0): Stats {
   const powerMargin = Math.min(sunMargin, batMargin)
 
   const costM = sum((p) => p.costM) + launcher.costM + iterations * ITERATION_COST_M
-  const budgetLeftM = BUDGET_M - costM
-  const reserve = budgetLeftM / BUDGET_M
+  const budgetM = BUDGET_M + MODE_BUDGET_M[d.mode ?? 'B']
+  const budgetLeftM = budgetM - costM
+  const reserve = budgetLeftM / budgetM
 
   const dvTankMs = tank?.dvMs ?? 0
   const dvNeededMs = orbit.dvInsertion + orbit.dvKeeping
@@ -98,6 +100,11 @@ export function computeStats(d: Design, iterations = 0): Stats {
   for (const g of REQUIRED_SINGLE) {
     if (!parts.some((p) => p.group === g)) errors.push(`Missing: ${GROUP_LABEL[g].toLowerCase()}.`)
   }
+  if ((d.mode ?? 'B') !== 'A') {
+    for (const g of ROVER_REQUIRED) if (!parts.some((p) => p.group === g)) errors.push(`Mission ${d.mode ?? 'B'} needs a rover part: ${GROUP_LABEL[g]}.`)
+  } else if (parts.some((p) => ROVER_GROUPS.includes(p.group))) errors.push('Mission A is orbiter only: remove the Rover Bay parts.')
+  if (d.mode === 'C' && !has(d, 'drill_deep')) errors.push('Mission C needs the deep drill (2 m).')
+  if (d.mode === 'C' && !has(d, 'radar')) errors.push('Mission C needs the SAR radar to see how deep the ice goes.')
   if (slotsUsed > slotsMax && bus) errors.push(`The ${bus.name.toLowerCase()} only has ${slotsMax} instrument slots.`)
   if (has(d, 'radar') && (!has(d, 'panel_gaas') || !has(d, 'bat_2')))
     errors.push('The radar draws 150 W: it needs the GaAs array AND the 2 kWh battery.')
@@ -133,7 +140,7 @@ export function computeStats(d: Design, iterations = 0): Stats {
   ]
 
   return {
-    parts, massKg, capacityKg, massMargin, genW, demandW, instrumentW, powerMargin, batteryWh,
+    budgetM, parts, massKg, capacityKg, massMargin, genW, demandW, instrumentW, powerMargin, batteryWh,
     storageGb: recorder?.storageGb ?? 0, downlinkGbCycle, dataGbPerTarget, dvTankMs, dvNeededMs,
     costM, budgetLeftM, reserve, slotsUsed, slotsMax, layers, lowRelCount, errors, checks,
   }

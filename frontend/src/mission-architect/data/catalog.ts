@@ -1,4 +1,4 @@
-import type { Crater, Design, Group, Launcher, Orbit, Part } from './types'
+import type { Crater, Design, Group, Launcher, Orbit, Part, MissionMode } from './types'
 
 // Valores de JUEGO (balanceados a mano), inspirados en el catálogo del GDD.
 // Los de órbita (periodo, Δv, eclipse) se sustituirán por los de GMAT cuando
@@ -45,22 +45,42 @@ export const PARTS: Part[] = [
   { id: 'radar', name: 'SAR radar', group: 'instrument', massKg: 60, drawW: 150, costM: 80, rel: 0.88, layer: 'buriedIce', dataGb: 15, cards: ['radar_overheat'], note: 'Sees buried ice. Heavy, hungry and expensive.' },
 ]
 
+// Rover Bay: módulo de aterrizaje + rover "Buscador" (misiones B y C). No consumen energía del orbitador.
+PARTS.push(
+  { id: 'lander', name: 'Lander + rover chassis', group: 'lander', massKg: 420, drawW: 0, costM: 45, rel: 0.95, note: 'Carries Buscador down to the crater rim. Required for missions B and C.' },
+  { id: 'rbat_3', name: 'Rover battery 3 kWh', group: 'rbattery', massKg: 20, drawW: 0, costM: 6, rel: 0.95, batteryWh: 3000, note: 'Light, but heaters eat it fast in the dark. Short sorties only.' },
+  { id: 'rbat_6', name: 'Rover battery 6 kWh', group: 'rbattery', massKg: 38, drawW: 0, costM: 11, rel: 0.95, batteryWh: 6000, note: 'Enough to go deep into the shadow and come back.' },
+  { id: 'wheels_std', name: 'Standard wheels', group: 'wheels', massKg: 12, drawW: 0, costM: 3, rel: 0.93, note: 'Cheap. Rocks hurt them and soft regolith can trap them (50% to break free).' },
+  { id: 'wheels_mesh', name: 'Mesh wheels + active suspension', group: 'wheels', massKg: 18, drawW: 0, costM: 8, rel: 0.97, note: 'Half the damage from rocks, and it can "walk" out of soft ground (85%).' },
+  { id: 'drill_std', name: 'Drill (up to 1 m)', group: 'drill', massKg: 10, drawW: 0, costM: 6, rel: 0.94, note: 'Depths of 25 cm, 50 cm and 1 m.' },
+  { id: 'drill_deep', name: 'Deep drill (up to 2 m)', group: 'drill', massKg: 22, drawW: 0, costM: 14, rel: 0.9, note: 'Adds a 2 m depth: the richest ice, but jams more. Required for mission C.' },
+  { id: 'mass_spec', name: 'Mass spectrometer', group: 'rtools', massKg: 7, drawW: 0, costM: 12, rel: 0.95, note: 'Without it a core can only show "hydrogen", never confirmed water.' },
+  { id: 'autonav', name: 'Autonomous navigation', group: 'rtools', massKg: 3, drawW: 0, costM: 9, rel: 0.96, note: 'Drive at full speed between relay passes. Without it the rover crawls when out of contact.' },
+)
+
 export const PART: Record<string, Part> = Object.fromEntries(PARTS.map((p) => [p.id, p]))
 
 export const GROUP_LABEL: Record<Group, string> = {
   bus: 'Bus', panel: 'Solar power', battery: 'Battery', thermal: 'Thermal',
   antenna: 'Antenna', comms: 'Extra comms', recorder: 'Data recorder', tank: 'Propulsion',
   computer: 'Computer', shield: 'Shielding', instrument: 'Science instruments',
+  lander: 'Rover Bay · Lander', rbattery: 'Rover Bay · Battery', wheels: 'Rover Bay · Wheels', drill: 'Rover Bay · Drill', rtools: 'Rover Bay · Tools',
 }
 
 export const GROUP_ORDER: Group[] = [
   'bus', 'panel', 'battery', 'thermal', 'antenna', 'comms', 'recorder', 'tank', 'computer', 'shield', 'instrument',
+  'lander', 'rbattery', 'wheels', 'drill', 'rtools',
 ]
+export const ROVER_GROUPS: Group[] = ['lander', 'rbattery', 'wheels', 'drill', 'rtools']
+export const ROVER_REQUIRED: Group[] = ['lander', 'rbattery', 'wheels', 'drill']
+/** Presupuesto extra por misión: el rover y el radar no caben en el del orbitador. */
+export const MODE_BUDGET_M: Record<MissionMode, number> = { A: 0, B: 110, C: 200 }
+export const MODE_MULT: Record<MissionMode, number> = { A: 1, B: 2, C: 3 }
 
 /** Grupos donde solo cabe una pieza y es obligatoria. */
 export const REQUIRED_SINGLE: Group[] = ['bus', 'panel', 'battery', 'antenna', 'recorder', 'tank', 'computer']
 /** Grupos donde solo cabe una pieza, opcional. */
-export const OPTIONAL_SINGLE: Group[] = ['shield', 'comms']
+export const OPTIONAL_SINGLE: Group[] = ['shield', 'comms', 'lander', 'rbattery', 'wheels', 'drill']
 
 export const ORBITS: Orbit[] = [
   { id: 'polar_low', name: 'Low polar', altitude: '50 km', periodMin: 113, res: 1.5, eclipseMin: 47, dvInsertion: 900, dvKeeping: 300,
@@ -104,7 +124,7 @@ export const CRATERS: Crater[] = [
 export const CRATER: Record<string, Crater> = Object.fromEntries(CRATERS.map((c) => [c.id, c]))
 
 export function defaultDesign(): Design {
-  return { orbitId: 'polar_high', launcherId: 'medium', partIds: [] }
+  return { mode: 'B', orbitId: 'polar_high', launcherId: 'medium', partIds: [] }
 }
 
 /** Plantilla de partida para el botón "Suggested starter". */
@@ -112,6 +132,12 @@ export const STARTER_PARTS = [
   'bus_medium', 'panel_gaas', 'bat_1', 'heaters', 'radiator', 'hga', 'rec_256', 'tank_s',
   'comp_hard', 'shield', 'neutron', 'camera',
 ]
+
+export function starterFor(mode: MissionMode): string[] {
+  if (mode === 'A') return [...STARTER_PARTS]
+  const rover = ['lander', 'rbat_6', 'wheels_std', 'mass_spec']
+  return mode === 'B' ? [...STARTER_PARTS, ...rover, 'drill_std'] : [...STARTER_PARTS, ...rover, 'drill_deep', 'radar']
+}
 
 export const GLOSSARY: Record<string, string> = {
   eclipse: 'Time the Moon blocks the Sun. Solar panels make no power, so the battery carries the ship.',

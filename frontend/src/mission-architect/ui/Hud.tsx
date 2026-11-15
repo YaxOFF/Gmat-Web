@@ -42,4 +42,4 @@ export function TopBar({ step, steps, right }: { step: number; steps: string[]; 
   )
 }
 
-export const STEP_NAMES = ['Briefing', 'Orbit', 'Hangar', 'Review', 'Launch', 'Mapping', 'Site', 'Rover', 'Report']
+export const STEP_NAMES = ['Briefing', 'Orbit', 'Hangar', 'Review', 'Launch', 'Mapping', 'Site', 'Landing', 'Rover', 'Finale', 'Report']
