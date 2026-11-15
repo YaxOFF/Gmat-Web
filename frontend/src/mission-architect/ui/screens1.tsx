@@ -1,8 +1,9 @@
 import { Orbit3D } from '../three/Orbit3D'
+import { Ship3D } from '../three/Ship3D'
 import { useMemo, useState } from 'react'
 import { CARD } from '../data/cards'
 import {
-  BUDGET_M, GROUP_LABEL, GROUP_ORDER, LAUNCHERS, ORBITS, PARTS, ITERATION_COST_M, MAX_ITERATIONS, STARTER_PARTS,
+  GROUP_LABEL, GROUP_ORDER, ROVER_GROUPS, LAUNCHERS, ORBITS, PARTS, ITERATION_COST_M, MAX_ITERATIONS, starterFor,
 } from '../data/catalog'
 import type { Design, Group, Part } from '../data/types'
 import { buildDeck, computeStats, reviewDesign, reviewPassed, togglePart } from '../engine/design'
@@ -24,7 +25,7 @@ export function Title({ onStart }: { onStart: () => void }) {
         <p className="tag">Episode 1 · Water on the Moon</p>
         <p className="sub">Design a spacecraft with a tight budget, launch it, and find out <em>why</em> it worked or failed.</p>
         <button className="btn big" onClick={onStart}>START MISSION ▶</button>
-        <p className="hint">Beta · single player · 10–15 min · click, Space or → advances the story</p>
+        <p className="hint">1 or 4 players · 20–30 min · click, Space or → advances the story</p>
       </div>
     </div>
   )
@@ -59,7 +60,7 @@ export function OrbitPick({ design, onPick, onInspect }: { design: Design; onPic
       </div>
       <div className="orbit-stage">
         <span className="tagline">Schematic view · drag to rotate, scroll to zoom</span>
-        <Orbit3D orbitId={sel} />
+        <Orbit3D orbitId={sel} partIds={design.partIds} />
       </div>
       <div className="actions">
         <button className="btn ghost" onClick={() => onInspect(sel)}>Inspect in GMAT ↗</button>
@@ -72,30 +73,6 @@ export function OrbitPick({ design, onPick, onInspect }: { design: Design; onPic
 
 // ---------- Hangar ----------
 
-function Ship({ design }: { design: Design }) {
-  const has = (id: string) => design.partIds.includes(id)
-  const instr = design.partIds.filter((id) => PARTS.find((p) => p.id === id)?.group === 'instrument').length
-  const panelW = has('panel_gaas') ? 120 : has('panel_si') ? 80 : 0
-  const tankH = has('tank_l') ? 70 : has('tank_s') ? 46 : 0
-  const busW = has('bus_medium') ? 74 : has('bus_small') ? 54 : 0
-  return (
-    <svg className="ship" viewBox="0 0 400 300">
-      <rect width="400" height="300" fill="none" />
-      <g transform="translate(200 150)">
-        {busW > 0 && <rect x={-busW / 2} y={-50} width={busW} height={100} fill="#cfd4e0" stroke="#7a8196" strokeWidth="3" />}
-        {panelW > 0 && <><rect x={-busW / 2 - panelW} y={-12} width={panelW} height={24} fill="#38e1ff" opacity=".85" /><rect x={busW / 2} y={-12} width={panelW} height={24} fill="#38e1ff" opacity=".85" /></>}
-        {tankH > 0 && <rect x={-18} y={50} width={36} height={tankH} rx="10" fill="#ffb020" opacity=".9" />}
-        {has('hga') && <path d="M-26 -50 q26 -44 52 0z" fill="#e8eaf2" stroke="#7a8196" strokeWidth="3" />}
-        {has('lga') && <rect x={-3} y={-72} width={6} height={22} fill="#e8eaf2" />}
-        {Array.from({ length: instr }, (_, i) => <circle key={i} cx={-busW / 2 + 10 + (i * (busW - 20)) / Math.max(1, instr - 1 || 1)} cy={20} r={6} fill="#d7ff3a" />)}
-        {has('radar') && <rect x={-busW / 2 - 6} y={-10} width={8} height={40} fill="#ff3d81" />}
-        {has('shield') && <rect x={-busW / 2 - 3} y={-52} width={busW + 6} height={104} fill="none" stroke="#7dff6b" strokeWidth="2" strokeDasharray="5 4" />}
-        {busW === 0 && <text textAnchor="middle" fill="#6b7088" fontSize="16" y="4">Pick a bus to begin</text>}
-      </g>
-    </svg>
-  )
-}
-
 export function Hangar({ design, setDesign, iterations, onSubmit }: {
   design: Design
   setDesign: (d: Design) => void
@@ -105,7 +82,7 @@ export function Hangar({ design, setDesign, iterations, onSubmit }: {
   const stats = useMemo(() => computeStats(design, iterations), [design, iterations])
   const deck = useMemo(() => buildDeck(design, stats), [design, stats])
   const [group, setGroup] = useState<Group>('bus')
-  const groups = GROUP_ORDER
+  const groups = GROUP_ORDER.filter((g) => design.mode !== 'A' || !ROVER_GROUPS.includes(g))
   const parts = PARTS.filter((p) => p.group === group)
   const cls = (s: 'ok' | 'warn' | 'fail') => (s === 'ok' ? 'ok' : s === 'warn' ? 'warn' : 'bad')
   const mass = stats.checks.find((c) => c.id === 'mass')!
@@ -147,7 +124,7 @@ export function Hangar({ design, setDesign, iterations, onSubmit }: {
 
       <main className="col center">
         <div className="ship-wrap">
-          <Ship design={design} />
+          <Ship3D partIds={design.partIds} />
           <div className="launcher-row">
             <span>Launcher</span>
             {LAUNCHERS.map((l) => (
@@ -158,7 +135,7 @@ export function Hangar({ design, setDesign, iterations, onSubmit }: {
           </div>
         </div>
         <div className="actions">
-          <button className="btn ghost" onClick={() => setDesign({ ...design, partIds: [...STARTER_PARTS] })}>Suggested starter</button>
+          <button className="btn ghost" onClick={() => setDesign({ ...design, partIds: starterFor(design.mode) })}>Suggested starter</button>
           <button className="btn ghost" onClick={() => setDesign({ ...design, partIds: [] })}>Clear</button>
           <button className="btn big" disabled={stats.errors.length > 0} onClick={onSubmit}>Submit to design review ▶</button>
         </div>
@@ -171,7 +148,7 @@ export function Hangar({ design, setDesign, iterations, onSubmit }: {
       <aside className="col side">
         <h3>Live resources</h3>
         <Meter label="MASS (kg)" value={stats.massKg} max={stats.capacityKg} tone={mass.status === 'ok' ? 'ok' : mass.status === 'warn' ? 'warn' : 'bad'} hint="Total spacecraft mass against the rocket's capacity." />
-        <Meter label="BUDGET ($M)" value={Math.max(0, BUDGET_M - stats.budgetLeftM)} max={BUDGET_M} text={`$${Math.round(BUDGET_M - stats.budgetLeftM)}M / $${BUDGET_M}M`} tone={cls(stats.checks[2].status)} />
+        <Meter label={`BUDGET ($M) · MISSION ${design.mode}`} value={Math.max(0, stats.budgetM - stats.budgetLeftM)} max={stats.budgetM} text={`$${Math.round(stats.budgetM - stats.budgetLeftM)}M / $${stats.budgetM}M`} tone={cls(stats.checks[2].status)} />
         <Meter label="POWER" value={stats.demandW} max={Math.max(stats.genW, stats.demandW, 1)} text={`${Math.round(stats.demandW)} W of ${Math.round(stats.genW)} W`} tone={cls(power.status)} />
         <Meter label="FUEL (m/s)" value={stats.dvNeededMs} max={Math.max(stats.dvTankMs, stats.dvNeededMs, 1)} text={`needs ${stats.dvNeededMs} · has ${stats.dvTankMs}`} tone={stats.dvTankMs >= stats.dvNeededMs ? 'ok' : 'bad'} />
         <Meter label="INSTRUMENT SLOTS" value={stats.slotsUsed} max={Math.max(stats.slotsMax, stats.slotsUsed, 1)} text={`${stats.slotsUsed} / ${stats.slotsMax}`} tone={stats.slotsUsed > stats.slotsMax ? 'bad' : 'ok'} />

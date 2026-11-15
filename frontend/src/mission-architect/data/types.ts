@@ -5,6 +5,7 @@ export type Layer = 'hydrogen' | 'terrain' | 'slope' | 'temperature' | 'buriedIc
 export type Group =
   | 'bus' | 'panel' | 'battery' | 'thermal' | 'antenna'
   | 'recorder' | 'tank' | 'computer' | 'shield' | 'comms' | 'instrument'
+  | 'lander' | 'rbattery' | 'wheels' | 'drill' | 'rtools'
 
 export interface Part {
   id: string
@@ -63,7 +64,11 @@ export interface Launcher {
   rel: number
 }
 
+/** A: solo orbitador ×1 · B: orbitador + rover ×2 · C: + taladro profundo y radar ×3 */
+export type MissionMode = 'A' | 'B' | 'C'
+
 export interface Design {
+  mode: MissionMode
   orbitId: string
   launcherId: string
   partIds: string[]

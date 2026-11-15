@@ -4,11 +4,20 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CRATERS } from '../data/catalog'
 import { mulberry32 } from '../engine/rng'
 import { MOON_R_KM, ORBIT_ELEMENTS } from '../gmat'
+import { buildSpacecraft } from './spacecraft'
 import { mountStage, moonTexture, stars } from './stage'
 
 /** Vista esquemática de la órbita alrededor de la Luna (la trayectoria exacta sale de GMAT). */
-export function Orbit3D({ orbitId, seed = 7, highlight }: { orbitId: string; seed?: number; highlight?: string | null }) {
+export function Orbit3D({ orbitId, seed = 7, highlight, targets, partIds = [] }: { orbitId: string; seed?: number; highlight?: string | null; targets?: string[]; partIds?: string[] }) {
   const host = useRef<HTMLDivElement>(null)
+  const dots = useRef<Record<string, THREE.Mesh>>({})
+  // Objetivos del ciclo: se pintan sin rearmar la escena.
+  useEffect(() => {
+    for (const [id, d] of Object.entries(dots.current)) {
+      const on = id === highlight || !!targets?.includes(id)
+      ;(d.material as THREE.MeshBasicMaterial).color.set(on ? 0xd7ff3a : 0x38e1ff); d.scale.setScalar(on ? 1.8 : 1)
+    }
+  }, [targets, highlight])
   useEffect(() => mountStage(host.current!, ({ scene, camera, renderer }) => {
     const rng = mulberry32(seed)
     scene.add(stars(rng))
@@ -21,9 +30,9 @@ export function Orbit3D({ orbitId, seed = 7, highlight }: { orbitId: string; see
       const dx = (c.x - 50) / 50, dy = (c.y - 50) / 50
       const lat = -Math.PI / 2 + Math.hypot(dx, dy) * 0.14, lon = Math.atan2(dy, dx)
       const p = new THREE.Vector3(Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon))
-      const on = c.id === highlight
-      const dot = new THREE.Mesh(new THREE.SphereGeometry(on ? 0.03 : 0.018), new THREE.MeshBasicMaterial({ color: on ? 0xd7ff3a : 0x38e1ff }))
-      dot.position.copy(p.multiplyScalar(1.003)); moon.add(dot)
+      const on = c.id === highlight || !!targets?.includes(c.id)
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.018), new THREE.MeshBasicMaterial({ color: on ? 0xd7ff3a : 0x38e1ff }))
+      dot.scale.setScalar(on ? 1.8 : 1); dot.position.copy(p.multiplyScalar(1.003)); moon.add(dot); dots.current[c.id] = dot
     }
     // Elipse en el plano polar x–y con el periapsis hacia el polo sur.
     const e = ORBIT_ELEMENTS[orbitId] ?? ORBIT_ELEMENTS.polar_high
@@ -35,9 +44,9 @@ export function Orbit3D({ orbitId, seed = 7, highlight }: { orbitId: string; see
     const pts = Array.from({ length: 361 }, (_, i) => at((i / 360) * Math.PI * 2))
     scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ color: 0xd7ff3a, dashSize: 0.04, gapSize: 0.03 })).computeLineDistances())
     const sc = new THREE.Group()
-    sc.add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), new THREE.MeshStandardMaterial({ color: 0xffd27a, metalness: 0.6, roughness: 0.3 })))
-    const wing = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.004, 0.05), new THREE.MeshStandardMaterial({ color: 0x2a4cff, metalness: 0.4 }))
-    sc.add(wing); scene.add(sc)
+    const model = buildSpacecraft(partIds.length ? partIds : ['bus_medium', 'panel_gaas', 'hga', 'tank_s', 'neutron', 'camera'])
+    model.remove(...model.children.filter((c) => c.position.y < -1.2)) // sin el lander en órbita
+    model.scale.setScalar(0.035); sc.add(model); scene.add(sc)
     const beam = new THREE.Mesh(new THREE.ConeGeometry(0.05, 1, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0x38e1ff, transparent: true, opacity: 0.18, side: THREE.DoubleSide }))
     scene.add(beam)
 
@@ -57,6 +66,7 @@ export function Orbit3D({ orbitId, seed = 7, highlight }: { orbitId: string; see
       beam.lookAt(0, 0, 0); beam.rotateX(-Math.PI / 2)
       controls.update()
     }
-  }), [orbitId, seed, highlight])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [orbitId, seed, partIds.join(',')])
   return <div ref={host} className="view3d" />
 }

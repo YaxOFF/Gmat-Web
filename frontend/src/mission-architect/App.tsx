@@ -1,7 +1,12 @@
-import { useMemo, useRef, useState } from 'react'
-import { CRATER, defaultDesign, MAX_ITERATIONS, ORBIT } from './data/catalog'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { CRATER, defaultDesign, MAX_ITERATIONS, MODE_MULT, ORBIT } from './data/catalog'
+import { judge, ROLES, soloTeam, type Team } from './engine/roles'
+import { Launch3D } from './three/Launch3D'
+import { Napkin, Setup } from './ui/Setup'
 import { gmatScript } from './gmat'
-import { Rover3D, type RoverResult } from './three/Rover3D'
+import { Descent3D, type Landing } from './three/Descent3D'
+import { Finale3D, type FinaleResult } from './three/Finale3D'
+import { DEFAULT_ROVER, Rover3D, type RoverEnding, type RoverResult, type RoverStart } from './three/Rover3D'
 import './styles.css'
 import type { Design } from './data/types'
 import { computeStats, initialStress } from './engine/design'
@@ -9,8 +14,8 @@ import {
   createMission, failureScore, runLaunch, scoreMission, siteTier,
   type EndingId, type LaunchOutcome, type Mission, type ScoreBreakdown,
 } from './engine/mission'
-import { money, mulberry32, type Rng } from './engine/rng'
-import { INTRO, endingLines, launchLines } from './story/scripts'
+import { clamp, money, mulberry32, type Rng } from './engine/rng'
+import { INTRO, endingLines } from './story/scripts'
 import { Dialogue } from './ui/Dialogue'
 import { STEP_NAMES, TopBar } from './ui/Hud'
 import { Mapping } from './ui/Mapping'
@@ -18,17 +23,28 @@ import { Hangar, OrbitPick, Review, Title } from './ui/screens1'
 import { Report, Site } from './ui/screens2'
 
 type Phase =
-  | 'title' | 'intro' | 'orbit' | 'hangar' | 'review'
-  | 'launch' | 'mapping' | 'site' | 'ending' | 'rover' | 'report'
+  | 'title' | 'intro' | 'setup' | 'orbit' | 'hangar' | 'review'
+  | 'launch' | 'mapping' | 'site' | 'ending' | 'descent' | 'rover' | 'finale' | 'report'
 
 const STEP_OF: Record<Phase, number> = {
-  title: 0, intro: 0, orbit: 1, hangar: 2, review: 3,
-  launch: 4, mapping: 5, site: 6, ending: 6, rover: 7, report: 8,
+  title: 0, intro: 0, setup: 0, orbit: 1, hangar: 2, review: 3,
+  launch: 4, mapping: 5, site: 6, ending: 6, descent: 7, rover: 8, finale: 9, report: 10,
 }
 
 const urlSeed = () => Number(new URLSearchParams(location.search).get('seed')) || 0
-// Atajo para probar el rover: ?rover=cabeus (y opcional &seed=123)
-const urlRover = () => new URLSearchParams(location.search).get('rover')
+// Atajos de prueba: ?rover=cabeus o ?landing=cabeus (y opcional &seed=123)
+const q = (k: string) => { const v = new URLSearchParams(location.search).get(k); return v && CRATER[v] ? v : null }
+const urlRover = () => q('rover') ?? q('landing')
+const SCREEN = new URLSearchParams(location.search).get('screen')
+const DEMO_LAUNCH: LaunchOutcome = { status: 'ok', panel: 'success', loi: 'success', events: [
+  { kind: 'info', label: 'Mass check', text: '812 kg of 1500 kg. Within capacity.' },
+  { kind: 'roll', label: 'Launch', p: 0.97, roll: 0.41, result: 'success', text: 'Medium launcher reliability 97%.' },
+  { kind: 'roll', label: 'Solar array deployment', p: 0.9, roll: 0.62, result: 'success', text: 'Array reliability × stress penalty.' },
+  { kind: 'roll', label: 'Lunar orbit insertion', p: 0.88, roll: 0.3, result: 'success', text: 'The engine must fire at exactly the right moment.' },
+] }
+const ROVER_END: Record<RoverEnding, string> = {
+  return: 'The Return — back in the light', last: 'The Last Message', frozen: 'Frozen in the dark', dead: 'Battery depleted',
+}
 const newSeed = () => Math.floor(Math.random() * 1e6)
 
 export default function MissionArchitect({ onInspect, onExit }: {
@@ -38,13 +54,19 @@ export default function MissionArchitect({ onInspect, onExit }: {
   const [seed, setSeed] = useState(() => urlSeed() || newSeed())
   const rng = useRef<Rng>(mulberry32(seed))
   const [rover, setRover] = useState<RoverResult | null>(null)
-  const [phase, setPhase] = useState<Phase>(() => (urlRover() && CRATER[urlRover()!] ? 'rover' : 'title'))
+  const [team, setTeam] = useState<Team>(soloTeam)
+  const minBat = useRef(100)
+  const [landing, setLanding] = useState<Landing | null>(null)
+  const [finale, setFinale] = useState<FinaleResult | null>(null)
+  const [phase, setPhase] = useState<Phase>(() => (q('rover') ? 'rover' : q('landing') ? 'descent' : SCREEN === 'setup' ? 'setup' : SCREEN === 'launch' ? 'launch' : SCREEN === 'hangar' ? 'hangar' : SCREEN === 'orbit' ? 'orbit' : 'title'))
   const [design, setDesign] = useState<Design>(defaultDesign())
   const [iterations, setIterations] = useState(0)
   const [forced, setForced] = useState(false)
-  const [launch, setLaunch] = useState<LaunchOutcome | null>(null)
-  const [mission, setMission] = useState<Mission | null>(null)
-  const [site, setSite] = useState<string | null>(() => urlRover() && CRATER[urlRover()!] ? urlRover() : null)
+  const [launch, setLaunch] = useState<LaunchOutcome | null>(SCREEN === 'launch' ? DEMO_LAUNCH : null)
+  const [mission, setMissionRaw] = useState<Mission | null>(null)
+  // Systems: "Nobody Freezes" mira la batería mínima del orbitador en todo el mapeo.
+  const setMission = (m: Mission | null) => { if (m) minBat.current = Math.min(minBat.current, m.batteryPct); setMissionRaw(m) }
+  const [site, setSite] = useState<string | null>(urlRover)
   const [ending, setEnding] = useState<EndingId>('lead')
   const [score, setScore] = useState<ScoreBreakdown | null>(null)
 
@@ -53,7 +75,8 @@ export default function MissionArchitect({ onInspect, onExit }: {
 
   const reset = (keepDesign: boolean) => {
     const s = newSeed(); setSeed(s); rng.current = mulberry32(s)
-    setIterations(0); setForced(false); setLaunch(null); setMission(null); setSite(null); setScore(null); setRover(null)
+    minBat.current = 100
+    setIterations(0); setForced(false); setLaunch(null); setMission(null); setSite(null); setScore(null); setRover(null); setLanding(null); setFinale(null)
     if (!keepDesign) setDesign(defaultDesign())
     setPhase(keepDesign ? 'hangar' : 'title')
   }
@@ -90,7 +113,32 @@ export default function MissionArchitect({ onInspect, onExit }: {
   const iterationsLeft = MAX_ITERATIONS - iterations
   const inspect = (orbitId: string) => onInspect(gmatScript(orbitId, ORBIT[orbitId].name, stats.massKg))
   const hasWater = site ? CRATER[site].h >= 1 : false
-  const roverBonus = rover ? Math.round(rover.waterG / 5) + rover.wet * 10 : 0
+  const has = (id: string) => design.partIds.includes(id)
+  const stress = mission?.stress ?? 30
+  const budgetLeft = mission?.budgetLeftM ?? stats.budgetLeftM
+  const roverStart = useMemo<RoverStart>(() => q('rover') && !mission ? DEFAULT_ROVER : {
+    batteryPct: landing?.batteryPct ?? 100, integrity: landing?.integrity ?? 100, sciMul: landing?.sciMul ?? 1,
+    batteryKWh: design.partIds.includes('rbat_3') ? 3 : 6, mesh: design.partIds.includes('wheels_mesh'),
+    deep: design.partIds.includes('drill_deep'), massSpec: design.partIds.includes('mass_spec'),
+    autonav: design.partIds.includes('autonav'),
+    canExtend: (mission?.budgetLeftM ?? 0) >= 20 && 100 - (mission?.stress ?? 0) >= 30,
+  }, [landing, design.partIds, mission])
+  const roverBonus = (rover?.points ?? 0) + (rover?.ending === 'return' ? 40 : 0) + (finale?.points ?? 0)
+  const confidence = Math.round(clamp(100 - stress / 2 + (rover?.confirmed ?? 0) * 10 + (rover?.ending === 'return' ? 15 : 0)
+    + (finale ? (finale.choice === 'relay' ? 20 : finale.success ? 10 : 0) : 0), 0, 200))
+  const verdicts = judge({
+    budgetLeftM: budgetLeft, confidence, minOrbiterBat: minBat.current, roverMinTemp: rover ? rover.minTemp : null,
+    exploded: mission?.log.filter((l) => l.text.includes('timer ran out')).length ?? 0,
+    mapped: mission?.mapped.length ?? 0, lostGb: mission?.lostGb ?? 0, confirmed: rover?.confirmed ?? 0,
+    live: rover?.live ?? false, rover: design.mode !== 'A' && !!landing?.ok,
+  })
+  const mark = (v: boolean | null) => (v === null ? '— n/a' : v ? '✔' : '✖')
+  const afterAct = () => setPhase(score ? 'report' : 'title')
+  const summary: ReactNode[] = []
+  if (landing) summary.push(<div key="l">🛬 {landing.label}</div>)
+  if (rover?.extended) summary.push(<div key="x">⏱ Extended mission flown (+4 cycles)</div>)
+  if (rover) summary.push(<div key="r">🚙 {ROVER_END[rover.ending]}: {rover.samples} cores, {rover.wet} with ice, {rover.waterG} g of water sent{rover.lostG ? `, ${rover.lostG} g lost in the dark` : ''} (best {rover.bestPct}%) · seed {rover.seed}</div>)
+  if (finale) summary.push(<div key="f">🛰 {finale.title}</div>)
 
   return (
     <div className="ma app">
@@ -99,7 +147,8 @@ export default function MissionArchitect({ onInspect, onExit }: {
         <TopBar step={STEP_OF[phase]} steps={STEP_NAMES} right={<span className="hint">Budget left: {money(stats.budgetLeftM)} · seed {seed}</span>} />
       )}
       {phase === 'title' && <Title onStart={() => setPhase('intro')} />}
-      {phase === 'intro' && <Dialogue lines={INTRO} startScene="void" onDone={() => setPhase('orbit')} />}
+      {phase === 'intro' && <Dialogue lines={INTRO} startScene="void" onDone={() => setPhase('setup')} />}
+      {phase === 'setup' && <Setup mode={design.mode} team={team} onDone={(mode, t) => { setTeam(t); setDesign({ ...design, mode, partIds: [] }); setPhase('orbit') }} />}
       {phase === 'orbit' && <OrbitPick design={design} onInspect={inspect} onPick={(orbitId) => { setDesign({ ...design, orbitId }); setPhase('hangar') }} />}
       {phase === 'hangar' && <Hangar design={design} setDesign={setDesign} iterations={iterations} onSubmit={() => setPhase('review')} />}
       {phase === 'review' && (
@@ -111,23 +160,44 @@ export default function MissionArchitect({ onInspect, onExit }: {
           onForce={() => startLaunch(true)}
         />
       )}
-      {phase === 'launch' && launch && <Dialogue lines={launchLines(launch, forced)} startScene="launchpad" onDone={afterLaunch} />}
+      {phase === 'launch' && launch && <Launch3D launch={launch} seed={seed} partIds={design.partIds} onDone={afterLaunch} />}
       {phase === 'mapping' && mission && (
         <Mapping ctx={ctx} mission={mission} setMission={setMission} rng={rng.current} onFinish={() => setPhase('site')} />
       )}
       {phase === 'site' && mission && <Site mission={mission} design={design} onPick={pickSite} />}
       {phase === 'ending' && mission && site && (
-        <Dialogue lines={endingLines(site, (mission.quality[site]?.hydrogen ?? 0) >= 0.4)} startScene="crater" onDone={() => setPhase(hasWater ? 'rover' : 'report')} />
+        <Dialogue lines={endingLines(site, (mission.quality[site]?.hydrogen ?? 0) >= 0.4)} startScene="crater" onDone={() => setPhase(hasWater && design.mode !== 'A' ? 'descent' : 'report')} />
+      )}
+      {phase === 'descent' && site && (
+        <Descent3D crater={CRATER[site]} stress={stress} mapped={has('altimeter')} seed={seed} names={team.players === 4 ? team.names : undefined}
+          onDone={(l) => { setLanding(l); setPhase(l.ok ? 'rover' : 'finale') }} />
       )}
       {phase === 'rover' && site && (
         <Rover3D crater={CRATER[site]} quality={mission ? mission.quality[site]?.hydrogen ?? 0 : 0.6} seed={seed}
-          onDone={(r) => { setRover(r); setPhase(score ? 'report' : 'title') }} />
+          orbitId={design.orbitId} start={roverStart}
+          onDone={(r) => { setRover(r); if (r.ending === 'return') setPhase('finale'); else afterAct() }} />
+      )}
+      {phase === 'finale' && site && (
+        <Finale3D kind={landing && !landing.ok ? 'planb' : 'return'} crater={CRATER[site].name} seed={seed} partIds={design.partIds}
+          onDone={(f) => { setFinale(f); afterAct() }} />
       )}
       {phase === 'report' && score && (
-        <Report ending={ending} mission={mission} score={{ ...score, total: score.total + roverBonus }} siteId={site}
+        <Report ending={ending} mission={mission} score={{ ...score, total: (score.total + roverBonus) * MODE_MULT[design.mode] }} siteId={site}
           onRetry={() => reset(true)} onNew={() => reset(false)}
           extra={<div className="actions">
-            {rover && <span className="hint">Rover: {rover.samples} samples, {rover.wet} with ice, {rover.waterG} g of water (best {rover.bestPct}%) · +{roverBonus} pts · seed {rover.seed}</span>}
+            <div className="report-napkin">
+              <Napkin mode={design.mode} small />
+              <div className="hint">{summary}<div>Surface phase: +{roverBonus} pts · Mission {design.mode} ×{MODE_MULT[design.mode]} · NASA confidence {confidence}%</div></div>
+            </div>
+            <div className="roles-report">
+              {ROLES.map((r) => (
+                <div key={r.id} style={{ borderColor: r.color }}>
+                  <b>{r.icon} {r.title}{team.players === 4 ? ` · ${team.names[r.id]}` : ''}</b><br />
+                  {r.main[0]}: {mark(verdicts[r.id].main)}
+                  {team.players === 4 && <><br />Secret · {r.secret[0]}: {mark(verdicts[r.id].secret)}</>}
+                </div>
+              ))}
+            </div>
             <button className="btn small ghost" onClick={() => inspect(design.orbitId)}>Inspect Selene's orbit in GMAT ↗</button>
           </div>} />
       )}

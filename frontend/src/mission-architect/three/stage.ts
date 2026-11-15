@@ -20,7 +20,7 @@ export function mountStage(el: HTMLElement, setup: (s: Stage) => ((dt: number) =
   const ro = new ResizeObserver(fit); ro.observe(el); fit()
   const tick = setup(s)
   const clock = new THREE.Clock()
-  renderer.setAnimationLoop(() => { tick(Math.min(clock.getDelta(), 0.05)); renderer.render(scene, camera) })
+  renderer.setAnimationLoop(() => { tick(Math.min(clock.getDelta(), 0.1)); renderer.render(scene, camera) })
   return () => {
     renderer.setAnimationLoop(null); ro.disconnect(); tick.cleanup?.()
     scene.traverse((o) => {
@@ -62,3 +62,6 @@ export function moonTexture(rng: Rng): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace
   return t
 }
+
+/** Ubica un objeto y lo devuelve (para armar grupos en una línea). */
+export function at<T extends THREE.Object3D>(o: T, x: number, y: number, z: number): T { o.position.set(x, y, z); return o }
