@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { mulberry32 } from '../engine/rng'
 
 // Piezas solo de Marte para Rover3D (world.storms): cielo de atardecer, polvo de tormenta y afloramientos de roca.
 
@@ -210,4 +211,32 @@ export function triplanarRock(mats: (readonly [THREE.MeshStandardMaterial, boole
       mat.needsUpdate = true
     }
   }).catch(() => {}) // sin texturas: rocas de color liso
+}
+
+let dirtUrl = ''
+/** Suciedad de la cámara (capa CSS sobre el canvas): viñeta café, manchas y motas, más densas en los bordes.
+ *  Se dibuja una vez y se cachea como data URL. */
+export function dirtImage(): string {
+  if (dirtUrl) return dirtUrl
+  const W = 768, H = 432, cv = document.createElement('canvas')
+  cv.width = W; cv.height = H
+  const g = cv.getContext('2d')
+  if (!g) return ''
+  const rng = mulberry32(9)
+  const edge = () => { const t = rng(); return t < 0.5 ? Math.pow(t * 2, 2.2) / 2 : 1 - Math.pow((1 - t) * 2, 2.2) / 2 } // 0..1 cargado a los bordes
+  const v = g.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, W * 0.62)
+  v.addColorStop(0, 'rgba(110,66,38,0)'); v.addColorStop(1, 'rgba(96,56,30,0.75)')
+  g.fillStyle = v; g.fillRect(0, 0, W, H)
+  for (let i = 0; i < 26; i++) {
+    const x = edge() * W, y = edge() * H, r = 18 + rng() * 70
+    const s = g.createRadialGradient(x, y, 0, x, y, r)
+    s.addColorStop(0, `rgba(120,74,42,${0.25 + rng() * 0.3})`); s.addColorStop(1, 'rgba(120,74,42,0)')
+    g.fillStyle = s; g.fillRect(x - r, y - r, 2 * r, 2 * r)
+  }
+  for (let i = 0; i < 1600; i++) {
+    const x = edge() * W, y = edge() * H, r = 0.4 + rng() * rng() * 2.6
+    g.fillStyle = `rgba(${70 + rng() * 60},${42 + rng() * 34},${24 + rng() * 20},${0.35 + rng() * 0.5})`
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill()
+  }
+  return (dirtUrl = cv.toDataURL('image/png'))
 }

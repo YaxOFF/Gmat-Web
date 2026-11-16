@@ -8,7 +8,7 @@ import { loadCuriosity, meshHeight, type CuriosityRig, type HeightFn } from './c
 import { at, earthMesh, mountStage, realSky } from './stage'
 import type { RockField } from './rocks'
 import { MOON, type RoverSite, type World } from './world'
-import { DUST, dust, dustWall, footprint, outcropGeometry, skyDome, triplanarRock } from './mars'
+import { DUST, dirtImage, dust, dustWall, footprint, outcropGeometry, skyDome, triplanarRock } from './mars'
 import type { Rock, RockKind } from './rocks'
 import { makeXray } from './xray'
 import { CoreSample } from './CoreSample'
@@ -232,7 +232,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
   const [final, setFinal] = useState<Final>(null)
   const [typed, setTyped] = useState(0)
   const result = useRef<RoverResult>({ samples: 0, wet: 0, waterG: 0, lostG: 0, bestPct: 0, points: 0, ending: 'dead', seed, minTemp: 20, confirmed: 0, live: false, extended: false, cores: [] })
-  const api = useRef<{ lastDrill: () => void; transmitAll: () => void; finish: (e: RoverEnding) => void; extend: () => void; storm: (on: boolean) => void
+  const api = useRef<{ lastDrill: () => void; transmitAll: () => void; finish: (e: RoverEnding) => void; extend: () => void
     seal: () => void; discard: () => void; reset: () => void; clean: () => void } | null>(null)
   const doneRef = useRef(onDone)
   useEffect(() => { doneRef.current = onDone }, [onDone])
@@ -456,7 +456,6 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
     let trailT = 0, stuckT = 0, resetCd = 0, cleanCd = 0
     // Tormenta: calma → aviso → activa → calma. `storm` (0..1) suaviza la fase para cielo, polvo, niebla y Sol.
     let phase: 'calm' | 'warn' | 'on' = 'calm', stormT = FORCE_STORM ? 3 : STORM.calm, storm = 0, wind = 0, sheltered = false, forceNext = FORCE_STORM
-    let endless = false // tormenta de prueba: dura hasta apagar el interruptor
     const dustFx = world.storms ? dust() : null, wallFx = world.storms ? dustWall() : null
     if (dustFx && wallFx) scene.add(dustFx.points, wallFx.wall)
     const fromX = () => -Math.cos(wind), fromZ = () => -Math.sin(wind) // hacia donde está la tormenta (contra el viento)
@@ -558,12 +557,6 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
       paused = true; st.ending = ending; setTyped(0); setFinal({ kind: 'terminal', ending, lines })
     }
     api.current = {
-      // shortcut: control de prueba para forzar/terminar la tormenta; quitarlo cuando las tormentas estén balanceadas.
-      storm: (on) => {
-        endless = on
-        if (on) { forceNext = true; stormT = 0; phase = 'calm' } // el próximo tick arranca el aviso completo
-        else { phase = 'calm'; stormT = STORM.calm; say('Test: dust storm stopped.') }
-      },
       lastDrill: () => {
         const { pct, dep } = sampleAt(DEPTHS[depth].mul)
         if (dep) dep.taken = true
@@ -858,7 +851,7 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
           if (phase === 'calm' && stormT <= 0 && (forceNext || rng() < dt / STORM.every)) {
             forceNext = false; phase = 'warn'; stormT = STORM.warn; wind = rng() * Math.PI * 2
             say(`ALERT: a dust storm is approaching from the ${dirName(bearing(fromX(), fromZ()))}, arriving in ${STORM.warn} s. Watch the compass and hide behind a rock.`, 7)
-          } else if (phase === 'warn' && stormT <= 0) { phase = 'on'; stormT = endless ? Infinity : STORM.dur[0] + rng() * (STORM.dur[1] - STORM.dur[0]) }
+          } else if (phase === 'warn' && stormT <= 0) { phase = 'on'; stormT = STORM.dur[0] + rng() * (STORM.dur[1] - STORM.dur[0]) }
           else if (phase === 'on' && stormT <= 0) { phase = 'calm'; stormT = STORM.calm; say('The storm has passed. The solar panels charge again.') }
           storm += ((phase === 'on' ? 1 : 0) - storm) * (1 - Math.exp(-dt * 0.8))
           // Resguardo: hay roca hacia donde viene la tormenta, a menos de 2.5 × su alto (un rayo de 1 m en 1 m con su huella).
@@ -1216,6 +1209,8 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
   return (
     <div className="rover">
       <div ref={host} className="view3d" />
+      {/* Suciedad en la cámara: crece con el polvo de los paneles y se va al limpiarlos (P o el botón). */}
+      {world.storms && h && <div className="rv-dirt" style={{ opacity: Math.min(1, (1 - h.clean) / 0.6), backgroundImage: `url(${dirtImage()})` }} aria-hidden />}
       <div className={`rv-xray${h?.pov || h?.lcam ? ' on' : ''}${h?.xray ? ' scan' : ''}`} aria-hidden={!h?.pov && !h?.lcam}>
         <div className="rv-xray-tag">{h?.lcam ? '● LASER CAM · CHEMCAM FIRING' : h?.xray ? '● X-RAY · SUBSURFACE SCAN' : '● DRILL CAM · ARM DEPLOYING'}</div>
         {h?.xray && (
@@ -1243,22 +1238,6 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
           <small>{iceHunt ? 'NEUTRON + NEAR-INFRARED · SCANNING THE SUBSURFACE' : h.laser === 0 ? 'CHEMCAM · AIMING THE MAST' : 'CHEMCAM LASER · VAPORIZING ROCK'}</small>
           <div className="rv-hold-bar"><i style={{ width: `${h.laser * 100}%` }} /></div>
           <b>{Math.round(h.laser * 100)}%</b>
-        </div>
-      )}
-      {h?.libs && !final && (
-        <div className="rv-libs">
-          <small>{h.libs.lab ? 'CHEMIN + SAM · DRILLED SAMPLE' : 'CHEMCAM · LIBS SPECTRUM'}</small>
-          <div className="rv-spec">
-            {h.libs.kind.spectrum.map(([el, v]) => <div key={el}><i style={{ height: `${Math.round(v * h.libs!.k * 100)}%` }} /><span>{el}</span></div>)}
-          </div>
-          {h.libs.k >= 1 ? (
-            <>
-              <h4>{h.libs.kind.name}{h.libs.isNew && <em>NEW</em>}{!h.libs.lab && h.libs.kind.target && <em>DRILL TARGET</em>}</h4>
-              <p className="min">{h.libs.kind.minerals}</p>
-              <p>{h.libs.lab ? h.libs.kind.lab : h.libs.kind.note}</p>
-              <p className="pts">+{h.libs.pts} science</p>
-            </>
-          ) : <h4 className="wait">Reading the plasma light…</h4>}
         </div>
       )}
       {h && (
@@ -1300,24 +1279,6 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
         </div>
       )}
       <div ref={labelsRef} className="rv-labels" hidden />
-      {h?.core && !final && (
-        <div className="rv-libs gas core">
-          <small>CORE RESULT · {h.core.cm} cm HOLE</small>
-          <h4>{h.core.title}</h4>
-          <p className="min">{h.core.pct > 0 ? `${h.core.pct}% water by weight` : 'No water in this core'}{h.core.lost > 0 ? ` · ${h.core.lost}% lost to bit heat` : ''}</p>
-          <ul className="rv-bites">{h.core.bites.map((b) => <li key={b.t} className={`k${b.k}`}>{b.t}</li>)}</ul>
-          <p>This hole is done. Stored until the next relay pass.</p>
-        </div>
-      )}
-      {h?.gas && !h.core && !final && !h.pov && (
-        <div className="rv-libs gas">
-          <small>MASS SPECTROMETER · LIVE VOLATILES</small>
-          <div className="rv-spec">
-            {(['H₂O', 'H₂', 'CO₂'] as const).map((el, i) => <div key={el}><i style={{ height: `${Math.round(Math.min(1, h.gas![i]) * 100)}%` }} /><span>{el}</span></div>)}
-          </div>
-          <p>Gases rising from the regolith. Sweep the area to find where the water peak is strongest before drilling.</p>
-        </div>
-      )}
       {h?.nav && !final && !h.pov && !h.lcam && (
         <div className="rv-nav">
           <b>● NAVCAM · HAZARD VIEW</b>
@@ -1334,51 +1295,88 @@ export function Rover3D({ crater, quality, seed, orbitId, start, onDone, world =
           <p><i className="k-blue" /> hydrogen seen from orbit (coarse) · <kbd>F</kbd> scan to sharpen · <i className="k-wet" /> ice core · <i className="k-dry" /> dry</p>
         </div>
       )}
-      <div className="rv-keys">
-        <div><kbd>W A S D</kbd> drive · hold <kbd>SPACE</kbd> drill · <kbd>F</kbd> {iceHunt ? 'scan' : 'laser'}</div>
-        <div><kbd>L</kbd> lights · <kbd>C</kbd> top view · <kbd>G</kbd> nav view · <kbd>R</kbd> unstick · <kbd>T</kbd> reset</div>
-        <button className="btn small ghost" onClick={() => setSound(!sound)}>{sound ? 'Sound on' : 'Sound off'}</button>{' '}
-        {world.storms && <><button className={`btn small ${h && h.clean < 0.55 ? 'warn' : 'ghost'}`} title="Vibrate the solar panels to shake dust off (−3% battery)." onClick={() => api.current?.clean()}>Clean panels</button>{' '}</>}
-        <button className={`btn small ${h?.stuckHint ? 'warn' : 'ghost'}`} title="Stuck in a hole or on a rock? Put the rover back a few metres (−6% battery)." onClick={() => api.current?.reset()}>Reset rover</button>
-        {/* shortcut: interruptor temporal para probar tormentas; quitarlo junto con api.storm. */}
-        {world.storms && h && (
-          <label className="rv-test">
-            <input type="checkbox" checked={h.storm !== 'calm'}
-              onChange={(e) => { api.current?.storm(e.target.checked); e.target.blur() }} /> Dust storm (test)
-          </label>
-        )}
+      {/* Columna derecha: controles, brújula IMU + sonido, y debajo los paneles emergentes. Flex: no se enciman. */}
+      <div className="rv-side">
+        <div className="rv-keys">
+          <div><kbd>W A S D</kbd> drive · hold <kbd>SPACE</kbd> drill · <kbd>F</kbd> {iceHunt ? 'scan' : 'laser'}</div>
+          <div><kbd>L</kbd> lights · <kbd>C</kbd> top view · <kbd>G</kbd> nav view · <kbd>R</kbd> unstick · <kbd>T</kbd> reset</div>
+          {world.storms && <><button className={`btn small ${h && h.clean < 0.55 ? 'warn' : 'ghost'}`} title="Vibrate the solar panels to shake dust off (−3% battery)." onClick={() => api.current?.clean()}>Clean panels</button>{' '}</>}
+          <button className={`btn small ${h?.stuckHint ? 'warn' : 'ghost'}`} title="Stuck in a hole or on a rock? Put the rover back a few metres (−6% battery)." onClick={() => api.current?.reset()}>Reset rover</button>
+        </div>
+        <div className="rv-side-row">
+          {h && !final && world.storms && <Compass heading={h.heading} storm={h.storm !== 'calm' ? h.from : null} />}
+          <button className="btn small ghost" onClick={() => setSound(!sound)}>{sound ? 'Sound on' : 'Sound off'}</button>
+        </div>
+        <div className="rv-stack">
+          {h?.libs && !final && (
+            <div className="rv-libs">
+              <small>{h.libs.lab ? 'CHEMIN + SAM · DRILLED SAMPLE' : 'CHEMCAM · LIBS SPECTRUM'}</small>
+              <div className="rv-spec">
+                {h.libs.kind.spectrum.map(([el, v]) => <div key={el}><i style={{ height: `${Math.round(v * h.libs!.k * 100)}%` }} /><span>{el}</span></div>)}
+              </div>
+              {h.libs.k >= 1 ? (
+                <>
+                  <h4>{h.libs.kind.name}{h.libs.isNew && <em>NEW</em>}{!h.libs.lab && h.libs.kind.target && <em>DRILL TARGET</em>}</h4>
+                  <p className="min">{h.libs.kind.minerals}</p>
+                  <p>{h.libs.lab ? h.libs.kind.lab : h.libs.kind.note}</p>
+                  <p className="pts">+{h.libs.pts} science</p>
+                </>
+              ) : <h4 className="wait">Reading the plasma light…</h4>}
+            </div>
+          )}
+          {h?.gas && !h.core && !final && !h.pov && (
+            <div className="rv-libs gas">
+              <small>MASS SPECTROMETER · LIVE VOLATILES</small>
+              <div className="rv-spec">
+                {(['H₂O', 'H₂', 'CO₂'] as const).map((el, i) => <div key={el}><i style={{ height: `${Math.round(Math.min(1, h.gas![i]) * 100)}%` }} /><span>{el}</span></div>)}
+              </div>
+              <p>Gases rising from the regolith. Sweep the area to find where the water peak is strongest before drilling.</p>
+            </div>
+          )}
+          {h?.core && !final && (
+            <div className="rv-libs gas core">
+              <small>CORE RESULT · {h.core.cm} cm HOLE</small>
+              <h4>{h.core.title}</h4>
+              <p className="min">{h.core.pct > 0 ? `${h.core.pct}% water by weight` : 'No water in this core'}{h.core.lost > 0 ? ` · ${h.core.lost}% lost to bit heat` : ''}</p>
+              <ul className="rv-bites">{h.core.bites.map((b) => <li key={b.t} className={`k${b.k}`}>{b.t}</li>)}</ul>
+              <p>This hole is done. Stored until the next relay pass.</p>
+            </div>
+          )}
+          {!iceHunt && (
+            // Siempre montado (oculto sin núcleo): el visor 3D se crea una vez y no da tirones al perforar o sellar.
+            <aside className={`rv-core ${core?.state ?? ''}`} hidden={!core || !!final}>
+              {core && <>
+                <small>CORE #{core.n} · {ROCK_CORE.label} deep{core.state === 'sealed' ? ' · SEALED' : core.state === 'discarded' ? ' · DISCARDED' : ''}</small>
+                <h4>{ROCK_INFO[core.kind].name}</h4>
+              </>}
+              <CoreSample kind={core?.kind ?? null} seed={core?.seed ?? 0} sealed={core?.state === 'sealed'} />
+              {core && <>
+                {core.lab && <p>{core.lab}</p>}
+                <p className="real">Real case: <b>{ROCK_INFO[core.kind].real}</b><br /><span>{ROCK_INFO[core.kind].where}</span></p>
+                <p>{ROCK_INFO[core.kind].story}</p>
+                {ROCK_INFO[core.kind].bio > 0 && <p className={`bio b${ROCK_INFO[core.kind].bio}`}>{core.conf ? ['', 'Could preserve traces of life', 'Good place to look for ancient life', 'POTENTIAL BIOSIGNATURE'][ROCK_INFO[core.kind].bio] : 'No organics spectrometer on board: chemistry unknown'}</p>}
+                {core.state === 'pending' && (
+                  <div className="rv-core-actions">
+                    <button className="btn small" disabled={(hud?.tubes ?? 0) >= TUBES} onClick={() => api.current?.seal()}>Seal in tube {Math.min(TUBES, (hud?.tubes ?? 0) + 1)}/{TUBES}</button>
+                    <button className="btn small ghost" onClick={() => api.current?.discard()}>Discard</button>
+                  </div>
+                )}
+              </>}
+            </aside>
+          )}
+        </div>
       </div>
       {h && !final && <div className="rv-goal" role="status"><small>WHAT TO DO</small>{h.goal}</div>}
-      {h && !final && world.storms && <Compass heading={h.heading} storm={h.storm !== 'calm' ? h.from : null} />}
-      {h?.toast && !final && <div className="rv-toast">{h.toast}</div>}
-      {h?.canReturn && !final && (
-        <div className="rv-end">
-          <button className="btn big" onClick={() => api.current?.finish('return')}>{iceHunt ? 'Back in the light — end mission' : 'Leave the tubes for pickup — end mission'}</button>
-          {start.canExtend && !h.extended && <button className="btn big ghost" onClick={() => api.current?.extend()}>Request extended mission (+4 cycles)</button>}
-        </div>
-      )}
-      {!iceHunt && (
-        // Siempre montado (oculto sin núcleo): el visor 3D se crea una vez y no da tirones al perforar o sellar.
-        <aside className={`rv-core ${core?.state ?? ''}`} hidden={!core || !!final}>
-          {core && <>
-            <small>CORE #{core.n} · {ROCK_CORE.label} deep{core.state === 'sealed' ? ' · SEALED' : core.state === 'discarded' ? ' · DISCARDED' : ''}</small>
-            <h4>{ROCK_INFO[core.kind].name}</h4>
-          </>}
-          <CoreSample kind={core?.kind ?? null} seed={core?.seed ?? 0} sealed={core?.state === 'sealed'} />
-          {core && <>
-            {core.lab && <p>{core.lab}</p>}
-            <p className="real">Real case: <b>{ROCK_INFO[core.kind].real}</b><br /><span>{ROCK_INFO[core.kind].where}</span></p>
-            <p>{ROCK_INFO[core.kind].story}</p>
-            {ROCK_INFO[core.kind].bio > 0 && <p className={`bio b${ROCK_INFO[core.kind].bio}`}>{core.conf ? ['', 'Could preserve traces of life', 'Good place to look for ancient life', 'POTENTIAL BIOSIGNATURE'][ROCK_INFO[core.kind].bio] : 'No organics spectrometer on board: chemistry unknown'}</p>}
-            {core.state === 'pending' && (
-              <div className="rv-core-actions">
-                <button className="btn small" disabled={(hud?.tubes ?? 0) >= TUBES} onClick={() => api.current?.seal()}>Seal in tube {Math.min(TUBES, (hud?.tubes ?? 0) + 1)}/{TUBES}</button>
-                <button className="btn small ghost" onClick={() => api.current?.discard()}>Discard</button>
-              </div>
-            )}
-          </>}
-        </aside>
-      )}
+      {/* Abajo al centro: la notificación centrada sobre los botones de fin de misión. */}
+      <div className="rv-bottom">
+        {h?.toast && !final && <div className="rv-toast">{h.toast}</div>}
+        {h?.canReturn && !final && (
+          <div className="rv-end">
+            <button className="btn big" onClick={() => api.current?.finish('return')}>{iceHunt ? 'Back in the light — end mission' : 'Leave the tubes for pickup — end mission'}</button>
+            {start.canExtend && !h.extended && <button className="btn big ghost" onClick={() => api.current?.extend()}>Request extended mission (+4 cycles)</button>}
+          </div>
+        )}
+      </div>
       {final?.kind === 'choice' && (
         <div className="rv-final">
           <h2>THE LAST MESSAGE</h2>
